@@ -13,7 +13,7 @@
 /**
  * Define the preference bundle identifier used by the settings pane.
  */
-#define PREF_DOMAIN @"com.eolnmsuk.antidarksword"
+#define PREF_DOMAIN CFSTR("com.eolnmsuk.antidarksword")
 
 /**
  * Helper function to synchronously read the whitelist preferences.
@@ -21,7 +21,7 @@
  * standard NSUserDefaults caching, ensuring accurate state after a respring.
  */
 static NSArray* getWhitelistedApps() {
-    CFArrayRef appList = (CFArrayRef)CFPreferencesCopyAppValue(CFSTR("WhitelistedApps"), (CFStringRef)PREF_DOMAIN);
+    CFArrayRef appList = (CFArrayRef)CFPreferencesCopyAppValue(CFSTR("WhitelistedApps"), PREF_DOMAIN);
     if (appList && CFGetTypeID(appList) == CFArrayGetTypeID()) {
         NSArray *nsAppList = (__bridge NSArray *)appList;
         // The bridged array is autoreleased or manually retained based on ARC context,
@@ -56,7 +56,7 @@ static NSArray* getWhitelistedApps() {
         if () {
             WKPreferences *prefs = [config preferences];
             if () {
-               ;
+              ;
             }
         }
 
@@ -66,7 +66,7 @@ static NSArray* getWhitelistedApps() {
             if () {
                 WKWebpagePreferences *webPrefs =;
                 if () {
-                   ;
+                  ;
                 }
             }
         }
