@@ -1,25 +1,26 @@
 # AntiDarkSword 🛡️
 
-**A nuclear system-wide WebKit & JavaScriptCore kill-switch for modern iOS.**
+**A targeted system-wide WebKit & JavaScriptCore kill-switch for modern iOS.**
 
-AntiDarkSword is an aggressive security mitigation tweak designed to stop zero-click, JIT-based, and drive-by WebKit exploits (such as Coruna and DarkSword) before they can execute. Rather than relying on easily bypassed string-matching heuristics, this tweak hooks directly into `WKWebView` and the underlying C-level `JSEvaluateScript` functions to forcefully strip the JavaScript engine from web views across the entire operating system.
+AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-based, and drive-by WebKit exploits (such as Coruna and DarkSword) before they can execute. Rather than relying on easily bypassed string-matching heuristics, this tweak hooks directly into `WKWebView` and the underlying C-level `JSEvaluateScript` functions to forcefully strip the JavaScript engine from web views.
 
 If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents it from running at step zero.
 
-## ⚠️ The "Scorched Earth" Warning
-This is a highly aggressive mitigation. By default, **this tweak will break interactive web functionality** in any app it applies to. Web pages will still load HTML/CSS, but dropdowns, dynamic logins (like Google OAuth), and web-based UI elements will fail. 
+## ⚠️ How the Protection Works (Allow-By-Default)
+To prevent your device from breaking functionality immediately upon installation, **AntiDarkSword allows all apps to run JavaScript by default.** To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down (such as Safari, Messages, Discord etc). 
 
-To prevent your core apps (like Safari or YouTube) from breaking, you **must** whitelist them in the tweak preferences.
+*Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but dropdowns, dynamic logins, and complex web UI will fail.*
 
 ## 📱 Compatibility
 * **iOS Versions:** iOS 15.0 - 17.0
 * **Architecture:** arm64 / arm64e (A11 through A16/M-series)
-* **Jailbreaks:** * Rootless / Roothide (via Patcher): Dopamine (iOS 15.0 - 17.0), Palera1n (iOS 15.0 - 16.7.x)
+* **Jailbreaks:** * Rootless: Dopamine (iOS 15.0 - 17.0), Palera1n (iOS 15.0 - 16.7.x)
+  * Roothide: Dopamine Roothide 2 (via Roothide Patcher)
 
 ## ✨ Features
-* **System-Wide JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
-* **AltList Integration:** Easily whitelist specific User or System apps natively via the Settings app. Whitelisted apps will bypass the JS kill-switch.
-* **Advanced Exceptions:** Manually enter hidden bundle IDs or custom daemon processes that do not appear in standard app lists.
+* **Surgical JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
+* **AltList Integration:** Easily restrict specific User or System apps natively via the Settings app.
+* **Advanced Restrictions:** Manually enter hidden bundle IDs or custom daemon processes that do not appear in standard app lists.
 * **No Daemon Panics:** Strictly filtered to `com.apple.UIKit` to ensure invisible system background daemons do not crash your device.
 * **Persistent UI:** Includes a top-right Respring button in the Settings menu for immediate application of changes.
 
@@ -49,8 +50,9 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 ## ⚙️ Configuration
 1. Open your iPhone's native **Settings** app.
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
-3. Under the "Whitelist" section, select any apps (like Safari, Chrome, or YouTube) that you want to allow to run JavaScript normally.
-4. Tap the **Respring** button in the top right corner to apply changes.
+3. Under the "App Permissions" section, you will see a list of your apps. **All switches are ON by default.**
+4. **Turn OFF** the switch for any app you wish to protect. Turning it off strips its ability to run JavaScript.
+5. Tap the **Respring** button in the top right corner to apply your new security rules.
 
 ## 👨‍💻 Developer
-Created by **eolnmsuk**
+Created by [eolnmsuk](https://venmo.com/user/eolnmsuk)
