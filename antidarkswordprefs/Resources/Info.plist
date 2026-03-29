@@ -14,5 +14,9 @@
     <string>1.0</string>
     <key>NSPrincipalClass</key>
     <string>AntiDarkSwordPrefsRootListController</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>MinimumOSVersion</key>
+    <string>15.0</string>
 </dict>
 </plist>
