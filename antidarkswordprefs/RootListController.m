@@ -1,4 +1,6 @@
 #import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#import <AltList/AltList.h>
 #import <spawn.h>
 
 @interface AntiDarkSwordPrefsRootListController : PSListController
@@ -16,6 +18,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
+    // Add a Respring button to the top right
     UIBarButtonItem *respringButton = [[UIBarButtonItem alloc] initWithTitle:@"Respring" 
                                                                        style:UIBarButtonItemStyleDone 
                                                                       target:self 
@@ -24,6 +27,7 @@
 }
 
 - (void)respring {
+    // Standard rootless sbreload path
     pid_t pid;
     const char* args[] = {"sbreload", NULL};
     posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
