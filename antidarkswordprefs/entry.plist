@@ -14,8 +14,6 @@
         <true/>
         <key>label</key>
         <string>AntiDarkSword</string>
-        <key>icon</key>
-        <string>icon.png</string>
     </dict>
 </dict>
 </plist>
