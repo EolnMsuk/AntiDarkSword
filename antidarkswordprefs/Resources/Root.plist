@@ -34,16 +34,10 @@
 Turn an app OFF to restrict its web access and protect it from exploits.</string>
         </dict>
         <dict>
-            <key>bundle</key>
-            <string>AltList</string>
             <key>cell</key>
-            <string>PSLinkListCell</string>
+            <string>PSLinkCell</string>
             <key>detail</key>
             <string>ATLApplicationListMultiSelectionController</string>
-            <key>isController</key>
-            <true/>
-            <key>overridePrincipalClass</key>
-            <true/>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
