@@ -11,8 +11,3 @@ AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles
 AntiDarkSwordPrefs_CFLAGS = -fobjc-arc
 
 include $(THEOS_MAKE_PATH)/bundle.mk
-
-# This part tells Theos to create the entry point for Settings
-internal-stage::
-	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences$(ECHO_END)
-	$(ECHO_NOTHING)cp entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/AntiDarkSword.plist$(ECHO_END)
