@@ -22,6 +22,7 @@ static BOOL isAppWhitelisted() {
     if (!bundleID) return YES; 
     
     // 1. Check if the app was explicitly toggled OFF in AltList (meaning it is restricted)
+    // When defaultApplicationSwitchValue is true, AltList saves the disabled apps.
     if (restrictedApps && [restrictedApps containsObject:bundleID]) {
         return NO;
     }
