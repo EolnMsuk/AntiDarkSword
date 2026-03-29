@@ -1,2 +1,2 @@
 # AntiDarkSword
-A zero-day mitigation for Jailbroken devices on iOS 16+ AKA a webkit / javascript whitelist
+a zero-day mitigation for jailbroken devices on iOS 15.0 - 17.0 AKA a webkit / javascript whitelist
