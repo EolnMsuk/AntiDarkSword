@@ -8,6 +8,12 @@
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
+        // Dynamically load AltList into memory so we don't need to link it during the GitHub Actions build
+        NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
+        if (![altListBundle isLoaded]) {
+            [altListBundle load];
+        }
+        
         _specifiers = [self loadSpecifiersFromPlistName:@"Root" target:self];
     }
     return _specifiers;
