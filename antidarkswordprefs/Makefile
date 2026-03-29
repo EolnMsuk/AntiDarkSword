@@ -7,6 +7,7 @@ BUNDLE_NAME = AntiDarkSwordPrefs
 AntiDarkSwordPrefs_FILES = RootListController.m
 AntiDarkSwordPrefs_FRAMEWORKS = UIKit
 AntiDarkSwordPrefs_PRIVATE_FRAMEWORKS = Preferences
+AntiDarkSwordPrefs_LIBRARIES = altlist
 AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles
 AntiDarkSwordPrefs_CFLAGS = -fobjc-arc
 
