@@ -30,11 +30,12 @@
             <key>label</key>
             <string>App Permissions (JS)</string>
             <key>footerText</key>
-            <string>All apps are allowed to run JavaScript by default. Turn an app OFF to restrict its web access and protect it from exploits.</string>
+            <string>All apps are allowed to run JavaScript by default.
+Turn an app OFF to restrict its web access and protect it from exploits.</string>
         </dict>
         <dict>
             <key>cell</key>
-            <string>PSLinkListCell</string>
+            <string>PSLinkCell</string>
             <key>detail</key>
             <string>ATLApplicationListMultiSelectionController</string>
             <key>defaults</key>
@@ -47,11 +48,11 @@
             <array>
                 <dict>
                     <key>sectionType</key>
-                    <string>User</string>
+                    <string>Visible</string>
                 </dict>
                 <dict>
                     <key>sectionType</key>
-                    <string>System</string>
+                    <string>Hidden</string>
                 </dict>
             </array>
             <key>showIdentifiersAsSubtitle</key>
@@ -60,8 +61,6 @@
             <true/>
             <key>useSearchBar</key>
             <true/>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
         <dict>
             <key>cell</key>
