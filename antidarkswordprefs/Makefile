@@ -1,13 +1,15 @@
-TARGET := iphone:clang:14.5:15.0
-THEOS_PACKAGE_SCHEME = rootless
-
+# Import common Theos configuration directives
 include $(THEOS)/makefiles/common.mk
 
-BUNDLE_NAME = AntiDarkSwordPrefs
-AntiDarkSwordPrefs_FILES = RootListController.m
-AntiDarkSwordPrefs_FRAMEWORKS = UIKit
-AntiDarkSwordPrefs_PRIVATE_FRAMEWORKS = Preferences
-AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles
-AntiDarkSwordPrefs_CFLAGS = -fobjc-arc
+# Define the preference bundle identifier
+BUNDLE_NAME = antidarkswordprefs
 
+# Specify source files and compilation flags for the preference bundle
+antidarkswordprefs_FILES = RootListController.m
+antidarkswordprefs_FRAMEWORKS = UIKit
+antidarkswordprefs_PRIVATE_FRAMEWORKS = Preferences
+antidarkswordprefs_INSTALL_PATH = /Library/PreferenceBundles
+antidarkswordprefs_CFLAGS = -fobjc-arc
+
+# Include the standard bundle compilation rules
 include $(THEOS_MAKE_PATH)/bundle.mk
