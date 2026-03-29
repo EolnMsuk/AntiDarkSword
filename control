@@ -1,0 +1,9 @@
+Package: com.eolnmsuk.antidarksword
+Name: AntiDarkSword
+Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
+Version: 1.0
+Architecture: iphoneos-arm64
+Description: System-wide JS kill-switch with exceptions.
+Maintainer: eolnmsuk
+Author: eolnmsuk
+Section: Tweaks
