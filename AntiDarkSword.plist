@@ -1,1 +1,10 @@
-{ Filter = { Bundles = ( "com.apple.UIKit" ); }; }
+{
+    Filter = {
+        Bundles = (
+            "com.apple.Foundation",
+            "com.apple.UIKit",
+            "com.apple.WebKit",
+            "com.apple.JavaScriptCore"
+        );
+    };
+}
