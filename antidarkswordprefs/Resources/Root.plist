@@ -34,7 +34,7 @@
         </dict>
         <dict>
             <key>cell</key>
-            <string>PSLinkCell</string>
+            <string>PSLinkListCell</string>
             <key>detail</key>
             <string>ATLApplicationListMultiSelectionController</string>
             <key>defaults</key>
