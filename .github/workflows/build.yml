@@ -1,0 +1,24 @@
+name: Compile Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Build Tweak with Theos
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-sdks: 'https://github.com/theos/sdks'
+
+      - name: Upload .deb File
+        uses: actions/upload-artifact@v3
+        with:
+          name: AntiDarkSword-Rootless
+          path: ${{ github.workspace }}/packages/*.deb
