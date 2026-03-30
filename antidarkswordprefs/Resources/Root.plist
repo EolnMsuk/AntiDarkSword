@@ -24,6 +24,54 @@
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
+        
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Auto Protect</string>
+            <key>footerText</key>
+            <string>Automatically restricts critical native apps. Level 1: Safari, Messages, Mail. Level 2: + Calendar, Notes, Books. Level 3: + News, Podcasts, Stocks, Maps, Weather.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>autoProtectEnabled</string>
+            <key>label</key>
+            <string>Enable Auto Protect</string>
+            <key>set</key>
+            <string>setAutoProtect:specifier:</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSegmentCell</string>
+            <key>default</key>
+            <integer>1</integer>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>autoProtectLevel</string>
+            <key>validValues</key>
+            <array>
+                <integer>1</integer>
+                <integer>2</integer>
+                <integer>3</integer>
+            </array>
+            <key>validTitles</key>
+            <array>
+                <string>Level 1</string>
+                <string>Level 2</string>
+                <string>Level 3</string>
+            </array>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -35,6 +83,8 @@
         <dict>
             <key>cell</key>
             <string>PSLinkCell</string>
+            <key>id</key>
+            <string>SelectApps</string>
             <key>detail</key>
             <string>AntiDarkSwordAppListController</string>
             <key>defaults</key>
@@ -61,13 +111,14 @@
             <key>useSearchBar</key>
             <true/>
         </dict>
+        
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
             <string>Advanced Restrictions</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names for daemons you want to restrict manually.</string>
+            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
         </dict>
         <dict>
             <key>cell</key>
