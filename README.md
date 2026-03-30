@@ -7,7 +7,7 @@ AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-ba
 If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents it from running at step zero.
 
 ## ⚠️ How the Protection Works (Allow-By-Default)
-To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down (such as Safari, Messages, Discord etc). 
+To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down (such as Safari, Messages, Mail, Facebook etc). 
 
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but dropdowns, dynamic logins, and complex web UI will fail.*
 
