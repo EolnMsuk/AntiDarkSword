@@ -13,13 +13,21 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 
 ## 🛑 Mitigated Exploits
 By disabling WebKit and JavaScriptCore attack vectors, this tweak can prevent several known exploit chains:
-* **Coruna:** JavaScript-reliant iOS exploit kit.
-* **Operation Triangulation:** iMessage WebKit zero-click chain.
-* **Predator:** Safari JavaScript 1-click spyware.
-* **Hermit:** JavaScriptCore type-confusion spyware chain.
-* **KISMET:** iMessage rich link zero-click.
-* **Trident:** Safari memory corruption exploit chain.
-* **Chaos:** Safari WebKit DOM vulnerability exploit.
+* **DarkSword:** Full-chain, JavaScript-based zero-click exploit kit (iOS 18.4 – 18.7).
+* **Coruna:** JavaScript-reliant iOS exploit kit (iOS 13.0 – 17.2.1).
+* **Predator:** Safari JavaScript 1-click spyware (Versions before iOS 16.7).
+* **BLASTPASS:** iMessage zero-click using PassKit attachments (Versions before iOS 16.6.1).
+* **PWNYOURHOME:** Zero-click targeting HomeKit or iCloud Photos (iOS 15.0 – 16.3.1).
+* **CVE-2025-43529:** Recent WebKit zero-day using memory corruption (Versions prior to iOS 18.7.3 and iOS 26.2).
+* **CVE-2024-44308:** WebKit remote code execution via web content (Versions before iOS 17.7.2 and iOS 18.1.1).
+* **CVE-2022-42856:** JavaScriptCore type confusion in JIT compiler (iOS 16.0 to 16.1.1 and earlier).
+* **Operation Triangulation:** iMessage WebKit zero-click chain (iOS 15.7 and older).
+* **Hermit:** JavaScriptCore type-confusion spyware chain (iOS 15.0 – 15.4.1).
+* **KISMET:** iMessage rich link zero-click (Vulnerable prior to iOS 14).
+* **Trident:** Safari memory corruption exploit chain (iOS versions ≤ 9.3.4).
+* **Chaos:** Safari WebKit DOM vulnerability exploit (Versions older than 16.3).
+* **FORCEDENTRY:** Zero-click bypassing BlastDoor via PDF/GIF (Versions before iOS 14.8).
+* **Megalodon:** Variant of the FORCEDENTRY zero-click attack (Versions before iOS 14.8).
 
 ## 🛡️ Preset Rule Levels
 AntiDarkSword includes a Preset Rules feature that automatically applies surgical restrictions to high-risk applications and daemons based on three escalating security tiers.
