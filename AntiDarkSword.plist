@@ -4,7 +4,12 @@
             "com.apple.Foundation",
             "com.apple.UIKit",
             "com.apple.WebKit",
-            "com.apple.JavaScriptCore"
+            "com.apple.JavaScriptCore",
+            "com.apple.IMCore",
+            "com.apple.ChatKit"
+        );
+        Executables = (
+            "imagent"
         );
     };
 }
