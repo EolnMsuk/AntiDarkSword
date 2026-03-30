@@ -42,21 +42,41 @@ static void loadPrefs() {
     
     // 1. Evaluate Auto Protect Tiers
     if (autoProtectEnabled) {
-        NSArray *tier1 = @[@"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail"];
-        NSArray *tier2 = @[@"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks"];
-        NSArray *tier3 = @[
-            // Native Content Apps
-            @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", @"com.apple.Maps", @"com.apple.weather",
-            // Third-Party Browsers
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-            // Social Media & Messaging
-            @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", @"com.zhiliaoapp.musically"
+        // Level 1: All Native Apple Apps
+        NSArray *tier1 = @[
+            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
+            @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
+            @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+            @"com.apple.Maps", @"com.apple.weather"
         ];
         
+        // Level 2: All Major 3rd Party Browsers, Social Media, and Package Managers
+        NSArray *tier2 = @[
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+            @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+            @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn",
+            @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+        ];
+        
+        // Level 3: Extreme Lockdown (System Daemons & Exploit Vectors)
+        NSArray *tier3 = @[
+            @"com.apple.imagent", @"imagent", 
+            @"mediaserverd", 
+            @"networkd"
+        ];
+        
+        // Check Bundle ID
         if (bundleID) {
             if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
             if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
             if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
+        }
+        
+        // Check Process Name (Critical for Level 3 Daemons)
+        if (processName && !isTargetRestricted) {
+            if ([tier1 containsObject:processName]) isTargetRestricted = YES;
+            if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) isTargetRestricted = YES;
+            if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) isTargetRestricted = YES;
         }
     }
     
