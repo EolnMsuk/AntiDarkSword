@@ -17,7 +17,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 
 ## 🛑 Mitigated Exploits
 By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents several known exploit chains:
-* **DarkSword:** Full-chain, JavaScript-based zero-click exploit kit (iOS 18.4 – 18.7).
+* **DarkSword:** Full-chain, JavaScript-based exploit kit (iOS 18.4 – 18.7).
 * **Coruna:** JavaScript-reliant iOS exploit kit (iOS 13.0 – 17.2.1).
 * **Predator:** Safari JavaScript 1-click spyware (Versions before iOS 16.7).
 * **BLASTPASS:** iMessage zero-click using PassKit attachments (Versions before iOS 16.6.1).
