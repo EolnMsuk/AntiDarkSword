@@ -145,31 +145,43 @@
 }
 
 - (void)addCustomID {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Custom ID" message:@"Enter bundle ID or process name" preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Custom ID" message:@"Enter bundle IDs or process names (comma-separated)" preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"com.apple.imagent";
+        textField.placeholder = @"com.apple.imagent, mediaserverd";
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Add" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *newID = alert.textFields.firstObject.text;
-        if (newID.length > 0) {
+        NSString *inputText = alert.textFields.firstObject.text;
+        if (inputText.length > 0) {
+            // Split the input string by commas
+            NSArray *inputIDs = [inputText componentsSeparatedByString:@","];
+            
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
             NSMutableArray *customIDs = [NSMutableArray arrayWithArray:prefs[@"customDaemonIDs"] ?: @[]];
+            NSMutableArray *restricted = [NSMutableArray arrayWithArray:prefs[@"restrictedApps"] ?: @[]];
             
-            if (![customIDs containsObject:newID]) {
-                [customIDs addObject:newID];
-                prefs[@"customDaemonIDs"] = customIDs;
+            BOOL changesMade = NO;
+            
+            // Loop through each pasted ID, trim whitespace, and add it
+            for (NSString *rawID in inputIDs) {
+                NSString *cleanID = [rawID stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
                 
-                // Also default to ON and sync with restrictions when added
-                NSMutableArray *restricted = [NSMutableArray arrayWithArray:prefs[@"restrictedApps"] ?: @[]];
-                if (![restricted containsObject:newID]) {
-                    [restricted addObject:newID];
-                    prefs[@"restrictedApps"] = restricted;
+                if (cleanID.length > 0 && ![customIDs containsObject:cleanID]) {
+                    [customIDs addObject:cleanID];
+                    
+                    if (![restricted containsObject:cleanID]) {
+                        [restricted addObject:cleanID];
+                    }
+                    changesMade = YES;
                 }
-                
+            }
+            
+            // Save and reload if we actually added valid new IDs
+            if (changesMade) {
+                prefs[@"customDaemonIDs"] = customIDs;
+                prefs[@"restrictedApps"] = restricted;
                 [prefs writeToFile:PREFS_PATH atomically:YES];
                 
-                // Fully reload UI to render new switch
                 [self reloadSpecifiers];
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
             }
