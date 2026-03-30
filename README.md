@@ -12,7 +12,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but dropdowns, dynamic logins, and complex web UI will fail.*
 
 ## 🛑 Mitigated Exploits
-By disabling WebKit and JavaScriptCore attack vectors, this tweak neutralizes the initial stage of several known exploit chains:
+By disabling WebKit and JavaScriptCore attack vectors, this tweak neutralizes several known exploit chains:
 * **Coruna:** JavaScript-reliant iOS exploit kit.
 * **Operation Triangulation:** iMessage WebKit zero-click chain.
 * **Predator:** Safari JavaScript 1-click spyware.
