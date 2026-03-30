@@ -1,50 +1,56 @@
+#import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 
-static BOOL tweakEnabled = YES;
-static NSArray *restrictedApps = nil;
-static NSString *customRestrictedApps = @"";
+// Forward declarations to avoid compiler warnings
+@interface IMFileTransfer : NSObject
+- (BOOL)isAutoDownloadable;
+- (BOOL)canAutoDownload;
+@end
 
-// Hardcoded rootless path - the Roothide Patcher will automatically find and convert this string in the compiled binary!
+@interface CKAttachmentMessagePartChatItem : NSObject
+- (BOOL)_needsPreviewGeneration;
+@end
+
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+#define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
-// Read directly from the plist file to bypass NSUserDefaults sandboxing blocks
+// Use an atomic boolean to ensure blazing fast, thread-safe O(1) reads for global JS hooks
+static _Atomic BOOL currentProcessRestricted = NO;
+
 static void loadPrefs() {
     NSDictionary *prefs = nil;
-    
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    } else if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"]) {
-        // Fallback for rootful, just in case
-        prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"];
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:ROOTFUL_PREFS_PATH];
     }
 
+    BOOL tweakEnabled = NO;
+    NSArray *restrictedApps = @[];
+    
     if (prefs) {
-        tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : YES;
+        // Default to NO (Safe/Allowed)
+        tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
         restrictedApps = prefs[@"restrictedApps"] ?: @[];
-        customRestrictedApps = prefs[@"customRestrictedApps"] ?: @"";
-    } else {
-        tweakEnabled = YES;
-        restrictedApps = @[];
-        customRestrictedApps = @"";
     }
+    
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
+    NSString *processName = [[NSProcessInfo processInfo] processName];
+    BOOL isTargetRestricted = NO;
+    
+    // Check both Bundle ID and Process Name (crucial for daemons without bundles)
+    if (bundleID && [restrictedApps containsObject:bundleID]) {
+        isTargetRestricted = YES;
+    } else if (processName && [restrictedApps containsObject:processName]) {
+        isTargetRestricted = YES;
+    }
+    
+    currentProcessRestricted = (tweakEnabled && isTargetRestricted);
 }
 
-static BOOL isAppWhitelisted() {
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    if (!bundleID) return YES; 
-    
-    if (restrictedApps && [restrictedApps containsObject:bundleID]) {
-        return NO;
-    }
-    
-    if (customRestrictedApps && customRestrictedApps.length > 0) {
-        if ([customRestrictedApps containsString:bundleID]) {
-            return NO;
-        }
-    }
-    
-    return YES;
+static BOOL isAppRestricted() {
+    return currentProcessRestricted;
 }
 
 %ctor {
@@ -52,10 +58,13 @@ static BOOL isAppWhitelisted() {
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
-// Intercept Initialization and Apply Strict Exploit Mitigations
+// =========================================================
+// WEBKIT EXPLOIT MITIGATIONS
+// =========================================================
+
 %hook WKWebView
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    if (tweakEnabled && !isAppWhitelisted()) {
+    if (isAppRestricted()) {
         
         // 1. Block JavaScript Execution
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
@@ -86,7 +95,7 @@ static BOOL isAppWhitelisted() {
                 [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
                 [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
                 [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"]; 
+                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
             } @catch (NSException *e) {}
         }
     }
@@ -94,10 +103,9 @@ static BOOL isAppWhitelisted() {
 }
 %end
 
-// Intercept Late Configuration Changes for JavaScript
 %hook WKWebpagePreferences
 - (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (tweakEnabled && !isAppWhitelisted() && allowed) {
+    if (isAppRestricted() && allowed) {
         return %orig(NO);
     }
     %orig;
@@ -106,16 +114,15 @@ static BOOL isAppWhitelisted() {
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (tweakEnabled && !isAppWhitelisted() && enabled) {
+    if (isAppRestricted() && enabled) {
         return %orig(NO);
     }
     %orig;
 }
 %end
 
-// Global JavaScriptCore Kill-Switch
 %hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (tweakEnabled && !isAppWhitelisted()) {
+    if (isAppRestricted()) {
         return NULL;
     }
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
@@ -125,26 +132,24 @@ static BOOL isAppWhitelisted() {
 // NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
 // =========================================================
 
-// Intercept IMCore to prevent automatic downloading of malicious iMessage attachments
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
-    if (tweakEnabled && !isAppWhitelisted()) {
+    if (isAppRestricted()) {
         return NO;
     }
     return %orig;
 }
 - (BOOL)canAutoDownload {
-    if (tweakEnabled && !isAppWhitelisted()) {
+    if (isAppRestricted()) {
         return NO;
     }
     return %orig;
 }
 %end
 
-// Intercept ChatKit to prevent automatic preview generation (which triggers ImageIO memory corruption)
 %hook CKAttachmentMessagePartChatItem
 - (BOOL)_needsPreviewGeneration {
-    if (tweakEnabled && !isAppWhitelisted()) {
+    if (isAppRestricted()) {
         return NO;
     }
     return %orig;
