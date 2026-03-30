@@ -60,12 +60,15 @@
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
-        NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
         
-        // 1. Gray out "Select Apps..." if Auto Protect is currently enabled
-        BOOL autoProtect = [prefs[@"autoProtectEnabled"] boolValue];
+        // Use NSUserDefaults to perfectly sync with AltList's memory cache
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        BOOL autoProtect = [defaults boolForKey:@"autoProtectEnabled"];
+        NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
+        
+        // 1. Gray out "Select Apps..." and "Add Custom ID" if Auto Protect is currently enabled
         for (PSSpecifier *s in specs) {
-            if ([s.identifier isEqualToString:@"SelectApps"]) {
+            if ([s.identifier isEqualToString:@"SelectApps"] || [s.identifier isEqualToString:@"AddCustomIDButton"]) {
                 [s setProperty:@(!autoProtect) forKey:@"enabled"];
             }
         }
@@ -80,7 +83,6 @@
             }
         }
         
-        NSArray *customIDs = prefs[@"customDaemonIDs"] ?: @[];
         if (insertIndex != NSNotFound) {
             for (NSString *daemonID in customIDs) {
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
@@ -92,6 +94,7 @@
                                                                      edit:nil];
                 [spec setProperty:daemonID forKey:@"daemonID"];
                 [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
+                [spec setProperty:@(!autoProtect) forKey:@"enabled"]; // Gray out existing switches if auto protect is ON
                 [specs insertObject:spec atIndex:insertIndex++];
             }
         }
@@ -111,35 +114,52 @@
 }
 
 // ----------------------------------------------------
-// UI Toggles & Actions
+// UI Toggles & Actions (Now exclusively using NSUserDefaults to sync with AltList)
 // ----------------------------------------------------
 
-// Dynamic interceptor for Auto Protect to toggle the Select Apps UI cell instantly
 - (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
-    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
-    prefs[@"autoProtectEnabled"] = value;
-    [prefs writeToFile:PREFS_PATH atomically:YES];
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults setObject:value forKey:@"autoProtectEnabled"];
+    [defaults synchronize]; // Flush to disk for Tweak.x
     
     BOOL autoProtect = [value boolValue];
+    
+    // Disable "Select Apps..."
     PSSpecifier *selectAppsSpec = [self specifierForID:@"SelectApps"];
     if (selectAppsSpec) {
         [selectAppsSpec setProperty:@(!autoProtect) forKey:@"enabled"];
         [self reloadSpecifier:selectAppsSpec];
     }
     
+    // Disable "Add Custom Bundle ID" button
+    PSSpecifier *addCustomIDSpec = [self specifierForID:@"AddCustomIDButton"];
+    if (addCustomIDSpec) {
+        [addCustomIDSpec setProperty:@(!autoProtect) forKey:@"enabled"];
+        [self reloadSpecifier:addCustomIDSpec];
+    }
+    
+    // Disable all generated Custom ID switches
+    for (PSSpecifier *s in self.specifiers) {
+        if ([[s propertyForKey:@"isCustomDaemon"] boolValue]) {
+            [s setProperty:@(!autoProtect) forKey:@"enabled"];
+            [self reloadSpecifier:s];
+        }
+    }
+    
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
 }
 
 - (id)readCustomIDValue:(PSSpecifier*)specifier {
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    NSArray *restricted = prefs[@"restrictedApps"] ?: @[];
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSArray *restricted = [defaults objectForKey:@"restrictedApps"] ?: @[];
     NSString *daemonID = [specifier propertyForKey:@"daemonID"];
     return @([restricted containsObject:daemonID]);
 }
 
 - (void)setCustomIDValue:(id)value specifier:(PSSpecifier*)specifier {
-    NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
-    NSMutableArray *restricted = [NSMutableArray arrayWithArray:prefs[@"restrictedApps"] ?: @[]];
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
+    
     NSString *daemonID = [specifier propertyForKey:@"daemonID"];
     BOOL enabled = [value boolValue];
     
@@ -149,8 +169,8 @@
         [restricted removeObject:daemonID];
     }
     
-    prefs[@"restrictedApps"] = restricted;
-    [prefs writeToFile:PREFS_PATH atomically:YES];
+    [defaults setObject:restricted forKey:@"restrictedApps"];
+    [defaults synchronize]; // Flush to disk for Tweak.x
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
 }
 
@@ -165,9 +185,9 @@
         if (inputText.length > 0) {
             NSArray *inputIDs = [inputText componentsSeparatedByString:@","];
             
-            NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
-            NSMutableArray *customIDs = [NSMutableArray arrayWithArray:prefs[@"customDaemonIDs"] ?: @[]];
-            NSMutableArray *restricted = [NSMutableArray arrayWithArray:prefs[@"restrictedApps"] ?: @[]];
+            NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+            NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+            NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
             
             BOOL changesMade = NO;
             
@@ -184,9 +204,9 @@
             }
             
             if (changesMade) {
-                prefs[@"customDaemonIDs"] = customIDs;
-                prefs[@"restrictedApps"] = restricted;
-                [prefs writeToFile:PREFS_PATH atomically:YES];
+                [defaults setObject:customIDs forKey:@"customDaemonIDs"];
+                [defaults setObject:restricted forKey:@"restrictedApps"];
+                [defaults synchronize];
                 
                 [self reloadSpecifiers];
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
@@ -201,7 +221,6 @@
 // ----------------------------------------------------
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
-    // Only allow editing for cells tagged as custom daemons
     if ([[spec propertyForKey:@"isCustomDaemon"] boolValue]) {
         return YES;
     }
@@ -213,19 +232,17 @@
         PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
         NSString *daemonID = [spec propertyForKey:@"daemonID"];
         
-        NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
-        NSMutableArray *customIDs = [NSMutableArray arrayWithArray:prefs[@"customDaemonIDs"] ?: @[]];
-        NSMutableArray *restricted = [NSMutableArray arrayWithArray:prefs[@"restrictedApps"] ?: @[]];
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+        NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
         
-        // Remove from persistent storage
         [customIDs removeObject:daemonID];
         [restricted removeObject:daemonID];
         
-        prefs[@"customDaemonIDs"] = customIDs;
-        prefs[@"restrictedApps"] = restricted;
-        [prefs writeToFile:PREFS_PATH atomically:YES];
+        [defaults setObject:customIDs forKey:@"customDaemonIDs"];
+        [defaults setObject:restricted forKey:@"restrictedApps"];
+        [defaults synchronize];
         
-        // Remove from UI dynamically
         [self removeSpecifier:spec animated:YES];
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     }
