@@ -57,13 +57,44 @@
     }
 }
 
+// Helper to get the lists for dynamic UI injection
+- (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
+    NSMutableArray *items = [NSMutableArray array];
+    
+    NSArray *tier1 = @[
+        @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
+        @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
+        @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+        @"com.apple.Maps", @"com.apple.weather"
+    ];
+    
+    NSArray *tier2 = @[
+        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+        @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn",
+        @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+    ];
+    
+    NSArray *tier3 = @[
+        @"com.apple.imagent", @"imagent", 
+        @"mediaserverd", 
+        @"networkd"
+    ];
+    
+    [items addObjectsFromArray:tier1];
+    if (level >= 2) [items addObjectsFromArray:tier2];
+    if (level >= 3) [items addObjectsFromArray:tier3];
+    
+    return items;
+}
+
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         
-        // Use NSUserDefaults to perfectly sync with AltList's memory cache
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         BOOL autoProtect = [defaults boolForKey:@"autoProtectEnabled"];
+        NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
         // 1. Gray out "Select Apps..." and "Add Custom ID" if Auto Protect is currently enabled
@@ -73,17 +104,44 @@
             }
         }
         
-        // 2. Inject Custom IDs dynamically
-        NSUInteger insertIndex = NSNotFound;
+        // 2. Inject Dynamic Auto-Protect Visual List
+        if (autoProtect) {
+            NSUInteger insertIndexAuto = NSNotFound;
+            for (NSUInteger i = 0; i < specs.count; i++) {
+                PSSpecifier *s = specs[i];
+                // Find where the segment cell lives to inject right below it
+                if ([s.identifier isEqualToString:@"AutoProtectLevelSegment"]) {
+                    insertIndexAuto = i + 1;
+                    break;
+                }
+            }
+            
+            if (insertIndexAuto != NSNotFound) {
+                // Add a new UI Group visually separating this list
+                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Actively Locked Down by Auto Protect" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+                [specs insertObject:groupSpec atIndex:insertIndexAuto++];
+                
+                NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
+                for (NSString *item in autoItems) {
+                    // Create switches that are ON, but grayed out so they can't be toggled
+                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:item target:self set:nil get:@selector(getAlwaysTrue:) detail:nil cell:PSSwitchCell edit:nil];
+                    [spec setProperty:@NO forKey:@"enabled"]; 
+                    [specs insertObject:spec atIndex:insertIndexAuto++];
+                }
+            }
+        }
+        
+        // 3. Inject Custom IDs dynamically
+        NSUInteger insertIndexCustom = NSNotFound;
         for (NSUInteger i = 0; i < specs.count; i++) {
             PSSpecifier *s = specs[i];
             if ([s.identifier isEqualToString:@"AddCustomIDButton"]) {
-                insertIndex = i + 1;
+                insertIndexCustom = i + 1;
                 break;
             }
         }
         
-        if (insertIndex != NSNotFound) {
+        if (insertIndexCustom != NSNotFound) {
             for (NSString *daemonID in customIDs) {
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
                                                                    target:self
@@ -95,7 +153,7 @@
                 [spec setProperty:daemonID forKey:@"daemonID"];
                 [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
                 [spec setProperty:@(!autoProtect) forKey:@"enabled"]; // Gray out existing switches if auto protect is ON
-                [specs insertObject:spec atIndex:insertIndex++];
+                [specs insertObject:spec atIndex:insertIndexCustom++];
             }
         }
         
@@ -114,39 +172,36 @@
 }
 
 // ----------------------------------------------------
-// UI Toggles & Actions (Now exclusively using NSUserDefaults to sync with AltList)
+// UI Toggles & Actions
 // ----------------------------------------------------
+
+// Dummy getter for the Auto-Protect dynamic list (Forces them to appear as "ON")
+- (id)getAlwaysTrue:(PSSpecifier*)specifier {
+    return @YES;
+}
 
 - (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults setObject:value forKey:@"autoProtectEnabled"];
-    [defaults synchronize]; // Flush to disk for Tweak.x
-    
-    BOOL autoProtect = [value boolValue];
-    
-    // Disable "Select Apps..."
-    PSSpecifier *selectAppsSpec = [self specifierForID:@"SelectApps"];
-    if (selectAppsSpec) {
-        [selectAppsSpec setProperty:@(!autoProtect) forKey:@"enabled"];
-        [self reloadSpecifier:selectAppsSpec];
-    }
-    
-    // Disable "Add Custom Bundle ID" button
-    PSSpecifier *addCustomIDSpec = [self specifierForID:@"AddCustomIDButton"];
-    if (addCustomIDSpec) {
-        [addCustomIDSpec setProperty:@(!autoProtect) forKey:@"enabled"];
-        [self reloadSpecifier:addCustomIDSpec];
-    }
-    
-    // Disable all generated Custom ID switches
-    for (PSSpecifier *s in self.specifiers) {
-        if ([[s propertyForKey:@"isCustomDaemon"] boolValue]) {
-            [s setProperty:@(!autoProtect) forKey:@"enabled"];
-            [self reloadSpecifier:s];
-        }
-    }
-    
+    [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    // Completely wipe the specifier cache and rebuild the UI
+    _specifiers = nil;
+    [self reloadSpecifiers];
+}
+
+- (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults setObject:value forKey:@"autoProtectLevel"];
+    [defaults synchronize];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    // Only rebuild the UI if Auto Protect is actively enabled
+    if ([defaults boolForKey:@"autoProtectEnabled"]) {
+        _specifiers = nil;
+        [self reloadSpecifiers];
+    }
 }
 
 - (id)readCustomIDValue:(PSSpecifier*)specifier {
@@ -170,7 +225,7 @@
     }
     
     [defaults setObject:restricted forKey:@"restrictedApps"];
-    [defaults synchronize]; // Flush to disk for Tweak.x
+    [defaults synchronize]; 
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
 }
 
@@ -208,6 +263,8 @@
                 [defaults setObject:restricted forKey:@"restrictedApps"];
                 [defaults synchronize];
                 
+                // Clear cache and rebuild UI so new switch appears
+                _specifiers = nil;
                 [self reloadSpecifiers];
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
             }
