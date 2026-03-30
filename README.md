@@ -1,19 +1,30 @@
 
 <img width="2753" height="2463" alt="IMG_6776" src="https://github.com/user-attachments/assets/366753b8-1432-4b1e-a4a9-16afae73a0ff" />
 
+# AntiDarkSword ⚔️
 
-# AntiDarkSword 🛡️
+**System-wide JS kill-switch with exceptions.**
 
-**A targeted system-wide WebKit & JavaScriptCore kill-switch for modern iOS.**
+AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken devices against WebKit and iMessage-based exploits. It significantly reduces your device's attack surface by neutralizing common vectors used in one-click and zero-click attacks.
 
-AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-based, and drive-by WebKit exploits (such as Coruna and DarkSword) before they can execute. This tweak hooks directly into `WKWebView` and the underlying C-level `JSEvaluateScript` functions to forcefully strip the JavaScript engine from web views.
-
-If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents* it from running (*level 3 rules).
-
-## ⚠️ How the Protection Works (Allow-By-Default)
+## 🔍 How the Protection Works (Allow-By-Default)
 To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Preset Rules** tiers. 
 
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps built with native UI like YouTube and Discord will continue to function normally.*
+
+## ✨ Features
+
+* **WebKit Hardening:** Forcibly disables JavaScript execution, inline media playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views.
+* **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation.
+* **Tiered Protection:**
+  * **Level 1:** Protects native Apple apps and services.
+  * **Level 2:** Expands protection to major third-party browsers and social media apps.
+  * **Level 3:** Locks down critical system daemons to prevent daemon-level zero-clicks.
+* **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific apps or background tasks.
+
+## ⚠️ Warning
+
+Even level 1 disables email / text previews of files, you have to hold the file down and save to files to view it. Enabling Level 3 restricts critical background daemons (like imagent and mediaserverd). Level 3 may break media playback. Only enable this level if you understand to disable if any issues.
 
 ## 🛑 Mitigated Exploits
 By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents several known exploit chains:
@@ -29,42 +40,11 @@ By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents sever
 * **Operation Triangulation:** iMessage WebKit zero-click chain (iOS 15.7 and older).
 * **Hermit:** JavaScriptCore type-confusion spyware chain (iOS 15.0 – 15.4.1).
 
-## 🛡️ Preset Rule Levels
-AntiDarkSword includes a Preset Rules feature that automatically applies surgical restrictions to high-risk applications and daemons based on three escalating security tiers.
-
-### Level 1: Native Apple Apps & Services
-Restricts JavaScript and WebKit execution in all pre-installed, native Apple applications and their underlying services. Protects against drive-by exploits, malicious calendar invites, rigged emails, and zero-click links.
-* **The Frontline:** Safari, Messages, Mail.
-* **Silent Parsers:** Calendar, Notes, Books.
-* **Content Consumers:** Apple News, Podcasts, Stocks, Maps, Weather.
-* **System View Services:** Safari View Service (SFSafariViewController in-app browsers), Mail Composition Service, iMessage Apps View Service & Activity Messages (iMessage extensions, stickers, and games).
-
-### Level 2: Third-Party Apps & Package Managers
-*Includes everything in Level 1, plus:* Extends the lockdown to non-Apple applications that heavily rely on custom in-app browsers or mandate the use of the WebKit engine.
-* **Third-Party Browsers:** Google Chrome, Mozilla Firefox, Brave Browser, DuckDuckGo.
-* **Social Media & Messaging:** WhatsApp, Telegram, Facebook, X / Twitter, Instagram, TikTok, LinkedIn.
-* **Jailbreak Package Managers:** Sileo, Zebra, Filza (prevents compromised repositories from injecting payloads via tweak depictions).
-
-### Level 3: Extreme Lockdown (System Daemons)
-*Includes everything in Levels 1 and 2, plus:* This is the maximum lockdown tier geared toward neutralizing complex zero-click exploit chains (like BLASTPASS or FORCEDENTRY) before they can even be parsed. 
-* **Restricted Daemons:** `imagent` (handles incoming iMessages/FaceTime), `mediaserverd` (audio/video parsing), `networkd` (socket connections).
-* **iMessage Clarification:** You DO NOT need to disable iMessage in your iOS Settings. Level 3 acts as a shield by restricting the background `imagent` daemon. You will still receive texts and notifications, but rich link previews and automatic attachment downloading will be blocked to prevent zero-click memory corruption.
-* **⚠️ WARNING:** Restricting critical background daemons **will** break normal device functions like iMessage background delivery (as mentioned above), media playback, and certain network features. ONLY enable if you know what you are doing!
-
 ## 📱 Compatibility
 * **iOS Versions:** iOS 15.0 - 17.0
 * **Architecture:** arm64 / arm64e (A11 through A16/M-series)
 * **Jailbreaks:** * Rootless: Dopamine (iOS 15.0 - 17.0), Palera1n (iOS 15.0 - 16.7.x)
   * Roothide: Dopamine Roothide 2 (via Roothide Patcher)
-
-## ✨ Features
-* **Surgical JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
-* **Preset Rules System:** 3 escalating tiers of automatic exploit mitigation.
-* **AltList Integration:** Easily restrict specific User or System apps manually natively via the Settings app.
-* **Advanced Restrictions:** Paste comma-separated lists of hidden bundle IDs or custom daemon process names to dynamically generate UI switches. Includes native swipe-to-delete functionality for easy management.
-* **No Daemon Panics:** Strictly filtered to ensure invisible system background daemons do not crash your device, with a process name fallback for daemons lacking standard bundles.
-* **Persistent UI Controls:** Includes a top-right Save button pinned to both the main Settings menu and the App Selection list for immediate application of changes.
-* **Safe Defaults:** Includes a "Reset to Defaults" option to quickly wipe all custom configurations and return the tweak to a safe, unrestrictive state.
 
 ## 📦 Dependencies
 Before installing this tweak, you **must** install the following from your package manager (Sileo/Zebra):
