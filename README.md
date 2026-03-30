@@ -1,3 +1,7 @@
+
+<img width="2753" height="2463" alt="IMG_6776" src="https://github.com/user-attachments/assets/366753b8-1432-4b1e-a4a9-16afae73a0ff" />
+
+
 # AntiDarkSword 🛡️
 
 **A targeted system-wide WebKit & JavaScriptCore kill-switch for modern iOS.**
