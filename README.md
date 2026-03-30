@@ -7,7 +7,7 @@ AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-ba
 If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents it from running at step zero.
 
 ## ⚠️ How the Protection Works (Allow-By-Default)
-To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Auto Protect** tiers. 
+To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Preset Rules** tiers. 
 
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps built with native UI like YouTube and Discord will continue to function normally.*
 
@@ -21,14 +21,15 @@ By disabling WebKit and JavaScriptCore attack vectors, this tweak can prevent se
 * **Trident:** Safari memory corruption exploit chain.
 * **Chaos:** Safari WebKit DOM vulnerability exploit.
 
-## 🛡️ Auto Protect Levels
-AntiDarkSword includes an Auto Protect feature that automatically applies surgical restrictions to high-risk applications based on three escalating security tiers.
+## 🛡️ Preset Rule Levels
+AntiDarkSword includes a Preset Rules feature that automatically applies surgical restrictions to high-risk applications and daemons based on three escalating security tiers.
 
-### Level 1: Native Apple Apps
-Restricts JavaScript and WebKit execution in all pre-installed, native Apple applications. Protects against drive-by exploits, malicious calendar invites, rigged emails, and zero-click links.
+### Level 1: Native Apple Apps & Services
+Restricts JavaScript and WebKit execution in all pre-installed, native Apple applications and their underlying services. Protects against drive-by exploits, malicious calendar invites, rigged emails, and zero-click links.
 * **The Frontline:** Safari, Messages, Mail.
 * **Silent Parsers:** Calendar, Notes, Books.
 * **Content Consumers:** Apple News, Podcasts, Stocks, Maps, Weather.
+* **System View Services:** Safari View Service (SFSafariViewController in-app browsers), Mail Composition Service, iMessage Apps View Service & Activity Messages (iMessage extensions, stickers, and games).
 
 ### Level 2: Third-Party Apps & Package Managers
 *Includes everything in Level 1, plus:* Extends the lockdown to non-Apple applications that heavily rely on custom in-app browsers or mandate the use of the WebKit engine.
@@ -39,7 +40,8 @@ Restricts JavaScript and WebKit execution in all pre-installed, native Apple app
 ### Level 3: Extreme Lockdown (System Daemons)
 *Includes everything in Levels 1 and 2, plus:* This is the maximum lockdown tier geared toward neutralizing complex zero-click exploit chains (like BLASTPASS or FORCEDENTRY) before they can even be parsed. 
 * **Restricted Daemons:** `imagent` (handles incoming iMessages/FaceTime), `mediaserverd` (audio/video parsing), `networkd` (socket connections).
-* **⚠️ WARNING:** Restricting critical background daemons **will** break normal device functions like iMessage background delivery, media playback, and certain network features. ONLY enable if you know what you are doing!
+* **iMessage Clarification:** You DO NOT need to disable iMessage in your iOS Settings. Level 3 acts as a shield by restricting the background `imagent` daemon. You will still receive texts and notifications, but rich link previews and automatic attachment downloading will be blocked to prevent zero-click memory corruption.
+* **⚠️ WARNING:** Restricting critical background daemons **will** break normal device functions like iMessage background delivery (as mentioned above), media playback, and certain network features. ONLY enable if you know what you are doing!
 
 ## 📱 Compatibility
 * **iOS Versions:** iOS 15.0 - 17.0
@@ -49,7 +51,7 @@ Restricts JavaScript and WebKit execution in all pre-installed, native Apple app
 
 ## ✨ Features
 * **Surgical JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
-* **Auto Protect System:** 3 escalating tiers of automatic exploit mitigation.
+* **Preset Rules System:** 3 escalating tiers of automatic exploit mitigation.
 * **AltList Integration:** Easily restrict specific User or System apps manually natively via the Settings app.
 * **Advanced Restrictions:** Paste comma-separated lists of hidden bundle IDs or custom daemon process names to dynamically generate UI switches. Includes native swipe-to-delete functionality for easy management.
 * **No Daemon Panics:** Strictly filtered to ensure invisible system background daemons do not crash your device, with a process name fallback for daemons lacking standard bundles.
@@ -84,8 +86,8 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
 3. **Turn ON** the master Enable Protection switch.
 4. Choose your protection method:
-   * **Auto Protect:** Turn on Enable Auto Protect and select Level 1, 2, or 3 for immediate, system-wide coverage.
-   * **Manual Selection:** If Auto Protect is off, use the **Select Apps...** menu to individually turn ON restrictions for specific apps (all are OFF by default).
+   * **Preset Rules:** Turn on Enable Preset Rules and select Level 1, 2, or 3 for immediate, system-wide coverage.
+   * **Manual Selection:** If Preset Rules are off, use the **Select Apps...** menu to individually turn ON restrictions for specific apps (all are OFF by default).
 5. Use the **Add Custom Bundle ID / Process** button to paste comma-separated lists of hidden background daemons you wish to restrict. Swipe left on any generated custom ID to delete it.
 6. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring.
 7. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
