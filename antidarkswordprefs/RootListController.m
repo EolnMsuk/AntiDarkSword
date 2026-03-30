@@ -65,7 +65,9 @@
         @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
         @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
         @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-        @"com.apple.Maps", @"com.apple.weather"
+        @"com.apple.Maps", @"com.apple.weather",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
     ];
     
     NSArray *tier2 = @[
@@ -97,19 +99,40 @@
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        // 1. Gray out "Select Apps..." and "Add Custom ID" if Auto Protect is currently enabled
-        for (PSSpecifier *s in specs) {
-            if ([s.identifier isEqualToString:@"SelectApps"] || [s.identifier isEqualToString:@"AddCustomIDButton"]) {
-                [s setProperty:@(!autoProtect) forKey:@"enabled"];
-            }
-        }
-        
-        // 2. Inject Dynamic Auto-Protect Visual List
+        // Dynamic UI Removal: If Preset Rules are ON, remove the manual App Permissions and Advanced Restrictions
         if (autoProtect) {
+            NSMutableArray *specsToKeep = [NSMutableArray array];
+            BOOL skipSection = NO;
+            
+            for (PSSpecifier *s in specs) {
+                // If we hit the App Permissions or Advanced Restrictions groups, start skipping
+                if ([s.identifier isEqualToString:@"SelectApps"] || 
+                    [s.identifier isEqualToString:@"AddCustomIDButton"]) {
+                    continue; 
+                }
+                
+                // Identify groups by inspecting their label properties directly since group cells often lack strict IDs
+                NSString *label = [s propertyForKey:@"label"];
+                if ([label isEqualToString:@"App Permissions (JS)"] || [label isEqualToString:@"Advanced Restrictions"]) {
+                    skipSection = YES;
+                    continue;
+                }
+                
+                // Keep the Reset to Defaults button visible
+                if ([label isEqualToString:@"Reset to Defaults"]) {
+                    skipSection = NO;
+                }
+                
+                if (!skipSection) {
+                    [specsToKeep addObject:s];
+                }
+            }
+            specs = specsToKeep;
+            
+            // Inject the visible list of locked-down items just beneath the segment control
             NSUInteger insertIndexAuto = NSNotFound;
             for (NSUInteger i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
-                // Find where the segment cell lives to inject right below it
                 if ([s.identifier isEqualToString:@"AutoProtectLevelSegment"]) {
                     insertIndexAuto = i + 1;
                     break;
@@ -117,43 +140,40 @@
             }
             
             if (insertIndexAuto != NSNotFound) {
-                // Add a new UI Group visually separating this list
-                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Actively Locked Down by Auto Protect" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Actively Locked Down by Preset" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
                 [specs insertObject:groupSpec atIndex:insertIndexAuto++];
                 
                 NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
                 for (NSString *item in autoItems) {
-                    // Create switches that are ON, but grayed out so they can't be toggled
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:item target:self set:nil get:@selector(getAlwaysTrue:) detail:nil cell:PSSwitchCell edit:nil];
                     [spec setProperty:@NO forKey:@"enabled"]; 
                     [specs insertObject:spec atIndex:insertIndexAuto++];
                 }
             }
-        }
-        
-        // 3. Inject Custom IDs dynamically
-        NSUInteger insertIndexCustom = NSNotFound;
-        for (NSUInteger i = 0; i < specs.count; i++) {
-            PSSpecifier *s = specs[i];
-            if ([s.identifier isEqualToString:@"AddCustomIDButton"]) {
-                insertIndexCustom = i + 1;
-                break;
+        } else {
+            // If Preset Rules are OFF, inject Custom IDs dynamically under the Advanced group
+            NSUInteger insertIndexCustom = NSNotFound;
+            for (NSUInteger i = 0; i < specs.count; i++) {
+                PSSpecifier *s = specs[i];
+                if ([s.identifier isEqualToString:@"AddCustomIDButton"]) {
+                    insertIndexCustom = i + 1;
+                    break;
+                }
             }
-        }
-        
-        if (insertIndexCustom != NSNotFound) {
-            for (NSString *daemonID in customIDs) {
-                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
-                                                                   target:self
-                                                                      set:@selector(setCustomIDValue:specifier:)
-                                                                      get:@selector(readCustomIDValue:)
-                                                                   detail:nil
-                                                                     cell:PSSwitchCell
-                                                                     edit:nil];
-                [spec setProperty:daemonID forKey:@"daemonID"];
-                [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
-                [spec setProperty:@(!autoProtect) forKey:@"enabled"]; // Gray out existing switches if auto protect is ON
-                [specs insertObject:spec atIndex:insertIndexCustom++];
+            
+            if (insertIndexCustom != NSNotFound) {
+                for (NSString *daemonID in customIDs) {
+                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
+                                                                       target:self
+                                                                          set:@selector(setCustomIDValue:specifier:)
+                                                                          get:@selector(readCustomIDValue:)
+                                                                       detail:nil
+                                                                         cell:PSSwitchCell
+                                                                         edit:nil];
+                    [spec setProperty:daemonID forKey:@"daemonID"];
+                    [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
+                    [specs insertObject:spec atIndex:insertIndexCustom++];
+                }
             }
         }
         
@@ -171,10 +191,6 @@
     self.navigationItem.rightBarButtonItem = saveButton;
 }
 
-// ----------------------------------------------------
-// UI Toggles & Actions
-// ----------------------------------------------------
-
 // Dummy getter for the Auto-Protect dynamic list (Forces them to appear as "ON")
 - (id)getAlwaysTrue:(PSSpecifier*)specifier {
     return @YES;
@@ -186,7 +202,7 @@
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    // Completely wipe the specifier cache and rebuild the UI
+    // Wipe cache and rebuild UI to show/hide sections
     _specifiers = nil;
     [self reloadSpecifiers];
 }
@@ -197,7 +213,7 @@
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    // Only rebuild the UI if Auto Protect is actively enabled
+    // Only rebuild UI if Preset Rules are ON to refresh the visual list
     if ([defaults boolForKey:@"autoProtectEnabled"]) {
         _specifiers = nil;
         [self reloadSpecifiers];
@@ -263,7 +279,6 @@
                 [defaults setObject:restricted forKey:@"restrictedApps"];
                 [defaults synchronize];
                 
-                // Clear cache and rebuild UI so new switch appears
                 _specifiers = nil;
                 [self reloadSpecifiers];
                 CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
@@ -273,9 +288,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// ----------------------------------------------------
-// Swipe-to-Delete Logic (UITableViewDelegate)
-// ----------------------------------------------------
+// Swipe-to-Delete Logic
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
     if ([[spec propertyForKey:@"isCustomDaemon"] boolValue]) {
