@@ -2,7 +2,6 @@
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 
-// Forward declarations to avoid compiler warnings
 @interface IMFileTransfer : NSObject
 - (BOOL)isAutoDownloadable;
 - (BOOL)canAutoDownload;
@@ -15,7 +14,6 @@
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 #define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
-// Use an atomic boolean to ensure blazing fast, thread-safe O(1) reads for global JS hooks
 static _Atomic BOOL currentProcessRestricted = NO;
 
 static void loadPrefs() {
@@ -27,11 +25,14 @@ static void loadPrefs() {
     }
 
     BOOL tweakEnabled = NO;
+    BOOL autoProtectEnabled = NO;
+    NSInteger autoProtectLevel = 1;
     NSArray *restrictedApps = @[];
     
     if (prefs) {
-        // Default to NO (Safe/Allowed)
         tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
+        autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
+        autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         restrictedApps = prefs[@"restrictedApps"] ?: @[];
     }
     
@@ -39,11 +40,27 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     
-    // Check both Bundle ID and Process Name (crucial for daemons without bundles)
-    if (bundleID && [restrictedApps containsObject:bundleID]) {
-        isTargetRestricted = YES;
-    } else if (processName && [restrictedApps containsObject:processName]) {
-        isTargetRestricted = YES;
+    // 1. Evaluate Auto Protect Tiers
+    if (autoProtectEnabled) {
+        NSArray *tier1 = @[@"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail"];
+        NSArray *tier2 = @[@"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks"];
+        NSArray *tier3 = @[@"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", @"com.apple.Maps", @"com.apple.weather"];
+        
+        if (bundleID) {
+            if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
+            if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
+            if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
+        }
+    }
+    
+    // 2. Evaluate Manual / Custom Array 
+    // (This runs if AutoProtect is OFF, OR to catch manually added Custom Daemons when AutoProtect is ON)
+    if (!isTargetRestricted) {
+        if (bundleID && [restrictedApps containsObject:bundleID]) {
+            isTargetRestricted = YES;
+        } else if (processName && [restrictedApps containsObject:processName]) {
+            isTargetRestricted = YES;
+        }
     }
     
     currentProcessRestricted = (tweakEnabled && isTargetRestricted);
@@ -65,8 +82,6 @@ static BOOL isAppRestricted() {
 %hook WKWebView
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if (isAppRestricted()) {
-        
-        // 1. Block JavaScript Execution
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         }
@@ -76,8 +91,6 @@ static BOOL isAppRestricted() {
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) {
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
         }
-
-        // 2. Block Media Parser Exploits (e.g., ImageIO/Video Decoder Zero-Clicks)
         if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) {
             configuration.allowsInlineMediaPlayback = NO;
         }
@@ -87,8 +100,6 @@ static BOOL isAppRestricted() {
         if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) {
             configuration.allowsPictureInPictureMediaPlayback = NO;
         }
-
-        // 3. Block WebGL, WebRTC, and File Sandbox Escapes via Private APIs
         if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
             @try {
                 [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
