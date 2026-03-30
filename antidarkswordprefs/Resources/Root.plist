@@ -31,7 +31,7 @@
             <key>label</key>
             <string>Auto Protect</string>
             <key>footerText</key>
-            <string>Automatically restricts critical native apps. Level 1: Safari, Messages, Mail. Level 2: + Calendar, Notes, Books. Level 3: + News, Podcasts, Stocks, Maps, Weather.</string>
+            <string>Automatically restricts critical apps. Level 1: Safari, Messages, Mail. Level 2: + Calendar, Notes, Books. Level 3: + News/Weather, all major 3rd-party browsers (Chrome, Firefox, etc.), and social media apps.</string>
         </dict>
         <dict>
             <key>cell</key>
