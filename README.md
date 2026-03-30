@@ -9,7 +9,7 @@ If an exploit requires JavaScript to trigger memory corruption or type confusion
 ## ⚠️ How the Protection Works (Allow-By-Default)
 To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down (such as Safari, Messages, Mail, Facebook etc). 
 
-*Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but dropdowns, dynamic logins, and complex web UI will fail.*
+*Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps like YouTube, Discord, Github, .*
 
 ## 🛑 Mitigated Exploits
 By disabling WebKit and JavaScriptCore attack vectors, this tweak can prevent several known exploit chains:
