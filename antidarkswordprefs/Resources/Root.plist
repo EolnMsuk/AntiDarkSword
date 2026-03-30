@@ -29,7 +29,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Auto Protect</string>
+            <string>Preset Rules</string>
             <key>footerText</key>
             <string>Level 1: All Native Apple Apps. Level 2: + All Major 3rd-Party Browsers &amp; Social Media. Level 3: + System Daemons (imagent, mediaserverd, networkd). ⚠️ WARNING: Level 3 restricts critical background daemons to prevent zero-clicks. This may break iMessage, media playback, or network features. ONLY enable if you know what you are doing!</string>
         </dict>
@@ -43,13 +43,15 @@
             <key>key</key>
             <string>autoProtectEnabled</string>
             <key>label</key>
-            <string>Enable Auto Protect</string>
+            <string>Enable Preset Rules</string>
             <key>set</key>
             <string>setAutoProtect:specifier:</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSSegmentCell</string>
+            <key>id</key>
+            <string>AutoProtectLevelSegment</string>
             <key>default</key>
             <integer>1</integer>
             <key>defaults</key>
@@ -68,8 +70,8 @@
                 <string>Level 2</string>
                 <string>Level 3</string>
             </array>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+            <key>set</key>
+            <string>setAutoProtectLevel:specifier:</string>
         </dict>
 
         <dict>
