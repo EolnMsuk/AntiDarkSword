@@ -182,9 +182,21 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Respring required to apply changes." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        
+        // 1. Wipe CFPreferences (Settings App UI cache)
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults removePersistentDomainForName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults synchronize];
+        
+        // 2. Overwrite the physical plist file to empty (Tweak.x reads this directly)
+        [@{} writeToFile:PREFS_PATH atomically:YES];
+        
+        // 3. Delete the file to ensure a clean slate
         [[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH error:nil];
+        
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
         [self respring];
+        
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
