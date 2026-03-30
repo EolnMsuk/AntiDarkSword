@@ -42,12 +42,14 @@ static void loadPrefs() {
     
     // 1. Evaluate Auto Protect Tiers
     if (autoProtectEnabled) {
-        // Level 1: All Native Apple Apps
+        // Level 1: All Native Apple Apps & Services
         NSArray *tier1 = @[
             @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
             @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
             @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-            @"com.apple.Maps", @"com.apple.weather"
+            @"com.apple.Maps", @"com.apple.weather",
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
         ];
         
         // Level 2: All Major 3rd Party Browsers, Social Media, and Package Managers
@@ -81,7 +83,6 @@ static void loadPrefs() {
     }
     
     // 2. Evaluate Manual / Custom Array 
-    // (This runs if AutoProtect is OFF, OR to catch manually added Custom Daemons when AutoProtect is ON)
     if (!isTargetRestricted) {
         if (bundleID && [restrictedApps containsObject:bundleID]) {
             isTargetRestricted = YES;
