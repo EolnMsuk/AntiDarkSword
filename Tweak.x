@@ -5,18 +5,18 @@ static BOOL tweakEnabled = YES;
 static NSArray *restrictedApps = nil;
 static NSString *customRestrictedApps = @"";
 
-// Define preference paths for both rootless and rootful environments
-#define PREFS_PATH_ROOTLESS @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
-#define PREFS_PATH_ROOTFUL @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+// Hardcoded rootless path - the Roothide Patcher will automatically find and convert this string in the compiled binary!
+#define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 // Read directly from the plist file to bypass NSUserDefaults sandboxing blocks
 static void loadPrefs() {
     NSDictionary *prefs = nil;
     
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH_ROOTLESS]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH_ROOTLESS];
-    } else if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH_ROOTFUL]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH_ROOTFUL];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    } else if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"]) {
+        // Fallback for rootful, just in case
+        prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"];
     }
 
     if (prefs) {
@@ -82,19 +82,12 @@ static BOOL isAppWhitelisted() {
         // 3. Block WebGL, WebRTC, and File Sandbox Escapes via Private APIs
         if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
             @try {
-                // Prevent local file access escapes
                 [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
                 [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-                
-                // Disable WebGL (graphics memory corruption vectors)
                 [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                
-                // Disable WebRTC (peer-to-peer data channel exploits)
                 [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
                 [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"]; 
-            } @catch (NSException *e) {
-                // Silently catch in case Apple alters or removes a private key in newer iOS versions
-            }
+            } @catch (NSException *e) {}
         }
     }
     return %orig(frame, configuration);
@@ -127,3 +120,33 @@ static BOOL isAppWhitelisted() {
     }
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
 }
+
+// =========================================================
+// NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
+// =========================================================
+
+// Intercept IMCore to prevent automatic downloading of malicious iMessage attachments
+%hook IMFileTransfer
+- (BOOL)isAutoDownloadable {
+    if (tweakEnabled && !isAppWhitelisted()) {
+        return NO;
+    }
+    return %orig;
+}
+- (BOOL)canAutoDownload {
+    if (tweakEnabled && !isAppWhitelisted()) {
+        return NO;
+    }
+    return %orig;
+}
+%end
+
+// Intercept ChatKit to prevent automatic preview generation (which triggers ImageIO memory corruption)
+%hook CKAttachmentMessagePartChatItem
+- (BOOL)_needsPreviewGeneration {
+    if (tweakEnabled && !isAppWhitelisted()) {
+        return NO;
+    }
+    return %orig;
+}
+%end
