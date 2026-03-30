@@ -1,56 +1,79 @@
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <spawn.h>
+#import <objc/runtime.h>
 
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
-// -------------------------------------------------------------------------
-// Subclass AltList to inject a persistent "Save" button in the App List view
-// -------------------------------------------------------------------------
-@interface ATLApplicationListMultiSelectionController : PSListController
-@end
-
-@interface AntiDarkSwordAppListController : ATLApplicationListMultiSelectionController
-@end
-
-@implementation AntiDarkSwordAppListController
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" 
-                                                                   style:UIBarButtonItemStyleDone 
-                                                                  target:self 
-                                                                  action:@selector(savePrompt)];
-    self.navigationItem.rightBarButtonItem = saveButton;
-}
-
-- (void)savePrompt {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes now?" preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        pid_t pid;
-        const char* args[] = {"sbreload", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-@end
-
-// -------------------------------------------------------------------------
-// Main Preferences Controller
-// -------------------------------------------------------------------------
 @interface AntiDarkSwordPrefsRootListController : PSListController
 @end
 
 @implementation AntiDarkSwordPrefsRootListController
 
-- (NSArray *)specifiers {
-    if (!_specifiers) {
-        // Dynamically load AltList
+// We use +initialize so the dynamic class is registered the moment Preferences.app 
+// loads our root controller, ensuring it exists before the user taps "Select Apps..."
++ (void)initialize {
+    if (self == [AntiDarkSwordPrefsRootListController class]) {
+        
+        // 1. Ensure AltList is loaded into memory first
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
             [altListBundle load];
         }
         
+        // 2. Dynamically create the subclass to avoid compile-time CI linker errors
+        Class altListClass = NSClassFromString(@"ATLApplicationListMultiSelectionController");
+        if (altListClass && !NSClassFromString(@"AntiDarkSwordAppListController")) {
+            
+            // Allocate the new class: AntiDarkSwordAppListController : ATLApplicationListMultiSelectionController
+            Class newClass = objc_allocateClassPair(altListClass, "AntiDarkSwordAppListController", 0);
+            if (newClass) {
+                
+                // Inject viewWillAppear: to add the persistent Save button
+                SEL viewWillAppearSel = @selector(viewWillAppear:);
+                Method originalMethod = class_getInstanceMethod(altListClass, viewWillAppearSel);
+                
+                IMP customViewWillAppearImp = imp_implementationWithBlock(^(id _self, BOOL animated) {
+                    // Call the original viewWillAppear: implementation safely
+                    if (originalMethod) {
+                        void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalMethod);
+                        originalMsg(_self, viewWillAppearSel, animated);
+                    }
+                    
+                    // Inject our Save button into the navigation bar
+                    UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" 
+                                                                                   style:UIBarButtonItemStyleDone 
+                                                                                  target:_self 
+                                                                                  action:@selector(savePrompt)];
+                    ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
+                });
+                
+                // If originalMethod is somehow null, default to "v@:B" (void return, id self, SEL cmd, BOOL arg)
+                class_addMethod(newClass, viewWillAppearSel, customViewWillAppearImp, originalMethod ? method_getTypeEncoding(originalMethod) : "v@:B");
+                
+                // Inject the savePrompt action method
+                SEL savePromptSel = @selector(savePrompt);
+                IMP savePromptImp = imp_implementationWithBlock(^(id _self) {
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes now?" preferredStyle:UIAlertControllerStyleAlert];
+                    [alert addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
+                    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                        pid_t pid;
+                        const char* args[] = {"sbreload", NULL};
+                        posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
+                    }]];
+                    [((UIViewController *)_self) presentViewController:alert animated:YES completion:nil];
+                });
+                class_addMethod(newClass, savePromptSel, savePromptImp, "v@:");
+                
+                // Finalize and register the class globally
+                objc_registerClassPair(newClass);
+            }
+        }
+    }
+}
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         
         // Find index to insert dynamic custom ID switches
@@ -132,6 +155,7 @@
         if (newID.length > 0) {
             NSMutableDictionary *prefs = [NSMutableDictionary dictionaryWithContentsOfFile:PREFS_PATH] ?: [NSMutableDictionary dictionary];
             NSMutableArray *customIDs = [NSMutableArray arrayWithArray:prefs[@"customDaemonIDs"] ?: @[]];
+            
             if (![customIDs containsObject:newID]) {
                 [customIDs addObject:newID];
                 prefs[@"customDaemonIDs"] = customIDs;
