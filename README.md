@@ -4,7 +4,7 @@
 
 AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-based, and drive-by WebKit exploits (such as Coruna and DarkSword) before they can execute. This tweak hooks directly into `WKWebView` and the underlying C-level `JSEvaluateScript` functions to forcefully strip the JavaScript engine from web views.
 
-If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents it from running at step zero.
+If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents* it from running (*level 3 rules).
 
 ## ⚠️ How the Protection Works (Allow-By-Default)
 To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Preset Rules** tiers. 
@@ -12,7 +12,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps built with native UI like YouTube and Discord will continue to function normally.*
 
 ## 🛑 Mitigated Exploits
-By disabling WebKit and JavaScriptCore attack vectors, this tweak can prevent several known exploit chains:
+By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents several known exploit chains:
 * **DarkSword:** Full-chain, JavaScript-based zero-click exploit kit (iOS 18.4 – 18.7).
 * **Coruna:** JavaScript-reliant iOS exploit kit (iOS 13.0 – 17.2.1).
 * **Predator:** Safari JavaScript 1-click spyware (Versions before iOS 16.7).
