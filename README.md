@@ -7,7 +7,7 @@ AntiDarkSword is a security mitigation tweak designed to stop zero-click, JIT-ba
 If an exploit requires JavaScript to trigger memory corruption or type confusion, this tweak mathematically prevents it from running at step zero.
 
 ## ⚠️ How the Protection Works (Allow-By-Default)
-To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down (such as Safari, Messages, Mail, Facebook etc). 
+To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Auto Protect** tiers. 
 
 *Note: Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps built with native UI like YouTube and Discord will continue to function normally.*
 
@@ -21,51 +21,25 @@ By disabling WebKit and JavaScriptCore attack vectors, this tweak can prevent se
 * **Trident:** Safari memory corruption exploit chain.
 * **Chaos:** Safari WebKit DOM vulnerability exploit.
 
-## 🛡️ Recommended Native Apps to Restrict
-For a paranoid-level lockdown, you should disable JavaScript for the following native Apple applications in the tweak settings to eliminate silent attack vectors:
+## 🛡️ Auto Protect Levels
+AntiDarkSword includes an Auto Protect feature that automatically applies surgical restrictions to high-risk applications based on three escalating security tiers.
 
-### Tier 1: The Frontline (Critical)
-* **Safari** (`com.apple.mobilesafari`): The primary target for drive-by web exploits.
-* **Messages** (`com.apple.MobileSMS`): Generates rich link previews and processes incoming data automatically.
-* **Mail** (`com.apple.mobilemail`): Renders complex HTML, CSS, and tracking pixels in incoming emails. 
+### Level 1: Native Apple Apps
+Restricts JavaScript and WebKit execution in all pre-installed, native Apple applications. Protects against drive-by exploits, malicious calendar invites, rigged emails, and zero-click links.
+* **The Frontline:** Safari, Messages, Mail.
+* **Silent Parsers:** Calendar, Notes, Books.
+* **Content Consumers:** Apple News, Podcasts, Stocks, Maps, Weather.
 
-### Tier 2: The Silent Parsers (High Risk)
-* **Calendar** (`com.apple.mobilecal`): Malicious calendar invites can contain rigged HTML descriptions or web-based attachments.
-* **Notes** (`com.apple.mobilenotes`): iCloud shared notes process rich web links and formatted HTML.
-* **Books** (`com.apple.iBooks`): EPUB files are ZIP archives containing HTML and JavaScript. A malicious book file can trigger a WebKit exploit.
+### Level 2: Third-Party Apps & Package Managers
+*Includes everything in Level 1, plus:* Extends the lockdown to non-Apple applications that heavily rely on custom in-app browsers or mandate the use of the WebKit engine.
+* **Third-Party Browsers:** Google Chrome, Mozilla Firefox, Brave Browser, DuckDuckGo.
+* **Social Media & Messaging:** WhatsApp, Telegram, Facebook, X / Twitter, Instagram, TikTok, LinkedIn.
+* **Jailbreak Package Managers:** Sileo, Zebra, Filza (prevents compromised repositories from injecting payloads via tweak depictions).
 
-### Tier 3: The Content Consumers (Moderate Risk)
-* **Apple News** (`com.apple.news`): Renders its articles and third-party ad networks almost entirely via WebKit.
-* **Podcasts** (`com.apple.podcasts`): Uses web views to render complex, formatted show notes that contain links.
-* **Stocks** (`com.apple.stocks`): Pulls in and renders web-based financial news articles.
-* **Maps** (`com.apple.Maps`): Embeds web content for business listings, Wikipedia snippets, and Yelp integrations.
-* **Weather** (`com.apple.weather`): Occasionally pulls in web-based news alerts for severe weather events.
-
-## 🌐 Recommended Third-Party & Jailbreak Apps to Restrict
-If you use the following third-party applications, they should also be restricted as they rely heavily on embedded WebKit views that can be targeted by attackers.
-
-### Third-Party Web Browsers
-Apple mandates that all iOS browsers use the WebKit engine. If you use an alternative default browser, it is just as vulnerable as Safari.
-* **Google Chrome** (`com.google.chrome.ios`)
-* **Mozilla Firefox** (`org.mozilla.ios.Firefox`)
-* **Brave Browser** (`com.brave.ios.browser`)
-* **DuckDuckGo** (`com.duckduckgo.mobile.ios`)
-
-### Social Media & Messaging
-These apps frequently utilize custom in-app browsers to open links, bypassing standard protections.
-* **WhatsApp** (`net.whatsapp.WhatsApp`)
-* **Telegram** (`ph.telegra.Telegraph`)
-* **Facebook** (`com.facebook.Facebook`)
-* **X / Twitter** (`com.atebits.Tweetie2`)
-* **Instagram** (`com.burbn.instagram`)
-* **TikTok** (`com.zhiliaoapp.musically`)
-* **LinkedIn** (`com.linkedin.LinkedIn`)
-
-### Jailbreak Package Managers
-Package managers render tweak depictions by fetching HTML from external repositories. A compromised repository could inject a WebKit payload directly into the package manager.
-* **Sileo** (`org.coolstar.sileo`)
-* **Zebra** (`xyz.willy.Zebra`)
-* **Filza** (`com.tigisoftware.Filza`)
+### Level 3: Extreme Lockdown (System Daemons)
+*Includes everything in Levels 1 and 2, plus:* This is the maximum lockdown tier geared toward neutralizing complex zero-click exploit chains (like BLASTPASS or FORCEDENTRY) before they can even be parsed. 
+* **Restricted Daemons:** `imagent` (handles incoming iMessages/FaceTime), `mediaserverd` (audio/video parsing), `networkd` (socket connections).
+* **⚠️ WARNING:** Restricting critical background daemons **will** break normal device functions like iMessage background delivery, media playback, and certain network features. ONLY enable if you know what you are doing!
 
 ## 📱 Compatibility
 * **iOS Versions:** iOS 15.0 - 17.0
@@ -75,8 +49,9 @@ Package managers render tweak depictions by fetching HTML from external reposito
 
 ## ✨ Features
 * **Surgical JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
-* **AltList Integration:** Easily restrict specific User or System apps natively via the Settings app.
-* **Advanced Restrictions:** Manually enter hidden bundle IDs or custom daemon process names that do not appear in standard app lists. These dynamically generate syncable UI switches in the main menu.
+* **Auto Protect System:** 3 escalating tiers of automatic exploit mitigation.
+* **AltList Integration:** Easily restrict specific User or System apps manually natively via the Settings app.
+* **Advanced Restrictions:** Paste comma-separated lists of hidden bundle IDs or custom daemon process names to dynamically generate UI switches. Includes native swipe-to-delete functionality for easy management.
 * **No Daemon Panics:** Strictly filtered to ensure invisible system background daemons do not crash your device, with a process name fallback for daemons lacking standard bundles.
 * **Persistent UI Controls:** Includes a top-right Save button pinned to both the main Settings menu and the App Selection list for immediate application of changes.
 * **Safe Defaults:** Includes a "Reset to Defaults" option to quickly wipe all custom configurations and return the tweak to a safe, unrestrictive state.
@@ -107,9 +82,11 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 ## ⚙️ Configuration
 1. Open your iPhone's native **Settings** app.
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
-3. You will see an option to list your apps. **All switches are OFF by default** (meaning JavaScript is allowed and apps behave normally).
-4. **Turn ON** the switch for any app you wish to protect. Turning it on restricts its web access and strips its ability to run JavaScript.
-5. You can use the **Add Custom Bundle ID / Process** button to manually restrict hidden background daemons. 
+3. **Turn ON** the master Enable Protection switch.
+4. Choose your protection method:
+   * **Auto Protect:** Turn on Enable Auto Protect and select Level 1, 2, or 3 for immediate, system-wide coverage.
+   * **Manual Selection:** If Auto Protect is off, use the **Select Apps...** menu to individually turn ON restrictions for specific apps (all are OFF by default).
+5. Use the **Add Custom Bundle ID / Process** button to paste comma-separated lists of hidden background daemons you wish to restrict. Swipe left on any generated custom ID to delete it.
 6. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring.
 7. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
 
