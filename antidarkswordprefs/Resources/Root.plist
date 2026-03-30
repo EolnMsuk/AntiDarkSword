@@ -77,6 +77,8 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
+            <key>id</key>
+            <string>AppPermissionsGroup</string>
             <key>label</key>
             <string>App Permissions (JS)</string>
             <key>footerText</key>
@@ -117,6 +119,8 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
+            <key>id</key>
+            <string>AdvancedRestrictionsGroup</string>
             <key>label</key>
             <string>Advanced Restrictions</string>
             <key>footerText</key>
@@ -132,6 +136,7 @@
             <key>id</key>
             <string>AddCustomIDButton</string>
         </dict>
+        
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
