@@ -44,7 +44,14 @@ static void loadPrefs() {
     if (autoProtectEnabled) {
         NSArray *tier1 = @[@"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail"];
         NSArray *tier2 = @[@"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks"];
-        NSArray *tier3 = @[@"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", @"com.apple.Maps", @"com.apple.weather"];
+        NSArray *tier3 = @[
+            // Native Content Apps
+            @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", @"com.apple.Maps", @"com.apple.weather",
+            // Third-Party Browsers
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+            // Social Media & Messaging
+            @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", @"com.zhiliaoapp.musically"
+        ];
         
         if (bundleID) {
             if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
