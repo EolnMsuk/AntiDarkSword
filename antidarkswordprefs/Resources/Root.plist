@@ -14,7 +14,7 @@
             <key>cell</key>
             <string>PSSwitchCell</string>
             <key>default</key>
-            <true/>
+            <false/>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
@@ -30,14 +30,13 @@
             <key>label</key>
             <string>App Permissions (JS)</string>
             <key>footerText</key>
-            <string>All apps are allowed to run JavaScript by default.
-Turn an app OFF to restrict its web access and protect it from exploits.</string>
+            <string>All apps are allowed to run JavaScript by default. Turn an app ON to explicitly restrict its web access and protect it from exploits.</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSLinkCell</string>
             <key>detail</key>
-            <string>ATLApplicationListMultiSelectionController</string>
+            <string>AntiDarkSwordAppListController</string>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
@@ -68,19 +67,31 @@ Turn an app OFF to restrict its web access and protect it from exploits.</string
             <key>label</key>
             <string>Advanced Restrictions</string>
             <key>footerText</key>
-            <string>Manually enter bundle IDs for hidden daemons you want to RESTRICT (comma-separated).</string>
+            <string>Add bundle IDs or process names for daemons you want to restrict manually.</string>
         </dict>
         <dict>
             <key>cell</key>
-            <string>PSEditTextCell</string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>customRestrictedApps</string>
+            <string>PSButtonCell</string>
             <key>label</key>
-            <string>Custom IDs:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+            <string>Add Custom Bundle ID / Process</string>
+            <key>action</key>
+            <string>addCustomID</string>
+            <key>id</key>
+            <string>AddCustomIDButton</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Reset to Defaults</string>
+            <key>action</key>
+            <string>resetToDefaults</string>
+            <key>isDestructive</key>
+            <true/>
         </dict>
     </array>
     <key>title</key>
