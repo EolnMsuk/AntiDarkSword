@@ -31,7 +31,7 @@
             <key>label</key>
             <string>Auto Protect</string>
             <key>footerText</key>
-            <string>Automatically restricts critical apps. Level 1: Safari, Messages, Mail. Level 2: + Calendar, Notes, Books. Level 3: + News/Weather, all major 3rd-party browsers (Chrome, Firefox, etc.), and social media apps.</string>
+            <string>Level 1: All Native Apple Apps. Level 2: + All Major 3rd-Party Browsers &amp; Social Media. Level 3: + System Daemons (imagent, mediaserverd, networkd). ⚠️ WARNING: Level 3 restricts critical background daemons to prevent zero-clicks. This may break iMessage, media playback, or network features. ONLY enable if you know what you are doing!</string>
         </dict>
         <dict>
             <key>cell</key>
