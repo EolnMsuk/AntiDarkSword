@@ -99,37 +99,15 @@
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        // Dynamic UI Removal: If Preset Rules are ON, remove the manual App Permissions and Advanced Restrictions
-        if (autoProtect) {
-            NSMutableArray *specsToKeep = [NSMutableArray array];
-            BOOL skipSection = NO;
-            
-            for (PSSpecifier *s in specs) {
-                // If we hit the App Permissions or Advanced Restrictions groups, start skipping
-                if ([s.identifier isEqualToString:@"SelectApps"] || 
-                    [s.identifier isEqualToString:@"AddCustomIDButton"]) {
-                    continue; 
-                }
-                
-                // Identify groups by inspecting their label properties directly since group cells often lack strict IDs
-                NSString *label = [s propertyForKey:@"label"];
-                if ([label isEqualToString:@"App Permissions (JS)"] || [label isEqualToString:@"Advanced Restrictions"]) {
-                    skipSection = YES;
-                    continue;
-                }
-                
-                // Keep the Reset to Defaults button visible
-                if ([label isEqualToString:@"Reset to Defaults"]) {
-                    skipSection = NO;
-                }
-                
-                if (!skipSection) {
-                    [specsToKeep addObject:s];
-                }
+        // 1. Gray out manual settings if Preset Rules are currently enabled
+        for (PSSpecifier *s in specs) {
+            if ([s.identifier isEqualToString:@"SelectApps"] || [s.identifier isEqualToString:@"AddCustomIDButton"]) {
+                [s setProperty:@(!autoProtect) forKey:@"enabled"];
             }
-            specs = specsToKeep;
-            
-            // Inject the visible list of locked-down items just beneath the segment control
+        }
+        
+        // 2. Inject the dynamic "Actively Locked Down" visual list
+        if (autoProtect) {
             NSUInteger insertIndexAuto = NSNotFound;
             for (NSUInteger i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
@@ -150,30 +128,31 @@
                     [specs insertObject:spec atIndex:insertIndexAuto++];
                 }
             }
-        } else {
-            // If Preset Rules are OFF, inject Custom IDs dynamically under the Advanced group
-            NSUInteger insertIndexCustom = NSNotFound;
-            for (NSUInteger i = 0; i < specs.count; i++) {
-                PSSpecifier *s = specs[i];
-                if ([s.identifier isEqualToString:@"AddCustomIDButton"]) {
-                    insertIndexCustom = i + 1;
-                    break;
-                }
+        }
+        
+        // 3. Inject Custom IDs dynamically (Keep them visible, but gray them out if Preset Rules are ON)
+        NSUInteger insertIndexCustom = NSNotFound;
+        for (NSUInteger i = 0; i < specs.count; i++) {
+            PSSpecifier *s = specs[i];
+            if ([s.identifier isEqualToString:@"AddCustomIDButton"]) {
+                insertIndexCustom = i + 1;
+                break;
             }
-            
-            if (insertIndexCustom != NSNotFound) {
-                for (NSString *daemonID in customIDs) {
-                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
-                                                                       target:self
-                                                                          set:@selector(setCustomIDValue:specifier:)
-                                                                          get:@selector(readCustomIDValue:)
-                                                                       detail:nil
-                                                                         cell:PSSwitchCell
-                                                                         edit:nil];
-                    [spec setProperty:daemonID forKey:@"daemonID"];
-                    [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
-                    [specs insertObject:spec atIndex:insertIndexCustom++];
-                }
+        }
+        
+        if (insertIndexCustom != NSNotFound) {
+            for (NSString *daemonID in customIDs) {
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID
+                                                                   target:self
+                                                                      set:@selector(setCustomIDValue:specifier:)
+                                                                      get:@selector(readCustomIDValue:)
+                                                                   detail:nil
+                                                                     cell:PSSwitchCell
+                                                                     edit:nil];
+                [spec setProperty:daemonID forKey:@"daemonID"];
+                [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Tag for swipe-to-delete
+                [spec setProperty:@(!autoProtect) forKey:@"enabled"]; // Gray out existing switches if Preset Rules are ON
+                [specs insertObject:spec atIndex:insertIndexCustom++];
             }
         }
         
@@ -202,7 +181,7 @@
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    // Wipe cache and rebuild UI to show/hide sections
+    // Wipe cache and rebuild UI to apply the gray-out effect and show/hide the visual list
     _specifiers = nil;
     [self reloadSpecifiers];
 }
@@ -213,7 +192,7 @@
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    // Only rebuild UI if Preset Rules are ON to refresh the visual list
+    // Wipe cache and rebuild UI to refresh the visual list contents
     if ([defaults boolForKey:@"autoProtectEnabled"]) {
         _specifiers = nil;
         [self reloadSpecifiers];
@@ -291,7 +270,11 @@
 // Swipe-to-Delete Logic
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
-    if ([[spec propertyForKey:@"isCustomDaemon"] boolValue]) {
+    // Don't allow swipe-to-delete if Preset Rules are turned on and locking the UI
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL autoProtect = [defaults boolForKey:@"autoProtectEnabled"];
+    
+    if ([[spec propertyForKey:@"isCustomDaemon"] boolValue] && !autoProtect) {
         return YES;
     }
     return NO;
