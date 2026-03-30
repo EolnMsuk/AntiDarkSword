@@ -57,7 +57,7 @@
             <key>showIdentifiersAsSubtitle</key>
             <true/>
             <key>defaultApplicationSwitchValue</key>
-            <true/>
+            <false/>
             <key>useSearchBar</key>
             <true/>
         </dict>
