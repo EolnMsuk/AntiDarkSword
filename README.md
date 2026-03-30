@@ -76,9 +76,10 @@ Package managers render tweak depictions by fetching HTML from external reposito
 ## ✨ Features
 * **Surgical JIT Denial:** Hooks `WKWebView` and `JavaScriptCore` via MobileSubstrate.
 * **AltList Integration:** Easily restrict specific User or System apps natively via the Settings app.
-* **Advanced Restrictions:** Manually enter hidden bundle IDs or custom daemon processes that do not appear in standard app lists.
-* **No Daemon Panics:** Strictly filtered to `com.apple.UIKit` to ensure invisible system background daemons do not crash your device.
-* **Persistent UI:** Includes a top-right Respring button in the Settings menu for immediate application of changes.
+* **Advanced Restrictions:** Manually enter hidden bundle IDs or custom daemon process names that do not appear in standard app lists. These dynamically generate syncable UI switches in the main menu.
+* **No Daemon Panics:** Strictly filtered to ensure invisible system background daemons do not crash your device, with a process name fallback for daemons lacking standard bundles.
+* **Persistent UI Controls:** Includes a top-right Save button pinned to both the main Settings menu and the App Selection list for immediate application of changes.
+* **Safe Defaults:** Includes a "Reset to Defaults" option to quickly wipe all custom configurations and return the tweak to a safe, unrestrictive state.
 
 ## 📦 Dependencies
 Before installing this tweak, you **must** install the following from your package manager (Sileo/Zebra):
@@ -106,9 +107,11 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 ## ⚙️ Configuration
 1. Open your iPhone's native **Settings** app.
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
-3. You will see an option to list your apps. **All switches are ON by default.**
-4. **Turn OFF** the switch for any app you wish to protect. Turning it off strips its ability to run JavaScript.
-5. Tap the **Respring** button in the top right corner to apply your new security rules.
+3. You will see an option to list your apps. **All switches are OFF by default** (meaning JavaScript is allowed and apps behave normally).
+4. **Turn ON** the switch for any app you wish to protect. Turning it on restricts its web access and strips its ability to run JavaScript.
+5. You can use the **Add Custom Bundle ID / Process** button to manually restrict hidden background daemons. 
+6. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring.
+7. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
 
 ## 👨‍💻 Developer
 Created by [eolnmsuk](https://venmo.com/user/eolnmsuk)
