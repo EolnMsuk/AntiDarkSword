@@ -50,7 +50,7 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 ## ⚙️ Configuration
 1. Open your iPhone's native **Settings** app.
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
-3. Under the "App Permissions" section, you will see a list of your apps. **All switches are ON by default.**
+3. Click "Select Apps..." and you will see a list of your apps. **All switches are ON by default.**
 4. **Turn OFF** the switch for any app you wish to protect. Turning it off strips its ability to run JavaScript.
 5. Tap the **Respring** button in the top right corner to apply your new security rules.
 
