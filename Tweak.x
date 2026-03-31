@@ -58,8 +58,7 @@ static void loadPrefs() {
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
             @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
             @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
-            @"com.reddit.Reddit",
-            @"com.google.ios.youtube", @"tv.twitch",
+            @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
             @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
         ];
         
