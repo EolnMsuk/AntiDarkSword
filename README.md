@@ -1,8 +1,7 @@
+<img width="800" height="806" alt="IMG_6776" src="https://github.com/user-attachments/assets/eb492aec-35fc-46b1-a2f1-88193bf78c10" />
 
-<img width="800" alt="AntiDarkSword Logo" src="https://github.com/user-attachments/assets/366753b8-1432-4b1e-a4a9-16afae73a0ff" />
-  
-  # AntiDarkSword ⚔️
-  **System-wide JS kill-switch with exceptions.**
+# AntiDarkSword ⚔️
+**System-wide JS kill-switch with exceptions.**
 
 AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken devices against WebKit and iMessage-based exploits. It significantly reduces your device's attack surface by neutralizing common vectors used in one-click and zero-click attacks.
 
