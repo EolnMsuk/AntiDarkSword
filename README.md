@@ -23,9 +23,11 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific apps or background tasks.
 
 > [!WARNING]
-> **Even Level 1 disables email and text previews of files.** You have to hold the file down and save it to the Files app to view it. 
+> **Remove any apps you want secured from Roothide's Blacklist app.** This allows the tweak to filter that app.
 > 
-> **Enabling Level 3** restricts critical background daemons (like `imagent` and `mediaserverd`) and may break media playback. Only enable this level if you know how to troubleshoot and disable it if issues arise.
+> **Level 1 disables email and text previews of files.** You have to hold the file down and save it to the Files app to view it. 
+> 
+> **Level 3 restricts critical background daemons.**  `imagent` and `mediaserverd` filtering may break media playback in some apps.
 
 ## 🛑 Mitigated Exploits
 
