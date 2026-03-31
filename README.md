@@ -50,6 +50,7 @@ By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents sever
 * **Architecture:** arm64 / arm64e (A11 through A16/M-series)
 * **Jailbreaks:** * **Rootless:** Dopamine (iOS 15.0 – 17.0), Palera1n (iOS 15.0 – 16.7.x)
   * **Roothide:** Dopamine Roothide 2 (via Roothide Patcher)
+  * **Rootful** Palera1n / Checkm8 users should use the: [rootful version](https://github.com/EolnMsuk/AntiDarkSword-rootful)
 
 ## 📦 Dependencies
 
