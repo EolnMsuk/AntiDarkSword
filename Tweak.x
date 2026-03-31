@@ -52,11 +52,14 @@ static void loadPrefs() {
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
         ];
         
-        // Level 2: All Major 3rd Party Browsers, Social Media, and Package Managers
+        // Level 2: All Major 3rd Party Browsers, Social Media, AI Chats, and Package Managers
         NSArray *tier2 = @[
+            @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
             @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-            @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn",
+            @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
+            @"com.reddit.Reddit",
+            @"com.google.ios.youtube", @"tv.twitch",
             @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
         ];
         
