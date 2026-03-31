@@ -23,8 +23,6 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific apps or background tasks.
 
 > [!WARNING]
-> **Remove any apps you want secured from Roothide's Blacklist app.** This allows the tweak to filter that app.
-> 
 > **Level 1 disables email and text previews of files.** You have to hold the file down and save it to the Files app to view it. 
 > 
 > **Level 3 restricts critical background daemons.**  `imagent` and `mediaserverd` filtering may break media playback in some apps.
@@ -89,6 +87,9 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 5. Use the **Add Custom Bundle ID / Process** button to paste comma-separated lists of hidden background daemons you wish to restrict. Swipe left on any generated custom ID to delete it.
 6. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring.
 7. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
+
+> [!WARNING]
+> **Remove any apps you want secured from Roothide's Blacklist app.** This allows the tweak to filter that app.
 
 ---
 
