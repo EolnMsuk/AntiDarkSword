@@ -168,6 +168,16 @@
                                                                   target:self 
                                                                   action:@selector(savePrompt)];
     self.navigationItem.rightBarButtonItem = saveButton;
+    
+    // Check if it's the first time opening settings to redirect to GitHub
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    if (![defaults boolForKey:@"hasOpenedGitHubBefore"]) {
+        [defaults setBool:YES forKey:@"hasOpenedGitHubBefore"];
+        [defaults synchronize];
+        
+        NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"];
+        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
+    }
 }
 
 // Dummy getter for the Auto-Protect dynamic list (Forces them to appear as "ON")
@@ -306,10 +316,22 @@
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        
+        // Preserve the 'hasOpenedGitHubBefore' flag so they aren't forced to open it again
+        BOOL hasOpened = [defaults boolForKey:@"hasOpenedGitHubBefore"];
+        
         [defaults removePersistentDomainForName:@"com.eolnmsuk.antidarkswordprefs"];
+        
+        // Restore the flag
+        if (hasOpened) {
+            [defaults setBool:YES forKey:@"hasOpenedGitHubBefore"];
+        }
         [defaults synchronize];
-        [@{} writeToFile:PREFS_PATH atomically:YES];
-        [[NSFileManager defaultManager] removeItemAtPath:PREFS_PATH error:nil];
+        
+        // Write only the flag back to the plist file to clear all other settings safely
+        NSDictionary *newDict = hasOpened ? @{@"hasOpenedGitHubBefore": @YES} : @{};
+        [newDict writeToFile:PREFS_PATH atomically:YES];
+        
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
         [self respring];
     }]];
