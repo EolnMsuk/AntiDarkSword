@@ -175,7 +175,7 @@
         [defaults setBool:YES forKey:@"hasOpenedGitHubBefore"];
         [defaults synchronize];
         
-        NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"];
+        NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/blob/main/README.md"];
         [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
     }
 }
