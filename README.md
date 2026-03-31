@@ -74,7 +74,7 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 2. Send the file to your iPhone.
 3. Open the **Roothide Patcher** app.
 4. Select the `.deb` file and let the app convert the rootless paths to dynamic Roothide paths.
-5. Open the newly generated `-roothide.deb` file in **Filza**, tap Install, and Respring.
+5. Open the newly generated `-roothide.deb` file in **Sileo** or **Filza**, tap Install, and Respring.
 
 ## ⚙️ Configuration
 
