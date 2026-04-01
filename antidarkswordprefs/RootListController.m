@@ -102,11 +102,18 @@
     ];
     
     NSArray *tier2 = @[
+        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
+        @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
+        @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
+        @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
+        @"ph.telegra.Telegraph", @"com.hammerandchisel.discord",
+        @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+        @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
+        @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
         @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-        @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-        @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
-        @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch", @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+        @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
     ];
     
     NSArray *tier3 = @[
