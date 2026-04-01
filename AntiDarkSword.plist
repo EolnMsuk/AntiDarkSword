@@ -6,7 +6,8 @@
             "com.apple.WebKit",
             "com.apple.JavaScriptCore",
             "com.apple.IMCore",
-            "com.apple.ChatKit"
+            "com.apple.ChatKit",
+            "com.apple.CFNetwork"
         );
         Executables = (
             "imagent"
