@@ -19,7 +19,7 @@ jobs:
       - name: Setup Theos Environment
         uses: Randomblock1/theos-action@v1
         with:
-          theos-sdks: 'https://github.com/theos/sdks'
+          theos-sdks: 'https://github.com/xybp888/iOS-SDKs'
 
       - name: Compile the Tweak
         run: make package FINALPACKAGE=1
