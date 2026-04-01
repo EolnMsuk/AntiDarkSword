@@ -25,7 +25,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 > [!WARNING]
 > **Level 1 disables email and text previews of files.** You have to hold the file down and save it to the Files app to view it. 
 > 
-> **Level 3 restricts critical background daemons.**  `imagent` and `mediaserverd` filtering may break media playback in some apps.
+> **Level 3 restricts critical background daemons.** `imagent` and `mediaserverd` filtering may break media playback in some apps.
 
 ## 🛑 Mitigated Exploits
 
@@ -49,7 +49,7 @@ By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents sever
 * **Architecture:** arm64 / arm64e (A11 through A16/M-series)
 * **Jailbreaks:** * **Rootless:** Dopamine (iOS 15.0 – 17.0), Palera1n (iOS 15.0 – 16.7.x)
   * **Roothide:** Dopamine Roothide 2 (via Roothide Patcher)
-  * **Rootful** Palera1n / Checkm8 users should use the: [rootful version](https://github.com/EolnMsuk/AntiDarkSword-rootful)
+  * **Rootful:** Palera1n / Checkm8 users should use: [AntiDarkSword-rootful](https://github.com/EolnMsuk/AntiDarkSword-rootful)
 
 ## 📦 Dependencies
 
@@ -61,20 +61,23 @@ Before installing this tweak, you **must** install the following from your packa
 
 ## 🛠️ Installation Instructions
 
-### Option 1: Direct Installation (Rootless)
-1. Navigate to the **Actions** tab of this repository.
-2. Click the latest successful `Compile Tweak` workflow run.
-3. Download the `AntiDarkSword-Rootless.deb` artifact at the bottom of the page.
-4. Transfer the `.deb` file to your iPhone and install via Filza, Sileo, or Zebra.
+### Option 1: Installation (Rootless)
+1. Navigate to the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page of this repository.
+2. Click on the latest release version.
+3. Under the **Assets** section, download the attached `.deb` file.
+4. Open the `.deb` file on your iPhone and install it via your preferred package manager (Sileo, Zebra, or Filza).
 5. Respring your device.
 
-### Option 2: Dopamine Roothide Installation
+### Option 2: Installation (Roothide)
 If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must patch the `.deb` before installing:
-1. Download the `AntiDarkSword-Rootless.deb` artifact from the **Actions** tab.
+1. Download the `.deb` file from the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page.
 2. Send the file to your iPhone.
 3. Open the **Roothide Patcher** app.
 4. Select the `.deb` file and let the app convert the rootless paths to dynamic Roothide paths.
 5. Open the newly generated `-roothide.deb` file in **Sileo** or **Filza**, tap Install, and Respring.
+
+### Option 3: Installation (Rootful)
+1. Navigate to the rootful version of this tweak: [AntiDarkSword-rootful](https://github.com/EolnMsuk/AntiDarkSword-rootful)
 
 ## ⚙️ Configuration
 
