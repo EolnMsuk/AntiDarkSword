@@ -16,10 +16,19 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 1. Setup Theos with default stable SDKs to prevent the 7z crash
       - name: Setup Theos Environment
         uses: Randomblock1/theos-action@v1
-        with:
-          theos-sdks: 'https://github.com/xybp888/iOS-SDKs'
+
+      # 2. Manually fetch ONLY the iOS 17.0 SDK to bypass the extraction bug
+      - name: Fetch iOS 17.0 SDK Manually
+        run: |
+          git clone --depth 1 --sparse https://github.com/xybp888/iOS-SDKs.git
+          cd iOS-SDKs
+          git sparse-checkout add iPhoneOS17.0.sdk
+          mv iPhoneOS17.0.sdk $THEOS/sdks/
+          cd ..
+          rm -rf iOS-SDKs
 
       - name: Compile the Tweak
         run: make package FINALPACKAGE=1
