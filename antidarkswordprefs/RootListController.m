@@ -45,7 +45,8 @@
                 IMP customSetPrefImp = imp_implementationWithBlock(^(id _self, id value, id specifier) {
                     if (originalSetPref) {
                         void (*originalMsg)(id, SEL, id, id) = (void (*)(id, SEL, id, id))method_getImplementation(originalSetPref);
-                        originalMsg(_self, value, specifier);
+                        // FIXED: Added 'setPrefSel' as the second argument
+                        originalMsg(_self, setPrefSel, value, specifier);
                     }
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
