@@ -23,6 +23,8 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse https://github.com/xybp888/iOS-SDKs.git
           cd iOS-SDKs
           git sparse-checkout set iPhoneOS16.5.sdk
+          # Force remove the existing directory to prevent "Directory not empty" error
+          rm -rf $THEOS/sdks/iPhoneOS16.5.sdk
           mv iPhoneOS16.5.sdk $THEOS/sdks/
           cd ..
           rm -rf iOS-SDKs
