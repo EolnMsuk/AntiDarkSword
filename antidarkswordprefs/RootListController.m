@@ -171,7 +171,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
         @"com.apple.Maps", @"com.apple.weather",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
     ];
     
     NSArray *tier2 = @[
