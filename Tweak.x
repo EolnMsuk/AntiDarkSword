@@ -65,13 +65,25 @@ static void loadPrefs() {
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
             ];
 
-            // Level 2: All Major 3rd Party Browsers, Social Media, AI Chats, and Package Managers
+            // Level 2: Expanded 3rd Party Browsers, Email, Social Media, AI, Comms, Package Managers
             NSArray *tier2 = @[
-                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-                @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
+                // Email Clients
+                @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
+                // Messaging & Comms
+                @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
+                @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
+                @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
+                @"ph.telegra.Telegraph", @"com.hammerandchisel.discord",
+                // Browsers & Search
+                @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+                // Social & Media
+                @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+                @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
+                // AI & Dev
+                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
+                // Package & File Managers
                 @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
 
