@@ -189,25 +189,8 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>About AntiDarkSword</string>
+            <string>More Options</string>
         </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>EolnMsuk (Donate)</string>
-            <key>action</key>
-            <string>openVenmo</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>AntiDarkSword (GitHub)</string>
-            <key>action</key>
-            <string>openGitHub</string>
-        </dict>
-
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
@@ -217,6 +200,22 @@
             <string>resetToDefaults</string>
             <key>isDestructive</key>
             <true/>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>AntiDarkSword (GitHub)</string>
+            <key>action</key>
+            <string>openGitHub</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>EolnMsuk (Donate)</string>
+            <key>action</key>
+            <string>openVenmo</string>
         </dict>
     </array>
     <key>title</key>
