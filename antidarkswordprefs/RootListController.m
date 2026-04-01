@@ -13,12 +13,6 @@
 + (void)initialize {
     if (self == [AntiDarkSwordPrefsRootListController class]) {
         
-        // Reset the "needs respring" flag on a fresh launch of the Settings app
-        // This ensures the button is correctly greyed out after any respring (since respringing kills Settings)
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-        [defaults synchronize];
-
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
             [altListBundle load];
@@ -28,12 +22,14 @@
         if (altListClass && !NSClassFromString(@"AntiDarkSwordAppListController")) {
             Class newClass = objc_allocateClassPair(altListClass, "AntiDarkSwordAppListController", 0);
             if (newClass) {
+                
+                // --- viewWillAppear Hook ---
                 SEL viewWillAppearSel = @selector(viewWillAppear:);
-                Method originalMethod = class_getInstanceMethod(altListClass, viewWillAppearSel);
+                Method originalViewWillAppear = class_getInstanceMethod(altListClass, viewWillAppearSel);
                 
                 IMP customViewWillAppearImp = imp_implementationWithBlock(^(id _self, BOOL animated) {
-                    if (originalMethod) {
-                        void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalMethod);
+                    if (originalViewWillAppear) {
+                        void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalViewWillAppear);
                         originalMsg(_self, viewWillAppearSel, animated);
                     }
                     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" 
@@ -43,28 +39,45 @@
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
                     ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
+                    
+                    // Listen for ANY preference changes while the AltList view is open
+                    [[NSNotificationCenter defaultCenter] addObserver:_self 
+                                                             selector:@selector(altListDefaultsChanged) 
+                                                                 name:NSUserDefaultsDidChangeNotification 
+                                                               object:nil];
                 });
-                class_addMethod(newClass, viewWillAppearSel, customViewWillAppearImp, originalMethod ? method_getTypeEncoding(originalMethod) : "v@:B");
+                class_addMethod(newClass, viewWillAppearSel, customViewWillAppearImp, originalViewWillAppear ? method_getTypeEncoding(originalViewWillAppear) : "v@:B");
                 
-                // Track toggles inside AltList to turn the button blue instantly
-                SEL setPrefSel = @selector(setPreferenceValue:specifier:);
-                Method originalSetPref = class_getInstanceMethod(altListClass, setPrefSel);
-                IMP customSetPrefImp = imp_implementationWithBlock(^(id _self, id value, id specifier) {
-                    if (originalSetPref) {
-                        void (*originalMsg)(id, SEL, id, id) = (void (*)(id, SEL, id, id))method_getImplementation(originalSetPref);
-                        originalMsg(_self, setPrefSel, value, specifier);
+                // --- viewWillDisappear Hook ---
+                SEL viewWillDisappearSel = @selector(viewWillDisappear:);
+                Method originalViewWillDisappear = class_getInstanceMethod(altListClass, viewWillDisappearSel);
+                
+                IMP customViewWillDisappearImp = imp_implementationWithBlock(^(id _self, BOOL animated) {
+                    if (originalViewWillDisappear) {
+                        void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalViewWillDisappear);
+                        originalMsg(_self, viewWillDisappearSel, animated);
                     }
+                    // Remove the observer so it doesn't leak or trigger randomly
+                    [[NSNotificationCenter defaultCenter] removeObserver:_self 
+                                                                    name:NSUserDefaultsDidChangeNotification 
+                                                                  object:nil];
+                });
+                class_addMethod(newClass, viewWillDisappearSel, customViewWillDisappearImp, originalViewWillDisappear ? method_getTypeEncoding(originalViewWillDisappear) : "v@:B");
+                
+                // --- Custom Method to handle the notification ---
+                SEL altListDefaultsChangedSel = @selector(altListDefaultsChanged);
+                IMP altListDefaultsChangedImp = imp_implementationWithBlock(^(id _self) {
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
                     [defaults synchronize];
                     
-                    // Dispatch to main thread to ensure the button updates visually the moment the switch is flipped
                     dispatch_async(dispatch_get_main_queue(), ^{
                         ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
                     });
                 });
-                class_addMethod(newClass, setPrefSel, customSetPrefImp, originalSetPref ? method_getTypeEncoding(originalSetPref) : "v@:@@");
+                class_addMethod(newClass, altListDefaultsChangedSel, altListDefaultsChangedImp, "v@:");
 
+                // --- savePrompt Method ---
                 SEL savePromptSel = @selector(savePrompt);
                 IMP savePromptImp = imp_implementationWithBlock(^(id _self) {
                     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes now?" preferredStyle:UIAlertControllerStyleAlert];
