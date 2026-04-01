@@ -88,8 +88,7 @@ Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservic
             <key>label</key>
             <string>App Permissions</string>
             <key>footerText</key>
-            <string>All apps are allowed to run JavaScript by default.
-Restricting an app neutralizes WebKit exploit vectors (disables JavaScript, WebGL, file access) and blocks automatic media/message downloads.</string>
+            <string>Restricting an app neutralizes WebKit exploit vectors (disables JavaScript, WebGL, file access) and blocks automatic media/message downloads.</string>
         </dict>
         <dict>
             <key>cell</key>
