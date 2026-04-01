@@ -30,13 +30,10 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
+            <key>id</key>
+            <string>PresetRulesGroup</string>
             <key>label</key>
             <string>Preset Rules</string>
-            <key>footerText</key>
-            <string>Level 1: All Native Apple Apps.
-Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
-Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
-⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.</string>
         </dict>
         <dict>
             <key>cell</key>
