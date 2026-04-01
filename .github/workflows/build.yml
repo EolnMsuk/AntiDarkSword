@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# Give the GitHub Actions bot permission to create a release
 permissions:
   contents: write
 
@@ -17,34 +18,27 @@ jobs:
 
       - name: Setup Theos Environment
         uses: Randomblock1/theos-action@v1
-        # We leave this default to get the standard environment set up
-
-      - name: Fetch Required SDKs Manually
-        run: |
-          mkdir -p $THEOS/sdks
-          git clone --depth 1 --filter=blob:none --sparse https://github.com/xybp888/iOS-SDKs.git
-          cd iOS-SDKs
-          # Initialize sparse-checkout and add the specific versions needed
-          git sparse-checkout set iPhoneOS15.0.sdk iPhoneOS17.0.sdk
-          mv *.sdk $THEOS/sdks/
-          cd ..
-          rm -rf iOS-SDKs
+        with:
+          theos-sdks: 'https://github.com/theos/sdks'
 
       - name: Compile the Tweak
         run: make package FINALPACKAGE=1
 
+      # (Optional) Keep the artifact upload as a backup
       - name: Upload .deb as Artifact
         uses: actions/upload-artifact@v4
         with:
           name: AntiDarkSword-Rootless
           path: ${{ github.workspace }}/packages/*.deb
 
+      # Create the Release and upload the .deb file directly to it
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          # Automatically generates a unique tag based on the workflow run number
           tag_name: build-${{ github.run_number }}
           name: "AntiDarkSword Build #${{ github.run_number }}"
-          body: "Automated build of AntiDarkSword compiled for iOS 15.0 - 17.0 rootless."
+          body: "Automated build of AntiDarkSword compiled directly from the latest push to the main branch."
           files: ${{ github.workspace }}/packages/*.deb
           draft: false
           prerelease: false
