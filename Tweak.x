@@ -36,15 +36,12 @@ static void loadPrefs() {
         autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
-        // Isolate AltList from Custom Daemons to prevent overriding
         restrictedApps = prefs[@"restrictedApps"] ?: @[];
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         
-        // Load User Agent Settings
         NSString *presetUA = prefs[@"selectedUAPreset"];
         NSString *manualUA = prefs[@"customUAString"];
         
-        // If Custom is selected in the dropdown (or nothing is selected yet), use the text box string
         if (!presetUA || [presetUA isEqualToString:@"CUSTOM"]) {
             customUAString = manualUA ?: @"";
         } else {
@@ -56,14 +53,12 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
 
-    // 1. ALWAYS Evaluate Manual / Custom Array (Applies regardless of Preset Rules state)
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
     } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
         isTargetRestricted = YES;
     }
 
-    // 2. Evaluate Preset Rules OR "Select Apps..." 
     if (!isTargetRestricted) {
         if (autoProtectEnabled) {
             NSArray *tier1 = @[
@@ -135,6 +130,8 @@ static BOOL isAppRestricted() {
 // =========================================================
 
 %hook WKWebView
+
+// 1. Hook code-based initialization
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if (isAppRestricted()) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
@@ -166,10 +163,7 @@ static BOOL isAppRestricted() {
         }
     }
     
-    // ANTI-FINGERPRINTING LOGIC
     if (globalTweakEnabled && customUAString && customUAString.length > 0) {
-        
-        // 1. Dynamic Platform & Vendor Derivation based on the UA string
         NSString *platform = @"iPhone";
         if ([customUAString containsString:@"iPad"]) platform = @"iPad";
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
@@ -181,17 +175,14 @@ static BOOL isAppRestricted() {
             vendor = @"Google Inc.";
         }
 
-        // appVersion is standardly the UA string stripped of the "Mozilla/" prefix
         NSString *appVersion = customUAString;
         if ([customUAString hasPrefix:@"Mozilla/"]) {
             appVersion = [customUAString substringFromIndex:8];
         }
 
-        // Escape single quotes just in case a custom string has them
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
 
-        // 2. Build the JS Injection to override the Navigator object
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
@@ -203,7 +194,6 @@ static BOOL isAppRestricted() {
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
         
-        // Ensure userContentController exists
         if (!configuration.userContentController) {
             configuration.userContentController = [[WKUserContentController alloc] init];
         }
@@ -212,7 +202,6 @@ static BOOL isAppRestricted() {
     
     WKWebView *webView = %orig(frame, configuration);
     
-    // 3. Set the native property (handles the HTTP headers)
     if (globalTweakEnabled && customUAString && customUAString.length > 0) {
         if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
             webView.customUserAgent = customUAString;
@@ -220,6 +209,94 @@ static BOOL isAppRestricted() {
     }
     
     return webView;
+}
+
+// 2. Hook Storyboard/Interface Builder initialization
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    WKWebView *webView = %orig(coder);
+    if (!webView) return nil;
+    
+    if (isAppRestricted()) {
+        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        }
+        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
+            webView.configuration.preferences.javaScriptEnabled = NO;
+        }
+        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) {
+            webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+        }
+        if ([webView respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) {
+            webView.configuration.allowsInlineMediaPlayback = NO;
+        }
+        if ([webView respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) {
+            webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+        }
+        if ([webView respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) {
+            webView.configuration.allowsPictureInPictureMediaPlayback = NO;
+        }
+        if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
+            @try {
+                [webView.configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
+                [webView.configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
+                [webView.configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
+                [webView.configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
+                [webView.configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
+            } @catch (NSException *e) {}
+        }
+    }
+    
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        NSString *platform = @"iPhone";
+        if ([customUAString containsString:@"iPad"]) platform = @"iPad";
+        else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
+        else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
+        else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
+
+        NSString *vendor = @"Apple Computer, Inc.";
+        if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
+            vendor = @"Google Inc.";
+        }
+
+        NSString *appVersion = customUAString;
+        if ([customUAString hasPrefix:@"Mozilla/"]) {
+            appVersion = [customUAString substringFromIndex:8];
+        }
+
+        NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+        NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+
+        NSString *jsSource = [NSString stringWithFormat:@"\
+            Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
+        ", safeUA, safeAppVersion, platform, vendor];
+
+        WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
+                                                                     injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
+                                                                  forMainFrameOnly:NO];
+        
+        if (!webView.configuration.userContentController) {
+            webView.configuration.userContentController = [[WKUserContentController alloc] init];
+        }
+        [webView.configuration.userContentController addUserScript:antiFingerprintScript];
+        
+        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+            webView.customUserAgent = customUAString;
+        }
+    }
+    
+    return webView;
+}
+
+// 3. Prevent the app from forcefully overwriting our spoofed agent
+- (void)setCustomUserAgent:(NSString *)customUserAgent {
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        %orig(customUAString); // Force our string instead of the app's string
+    } else {
+        %orig;
+    }
 }
 %end
 
@@ -247,6 +324,43 @@ static BOOL isAppRestricted() {
     }
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
 }
+
+// =========================================================
+// LEGACY UIWEBVIEW NEUTRALIZATION
+// =========================================================
+
+%hook UIWebView
+- (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
+    if (isAppRestricted()) {
+        return @""; // Neutralizes JS execution in deprecated WebViews
+    }
+    return %orig;
+}
+%end
+
+// =========================================================
+// GLOBAL NSUSERDEFAULTS SPOOFING (For UIWebView & Legacy Networking)
+// =========================================================
+
+%hook NSUserDefaults
+- (id)objectForKey:(NSString *)defaultName {
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        if ([defaultName isEqualToString:@"UserAgent"] || [defaultName isEqualToString:@"User-Agent"]) {
+            return customUAString;
+        }
+    }
+    return %orig;
+}
+
+- (NSString *)stringForKey:(NSString *)defaultName {
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        if ([defaultName isEqualToString:@"UserAgent"] || [defaultName isEqualToString:@"User-Agent"]) {
+            return customUAString;
+        }
+    }
+    return %orig;
+}
+%end
 
 // =========================================================
 // NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
