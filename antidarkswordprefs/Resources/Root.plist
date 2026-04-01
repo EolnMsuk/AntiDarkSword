@@ -10,7 +10,7 @@
             <key>label</key>
             <string>Global Settings</string>
             <key>footerText</key>
-            <string>Enabling this without selecting rules or apps will not protect your device from attack vectors. You must restrict apps/processes using the options below.</string>
+            <string>You must also enable preset or custom rules below to protect your device.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -27,6 +27,59 @@
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
         
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Preset Rules</string>
+            <key>footerText</key>
+            <string>Level 1: All Native Apple Apps.
+Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
+Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
+
+⚠️ Warning: Level 3 restricts critical background daemons to prevent zero-clicks. This may break certain features like iMessage or media playback.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>autoProtectEnabled</string>
+            <key>label</key>
+            <string>Enable Preset Rules</string>
+            <key>set</key>
+            <string>setAutoProtect:specifier:</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSegmentCell</string>
+            <key>id</key>
+            <string>AutoProtectLevelSegment</string>
+            <key>default</key>
+            <integer>1</integer>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>autoProtectLevel</string>
+            <key>validValues</key>
+            <array>
+                <integer>1</integer>
+                <integer>2</integer>
+                <integer>3</integer>
+            </array>
+            <key>validTitles</key>
+            <array>
+                <string>Level 1</string>
+                <string>Level 2</string>
+                <string>Level 3</string>
+            </array>
+            <key>set</key>
+            <string>setAutoProtectLevel:specifier:</string>
+        </dict>
+
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -95,59 +148,6 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Preset Rules</string>
-            <key>footerText</key>
-            <string>Level 1: All Native Apple Apps.
-Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
-Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
-
-Note: Level 3 restricts critical background daemons to prevent zero-clicks. This may break certain features like iMessage or media playback.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>autoProtectEnabled</string>
-            <key>label</key>
-            <string>Enable Preset Rules</string>
-            <key>set</key>
-            <string>setAutoProtect:specifier:</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSegmentCell</string>
-            <key>id</key>
-            <string>AutoProtectLevelSegment</string>
-            <key>default</key>
-            <integer>1</integer>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>autoProtectLevel</string>
-            <key>validValues</key>
-            <array>
-                <integer>1</integer>
-                <integer>2</integer>
-                <integer>3</integer>
-            </array>
-            <key>validTitles</key>
-            <array>
-                <string>Level 1</string>
-                <string>Level 2</string>
-                <string>Level 3</string>
-            </array>
-            <key>set</key>
-            <string>setAutoProtectLevel:specifier:</string>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -170,7 +170,7 @@ Note: Level 3 restricts critical background daemons to prevent zero-clicks. This
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Source Code (GitHub)</string>
+            <string>AntiDarkSword (GitHub)</string>
             <key>action</key>
             <string>openGitHub</string>
         </dict>
@@ -178,7 +178,7 @@ Note: Level 3 restricts critical background daemons to prevent zero-clicks. This
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Donate (Venmo)</string>
+            <string>EolnMsuk (Donate)</string>
             <key>action</key>
             <string>openVenmo</string>
         </dict>
