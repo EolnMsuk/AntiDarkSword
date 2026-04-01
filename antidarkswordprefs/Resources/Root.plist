@@ -9,6 +9,8 @@
             <string>PSGroupCell</string>
             <key>label</key>
             <string>Global Settings</string>
+            <key>footerText</key>
+            <string>Enabling this without selecting rules or apps will not protect your device from attack vectors. You must restrict apps/processes using the options below.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -28,10 +30,79 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
+            <key>id</key>
+            <string>AppPermissionsGroup</string>
+            <key>label</key>
+            <string>App Permissions</string>
+            <key>footerText</key>
+            <string>All apps are allowed to run JavaScript by default.
+Restricting an app neutralizes WebKit exploit vectors (disables JavaScript, WebGL, file access) and blocks automatic media/message downloads.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>id</key>
+            <string>SelectApps</string>
+            <key>detail</key>
+            <string>AntiDarkSwordAppListController</string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>restrictedApps</string>
+            <key>label</key>
+            <string>Select Apps...</string>
+            <key>sections</key>
+            <array>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Visible</string>
+                </dict>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Hidden</string>
+                </dict>
+            </array>
+            <key>showIdentifiersAsSubtitle</key>
+            <true/>
+            <key>defaultApplicationSwitchValue</key>
+            <false/>
+            <key>useSearchBar</key>
+            <true/>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
+            <string>AdvancedRestrictionsGroup</string>
+            <key>label</key>
+            <string>Advanced Restrictions</string>
+            <key>footerText</key>
+            <string>Swipe left on any custom ID below to delete it.
+Add bundle IDs or process names for daemons you want to restrict manually.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Add Custom Bundle ID / Process</string>
+            <key>action</key>
+            <string>addCustomID</string>
+            <key>id</key>
+            <string>AddCustomIDButton</string>
+        </dict>
+        
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
             <key>label</key>
             <string>Preset Rules</string>
             <key>footerText</key>
-            <string>Level 1: All Native Apple Apps. Level 2: + All Major 3rd-Party Browsers &amp; Social Media. Level 3: + System Daemons (imagent, mediaserverd, networkd). ⚠️ WARNING: Level 3 restricts critical background daemons to prevent zero-clicks. This may break iMessage, media playback, or network features. ONLY enable if you know what you are doing!</string>
+            <string>Level 1: All Native Apple Apps.
+Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
+Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
+
+Note: Level 3 restricts critical background daemons to prevent zero-clicks. This may break certain features like iMessage or media playback.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -77,69 +148,6 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
-            <key>id</key>
-            <string>AppPermissionsGroup</string>
-            <key>label</key>
-            <string>App Permissions (JS)</string>
-            <key>footerText</key>
-            <string>All apps are allowed to run JavaScript by default. Turn an app ON to explicitly restrict its web access and protect it from exploits.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSLinkCell</string>
-            <key>id</key>
-            <string>SelectApps</string>
-            <key>detail</key>
-            <string>AntiDarkSwordAppListController</string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>restrictedApps</string>
-            <key>label</key>
-            <string>Select Apps...</string>
-            <key>sections</key>
-            <array>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Visible</string>
-                </dict>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Hidden</string>
-                </dict>
-            </array>
-            <key>showIdentifiersAsSubtitle</key>
-            <true/>
-            <key>defaultApplicationSwitchValue</key>
-            <false/>
-            <key>useSearchBar</key>
-            <true/>
-        </dict>
-        
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
-            <string>AdvancedRestrictionsGroup</string>
-            <key>label</key>
-            <string>Advanced Restrictions</string>
-            <key>footerText</key>
-            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>Add Custom Bundle ID / Process</string>
-            <key>action</key>
-            <string>addCustomID</string>
-            <key>id</key>
-            <string>AddCustomIDButton</string>
-        </dict>
-        
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -150,6 +158,29 @@
             <string>resetToDefaults</string>
             <key>isDestructive</key>
             <true/>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>About AntiDarkSword</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Source Code (GitHub)</string>
+            <key>action</key>
+            <string>openGitHub</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Donate (Venmo)</string>
+            <key>action</key>
+            <string>openVenmo</string>
         </dict>
     </array>
     <key>title</key>
