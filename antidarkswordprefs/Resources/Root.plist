@@ -82,7 +82,7 @@
             <key>id</key>
             <string>AppPermissionsGroup</string>
             <key>label</key>
-            <string>Apply Rules Manually</string>
+            <string>Manual Rules</string>
             <key>footerText</key>
             <string>Manually selecting an app neutralizes its WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
         </dict>
