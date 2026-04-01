@@ -170,17 +170,17 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>AntiDarkSword (GitHub)</string>
+            <string>Donate (ElonMsuk)</string>
             <key>action</key>
-            <string>openGitHub</string>
+            <string>openVenmo</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>EolnMsuk (Donate)</string>
+            <string>GitHub (AntiDarkSword)</string>
             <key>action</key>
-            <string>openVenmo</string>
+            <string>openGitHub</string>
         </dict>
     </array>
     <key>title</key>
