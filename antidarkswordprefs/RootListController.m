@@ -206,7 +206,7 @@
             }
         }
 
-        // 3. Inject the dynamic "Current Rules from Preset" visual list
+        // 3. Inject the dynamic "Current Preset Rules" visual list
         if (autoProtect) {
             NSUInteger insertIndexAuto = NSNotFound;
             for (NSUInteger i = 0; i < specs.count; i++) {
@@ -218,7 +218,7 @@
             }
             
             if (insertIndexAuto != NSNotFound) {
-                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Rules from Preset" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
                 [specs insertObject:groupSpec atIndex:insertIndexAuto++];
                 
                 NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
