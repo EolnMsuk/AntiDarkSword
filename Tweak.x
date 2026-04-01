@@ -15,7 +15,7 @@
 #define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
-static BOOL customUAEnabled = NO;
+static BOOL globalTweakEnabled = NO;
 static NSString *customUAString = @"";
 
 static void loadPrefs() {
@@ -26,14 +26,13 @@ static void loadPrefs() {
         prefs = [NSDictionary dictionaryWithContentsOfFile:ROOTFUL_PREFS_PATH];
     }
 
-    BOOL tweakEnabled = NO;
     BOOL autoProtectEnabled = NO;
     NSInteger autoProtectLevel = 1;
     NSArray *restrictedApps = @[];
     NSArray *activeCustomDaemonIDs = @[];
 
     if (prefs) {
-        tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
+        globalTweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
         autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
@@ -42,12 +41,10 @@ static void loadPrefs() {
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         
         // Load User Agent Settings
-        customUAEnabled = tweakEnabled && (prefs[@"enableCustomUA"] ? [prefs[@"enableCustomUA"] boolValue] : NO);
-        
         NSString *presetUA = prefs[@"selectedUAPreset"];
         NSString *manualUA = prefs[@"customUAString"];
         
-        // If Custom is selected in the dropdown (or nothing is selected yet), use the text box
+        // If Custom is selected in the dropdown (or nothing is selected yet), use the text box string
         if (!presetUA || [presetUA isEqualToString:@"CUSTOM"]) {
             customUAString = manualUA ?: @"";
         } else {
@@ -81,23 +78,17 @@ static void loadPrefs() {
 
             // Level 2: Expanded 3rd Party Browsers, Email, Social Media, AI, Comms, Package Managers
             NSArray *tier2 = @[
-                // Email Clients
                 @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
-                // Messaging & Comms
                 @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
                 @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
                 @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
                 @"ph.telegra.Telegraph", @"com.hammerandchisel.discord",
-                // Browsers & Search
                 @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
                 @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                // Social & Media
                 @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-                // AI & Dev
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-                // Package & File Managers
                 @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
 
@@ -133,7 +124,7 @@ static void loadPrefs() {
         }
     }
     
-    currentProcessRestricted = (tweakEnabled && isTargetRestricted);
+    currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
 }
 
 static BOOL isAppRestricted() {
@@ -183,8 +174,8 @@ static BOOL isAppRestricted() {
     
     WKWebView *webView = %orig(frame, configuration);
     
-    // Apply Custom User Agent if enabled globally
-    if (customUAEnabled && customUAString && customUAString.length > 0) {
+    // Apply Custom User Agent ONLY if the global tweak is enabled AND a string is actually provided
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
         if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
             webView.customUserAgent = customUAString;
         }
