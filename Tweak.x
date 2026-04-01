@@ -15,10 +15,11 @@
 #define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
+static BOOL customUAEnabled = NO;
+static NSString *customUAString = @"";
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
-
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
@@ -39,6 +40,10 @@ static void loadPrefs() {
         // Isolate AltList from Custom Daemons to prevent overriding
         restrictedApps = prefs[@"restrictedApps"] ?: @[];
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        
+        // Load User Agent Settings
+        customUAEnabled = tweakEnabled && (prefs[@"enableCustomUA"] ? [prefs[@"enableCustomUA"] boolValue] : NO);
+        customUAString = prefs[@"customUAString"] ?: @"";
     }
     
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
@@ -166,7 +171,17 @@ static BOOL isAppRestricted() {
             } @catch (NSException *e) {}
         }
     }
-    return %orig(frame, configuration);
+    
+    WKWebView *webView = %orig(frame, configuration);
+    
+    // Apply Custom User Agent if enabled globally
+    if (customUAEnabled && customUAString && customUAString.length > 0) {
+        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+            webView.customUserAgent = customUAString;
+        }
+    }
+    
+    return webView;
 }
 %end
 
