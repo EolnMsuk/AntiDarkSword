@@ -1,4 +1,4 @@
-TARGET := iphone:clang:14.5:16.5
+TARGET := iphone:clang:16.5:14.5
 INSTALL_TARGET_PROCESSES = SpringBoard
 THEOS_PACKAGE_SCHEME = rootless
 
@@ -6,8 +6,7 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = AntiDarkSword
 AntiDarkSword_FILES = Tweak.x
-# Enforce minimum version to prevent ARC optimization errors and use classic linker
-AntiDarkSword_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -miphoneos-version-min=14.5
+AntiDarkSword_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
 AntiDarkSword_LDFLAGS = -Wl,-ld_classic
 AntiDarkSword_FRAMEWORKS = WebKit JavaScriptCore
 
