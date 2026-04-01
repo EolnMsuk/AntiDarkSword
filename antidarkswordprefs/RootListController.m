@@ -163,9 +163,20 @@
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
         // 1. Gray out manual settings if Preset Rules are currently enabled (Except Custom Daemon rules)
+        // Also dynamically set the footer text for the PresetRulesGroup based on the selected level
         for (PSSpecifier *s in specs) {
             if ([s.identifier isEqualToString:@"SelectApps"]) {
                 [s setProperty:@(!autoProtect) forKey:@"enabled"];
+            } else if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
+                NSString *footerText = @"";
+                if (autoProtectLevel == 1) {
+                    footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, and other built-in iOS apps.";
+                } else if (autoProtectLevel == 2) {
+                    footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, and package managers.";
+                } else if (autoProtectLevel == 3) {
+                    footerText = @"Level 3: Maximum lockdown. Enforces restrictions on critical background system daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
+                }
+                [s setProperty:footerText forKey:@"footerText"];
             }
         }
 
@@ -195,7 +206,7 @@
             }
         }
 
-        // 3. Inject the dynamic "Actively Locked Down" visual list
+        // 3. Inject the dynamic "Current Rules from Preset" visual list
         if (autoProtect) {
             NSUInteger insertIndexAuto = NSNotFound;
             for (NSUInteger i = 0; i < specs.count; i++) {
@@ -207,7 +218,7 @@
             }
             
             if (insertIndexAuto != NSNotFound) {
-                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Actively Locked Down by Preset" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Rules from Preset" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
                 [specs insertObject:groupSpec atIndex:insertIndexAuto++];
                 
                 NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
@@ -295,10 +306,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    if ([defaults boolForKey:@"autoProtectEnabled"]) {
-        _specifiers = nil;
-        [self reloadSpecifiers];
-    }
+    // Always clear and reload specifiers so the footer dynamically updates
+    _specifiers = nil;
+    [self reloadSpecifiers];
 }
 
 - (id)readCustomIDValue:(PSSpecifier*)specifier {
