@@ -13,6 +13,10 @@
 + (void)initialize {
     if (self == [AntiDarkSwordPrefsRootListController class]) {
         
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults synchronize];
+
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
             [altListBundle load];
@@ -23,7 +27,7 @@
             Class newClass = objc_allocateClassPair(altListClass, "AntiDarkSwordAppListController", 0);
             if (newClass) {
                 
-                // --- viewWillAppear Hook ---
+                // --- Safe UI Injection on Open ---
                 SEL viewWillAppearSel = @selector(viewWillAppear:);
                 Method originalViewWillAppear = class_getInstanceMethod(altListClass, viewWillAppearSel);
                 
@@ -32,6 +36,7 @@
                         void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalViewWillAppear);
                         originalMsg(_self, viewWillAppearSel, animated);
                     }
+                    
                     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" 
                                                                                    style:UIBarButtonItemStyleDone 
                                                                                   target:_self 
@@ -40,15 +45,29 @@
                     saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
                     ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
                     
-                    // Listen for ANY preference changes while the AltList view is open
-                    [[NSNotificationCenter defaultCenter] addObserver:_self 
-                                                             selector:@selector(altListDefaultsChanged) 
-                                                                 name:NSUserDefaultsDidChangeNotification 
-                                                               object:nil];
+                    // SAFE OBSERVER: Listen for toggles, but strictly prevent the infinite loop
+                    id observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSUserDefaultsDidChangeNotification 
+                                                                                    object:nil 
+                                                                                     queue:[NSOperationQueue mainQueue] 
+                                                                                usingBlock:^(NSNotification * _Nonnull note) {
+                        NSUserDefaults *checkDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+                        
+                        // ONLY write if it is currently NO. This stops the infinite loop dead in its tracks.
+                        if (![checkDefaults boolForKey:@"ADSNeedsRespring"]) {
+                            [checkDefaults setBool:YES forKey:@"ADSNeedsRespring"];
+                            [checkDefaults synchronize];
+                        }
+                        
+                        // Visually enable the button
+                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
+                    }];
+                    
+                    // Store the observer safely attached to this specific view controller instance
+                    objc_setAssociatedObject(_self, @selector(savePrompt), observer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
                 });
                 class_addMethod(newClass, viewWillAppearSel, customViewWillAppearImp, originalViewWillAppear ? method_getTypeEncoding(originalViewWillAppear) : "v@:B");
                 
-                // --- viewWillDisappear Hook ---
+                // --- Safe Observer Removal on Close ---
                 SEL viewWillDisappearSel = @selector(viewWillDisappear:);
                 Method originalViewWillDisappear = class_getInstanceMethod(altListClass, viewWillDisappearSel);
                 
@@ -57,27 +76,17 @@
                         void (*originalMsg)(id, SEL, BOOL) = (void (*)(id, SEL, BOOL))method_getImplementation(originalViewWillDisappear);
                         originalMsg(_self, viewWillDisappearSel, animated);
                     }
-                    // Remove the observer so it doesn't leak or trigger randomly
-                    [[NSNotificationCenter defaultCenter] removeObserver:_self 
-                                                                    name:NSUserDefaultsDidChangeNotification 
-                                                                  object:nil];
+                    
+                    // Safely retrieve and remove ONLY our specific observer, leaving AltList's internal observers intact
+                    id observer = objc_getAssociatedObject(_self, @selector(savePrompt));
+                    if (observer) {
+                        [[NSNotificationCenter defaultCenter] removeObserver:observer];
+                        objc_setAssociatedObject(_self, @selector(savePrompt), nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                    }
                 });
                 class_addMethod(newClass, viewWillDisappearSel, customViewWillDisappearImp, originalViewWillDisappear ? method_getTypeEncoding(originalViewWillDisappear) : "v@:B");
-                
-                // --- Custom Method to handle the notification ---
-                SEL altListDefaultsChangedSel = @selector(altListDefaultsChanged);
-                IMP altListDefaultsChangedImp = imp_implementationWithBlock(^(id _self) {
-                    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-                    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
-                    [defaults synchronize];
-                    
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
-                    });
-                });
-                class_addMethod(newClass, altListDefaultsChangedSel, altListDefaultsChangedImp, "v@:");
 
-                // --- savePrompt Method ---
+                // --- Save Prompt Handler ---
                 SEL savePromptSel = @selector(savePrompt);
                 IMP savePromptImp = imp_implementationWithBlock(^(id _self) {
                     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes now?" preferredStyle:UIAlertControllerStyleAlert];
@@ -398,16 +407,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        // Use standard NSUserDefaults API to delete keys, avoiding cfprefsd cache corruption
         NSDictionary *dict = [defaults dictionaryRepresentation];
         for (NSString *key in dict) {
-            // Keep the GitHub flag so it doesn't pop up again
             if (![key isEqualToString:@"hasOpenedGitHubBefore"]) {
                 [defaults removeObjectForKey:key];
             }
         }
         
-        // Force the save button grey state
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults synchronize];
         
