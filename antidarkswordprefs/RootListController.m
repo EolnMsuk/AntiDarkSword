@@ -102,8 +102,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                         [defaults synchronize];
                         
                         pid_t pid;
-                        const char* args[] = {"sbreload", NULL};
-                        posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
+                        const char* args[] = {"killall", "backboardd", NULL};
+                        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
                     }]];
                     [((UIViewController *)_self) presentViewController:alert animated:YES completion:nil];
                 });
@@ -510,8 +510,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
         
         pid_t pid;
-        const char* args[] = {"sbreload", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
+        const char* args[] = {"killall", "backboardd", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -525,8 +525,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults synchronize];
         
         pid_t pid;
-        const char* args[] = {"sbreload", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/sbreload", NULL, NULL, (char* const*)args, NULL);
+        const char* args[] = {"killall", "backboardd", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
