@@ -18,6 +18,7 @@ static _Atomic BOOL currentProcessRestricted = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
+
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
@@ -28,68 +29,81 @@ static void loadPrefs() {
     BOOL autoProtectEnabled = NO;
     NSInteger autoProtectLevel = 1;
     NSArray *restrictedApps = @[];
-    
+    NSArray *activeCustomDaemonIDs = @[];
+
     if (prefs) {
         tweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
         autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
+        
+        // Isolate AltList from Custom Daemons to prevent overriding
         restrictedApps = prefs[@"restrictedApps"] ?: @[];
+        activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
     }
     
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
-    
-    // 1. Evaluate Auto Protect Tiers
-    if (autoProtectEnabled) {
-        // Level 1: All Native Apple Apps & Services
-        NSArray *tier1 = @[
-            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-            @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
-            @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-            @"com.apple.Maps", @"com.apple.weather",
-            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
-        ];
-        
-        // Level 2: All Major 3rd Party Browsers, Social Media, AI Chats, and Package Managers
-        NSArray *tier2 = @[
-            @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-            @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-            @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
-            @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-            @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
-        ];
-        
-        // Level 3: Extreme Lockdown (System Daemons & Exploit Vectors)
-        NSArray *tier3 = @[
-            @"com.apple.imagent", @"imagent", 
-            @"mediaserverd", 
-            @"networkd"
-        ];
-        
-        // Check Bundle ID
-        if (bundleID) {
-            if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
-            if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
-            if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
-        }
-        
-        // Check Process Name (Critical for Level 3 Daemons)
-        if (processName && !isTargetRestricted) {
-            if ([tier1 containsObject:processName]) isTargetRestricted = YES;
-            if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) isTargetRestricted = YES;
-            if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) isTargetRestricted = YES;
-        }
+
+    // 1. ALWAYS Evaluate Manual / Custom Array (Applies regardless of Preset Rules state)
+    if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
+        isTargetRestricted = YES;
+    } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
+        isTargetRestricted = YES;
     }
-    
-    // 2. Evaluate Manual / Custom Array 
+
+    // 2. Evaluate Preset Rules OR "Select Apps..." 
     if (!isTargetRestricted) {
-        if (bundleID && [restrictedApps containsObject:bundleID]) {
-            isTargetRestricted = YES;
-        } else if (processName && [restrictedApps containsObject:processName]) {
-            isTargetRestricted = YES;
+        if (autoProtectEnabled) {
+            // Level 1: All Native Apple Apps & Services
+            NSArray *tier1 = @[
+                @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
+                @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
+                @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+                @"com.apple.Maps", @"com.apple.weather",
+                @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+                @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
+            ];
+
+            // Level 2: All Major 3rd Party Browsers, Social Media, AI Chats, and Package Managers
+            NSArray *tier2 = @[
+                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
+                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+                @"net.whatsapp.WhatsApp", @"ph.telegra.Telegraph", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+                @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.hammerandchisel.discord",
+                @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
+                @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+            ];
+
+            // Level 3: Extreme Lockdown (System Daemons & Exploit Vectors)
+            NSArray *tier3 = @[
+                @"com.apple.imagent", @"imagent", 
+                @"mediaserverd", 
+                @"networkd",
+                @"apsd",
+                @"identityservicesd"
+            ];
+
+            // Check Bundle ID
+            if (bundleID) {
+                if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
+                if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
+                if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
+            }
+            
+            // Check Process Name (Critical for Level 3 Daemons)
+            if (processName && !isTargetRestricted) {
+                if ([tier1 containsObject:processName]) isTargetRestricted = YES;
+                if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) isTargetRestricted = YES;
+                if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) isTargetRestricted = YES;
+            }
+        } else {
+            // Preset Rules are OFF. Evaluate "Select Apps..." manually defined rules.
+            if (bundleID && [restrictedApps containsObject:bundleID]) {
+                isTargetRestricted = YES;
+            } else if (processName && [restrictedApps containsObject:processName]) {
+                isTargetRestricted = YES;
+            }
         }
     }
     
