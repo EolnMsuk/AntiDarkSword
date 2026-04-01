@@ -36,7 +36,6 @@
             <string>Level 1: All Native Apple Apps.
 Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
 Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
-
 ⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.</string>
         </dict>
         <dict>
@@ -169,7 +168,7 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Donate (ElonMsuk)</string>
+            <string>EolnMsuk (Donate)</string>
             <key>action</key>
             <string>openVenmo</string>
         </dict>
@@ -177,7 +176,7 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>GitHub (AntiDarkSword)</string>
+            <string>AntiDarkSword (GitHub)</string>
             <key>action</key>
             <string>openGitHub</string>
         </dict>
