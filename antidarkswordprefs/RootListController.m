@@ -14,7 +14,7 @@
     if (self == [AntiDarkSwordPrefsRootListController class]) {
         
         // Reset the "needs respring" flag on a fresh launch of the Settings app
-        // This ensures the button is correctly greyed out after a respring or manual app kill
+        // This ensures the button is correctly greyed out after any respring (since respringing kills Settings)
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults synchronize];
@@ -378,15 +378,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        BOOL hasOpened = [defaults boolForKey:@"hasOpenedGitHubBefore"];
-        [defaults removePersistentDomainForName:@"com.eolnmsuk.antidarkswordprefs"];
+        // Use standard NSUserDefaults API to delete keys, avoiding cfprefsd cache corruption
+        NSDictionary *dict = [defaults dictionaryRepresentation];
+        for (NSString *key in dict) {
+            // Keep the GitHub flag so it doesn't pop up again
+            if (![key isEqualToString:@"hasOpenedGitHubBefore"]) {
+                [defaults removeObjectForKey:key];
+            }
+        }
         
-        // Write standard defaults back cleanly, making absolutely sure the respring flag is wiped out
-        NSDictionary *newDict = @{
-            @"hasOpenedGitHubBefore": @(hasOpened),
-            @"ADSNeedsRespring": @NO
-        };
-        [newDict writeToFile:PREFS_PATH atomically:YES];
+        // Force the save button grey state
+        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults synchronize];
         
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
         
