@@ -6,12 +6,13 @@ include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = AntiDarkSword
 AntiDarkSword_FILES = Tweak.x
-AntiDarkSword_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
+# Enforce minimum version to prevent ARC optimization errors and use classic linker
+AntiDarkSword_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -miphoneos-version-min=14.5
+AntiDarkSword_LDFLAGS = -Wl,-ld_classic
 AntiDarkSword_FRAMEWORKS = WebKit JavaScriptCore
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-# This is the "Magic" part that makes the settings show up
 internal-stage::
 	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences$(ECHO_END)
 	$(ECHO_NOTHING)cp antidarkswordprefs/entry.plist $(THEOS_STAGING_DIR)/Library/PreferenceLoader/Preferences/AntiDarkSword.plist$(ECHO_END)
