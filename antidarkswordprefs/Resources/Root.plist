@@ -37,7 +37,7 @@
 Level 2: + All Major 3rd-Party Browsers &amp; Social Media. 
 Level 3: + System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).
 
-⚠️ Warning: Level 3 restricts critical background daemons to prevent zero-clicks. This may break certain features like iMessage or media playback.</string>
+⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.</string>
         </dict>
         <dict>
             <key>cell</key>
