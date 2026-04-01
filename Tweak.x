@@ -43,7 +43,16 @@ static void loadPrefs() {
         
         // Load User Agent Settings
         customUAEnabled = tweakEnabled && (prefs[@"enableCustomUA"] ? [prefs[@"enableCustomUA"] boolValue] : NO);
-        customUAString = prefs[@"customUAString"] ?: @"";
+        
+        NSString *presetUA = prefs[@"selectedUAPreset"];
+        NSString *manualUA = prefs[@"customUAString"];
+        
+        // If Custom is selected in the dropdown (or nothing is selected yet), use the text box
+        if (!presetUA || [presetUA isEqualToString:@"CUSTOM"]) {
+            customUAString = manualUA ?: @"";
+        } else {
+            customUAString = presetUA;
+        }
     }
     
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
