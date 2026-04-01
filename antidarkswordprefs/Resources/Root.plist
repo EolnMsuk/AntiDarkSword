@@ -122,12 +122,52 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>id</key>
+            <string>UserAgentGroup</string>
+            <key>label</key>
+            <string>User Agent Spoofing</string>
+            <key>footerText</key>
+            <string>Spoofing your User Agent can prevent WebKit exploits targeting specific iOS versions by serving them incompatible payloads.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>enableCustomUA</string>
+            <key>label</key>
+            <string>Enable Custom UA</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSEditTextCell</string>
+            <key>default</key>
+            <string></string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>customUAString</string>
+            <key>label</key>
+            <string>Custom UA</string>
+            <key>placeholder</key>
+            <string>Mozilla/5.0 (iPhone; CPU iPhone OS...</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
             <string>AdvancedRestrictionsGroup</string>
             <key>label</key>
             <string>Advanced Restrictions</string>
             <key>footerText</key>
-            <string>Swipe left on any custom ID below to delete it.
-Add bundle IDs or process names for daemons you want to restrict manually.</string>
+            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
         </dict>
         <dict>
             <key>cell</key>
