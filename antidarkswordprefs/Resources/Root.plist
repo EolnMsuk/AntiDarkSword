@@ -82,9 +82,9 @@
             <key>id</key>
             <string>AppPermissionsGroup</string>
             <key>label</key>
-            <string>App Permissions</string>
+            <string>Manually Restrict Apps</string>
             <key>footerText</key>
-            <string>Restricting an app neutralizes WebKit exploit vectors (disables JavaScript, WebGL, file access) and blocks automatic media/message downloads.</string>
+            <string>Manually restricting an app neutralizes WebKit exploit vectors (disables JavaScript, WebGL, file access) and blocks automatic media/message downloads.</string>
         </dict>
         <dict>
             <key>cell</key>
