@@ -12,6 +12,13 @@
 
 + (void)initialize {
     if (self == [AntiDarkSwordPrefsRootListController class]) {
+        
+        // Reset the "needs respring" flag on a fresh launch of the Settings app
+        // This ensures the button is correctly greyed out after a respring or manual app kill
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults synchronize];
+
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
             [altListBundle load];
@@ -45,13 +52,16 @@
                 IMP customSetPrefImp = imp_implementationWithBlock(^(id _self, id value, id specifier) {
                     if (originalSetPref) {
                         void (*originalMsg)(id, SEL, id, id) = (void (*)(id, SEL, id, id))method_getImplementation(originalSetPref);
-                        // FIXED: Added 'setPrefSel' as the second argument
                         originalMsg(_self, setPrefSel, value, specifier);
                     }
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
                     [defaults synchronize];
-                    ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
+                    
+                    // Dispatch to main thread to ensure the button updates visually the moment the switch is flipped
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
+                    });
                 });
                 class_addMethod(newClass, setPrefSel, customSetPrefImp, originalSetPref ? method_getTypeEncoding(originalSetPref) : "v@:@@");
 
@@ -371,13 +381,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         BOOL hasOpened = [defaults boolForKey:@"hasOpenedGitHubBefore"];
         [defaults removePersistentDomainForName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        if (hasOpened) {
-            [defaults setBool:YES forKey:@"hasOpenedGitHubBefore"];
-        }
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-        [defaults synchronize];
-        
-        NSDictionary *newDict = hasOpened ? @{@"hasOpenedGitHubBefore": @YES} : @{};
+        // Write standard defaults back cleanly, making absolutely sure the respring flag is wiped out
+        NSDictionary *newDict = @{
+            @"hasOpenedGitHubBefore": @(hasOpened),
+            @"ADSNeedsRespring": @NO
+        };
         [newDict writeToFile:PREFS_PATH atomically:YES];
         
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
