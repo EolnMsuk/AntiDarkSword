@@ -147,21 +147,7 @@
             <key>label</key>
             <string>User Agent Spoofing</string>
             <key>footerText</key>
-            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads. Select a known safe preset or manually enter a Custom String.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>enableCustomUA</string>
-            <key>label</key>
-            <string>Enable Custom UA</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads. If Global Protection is ON, this string will be enforced. Leave this empty or set to Custom String (with no text) to disable UA spoofing.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -206,6 +192,8 @@
         <dict>
             <key>cell</key>
             <string>PSEditTextCell</string>
+            <key>id</key>
+            <string>CustomUATextField</string>
             <key>default</key>
             <string></string>
             <key>defaults</key>
