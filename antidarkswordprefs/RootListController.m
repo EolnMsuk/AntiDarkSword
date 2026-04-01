@@ -1,9 +1,14 @@
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
+#import <UIKit/UIKit.h>
 #import <spawn.h>
+#import <sys/types.h>
 #import <objc/runtime.h>
 
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+
+// Forward declaration to prevent compiler errors
+static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
 @interface AntiDarkSwordPrefsRootListController : PSListController
 @end
