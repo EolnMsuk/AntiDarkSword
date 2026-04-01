@@ -144,16 +144,6 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSGroupCell</string>
         </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>Reset to Defaults</string>
-            <key>action</key>
-            <string>resetToDefaults</string>
-            <key>isDestructive</key>
-            <true/>
-        </dict>
 
         <dict>
             <key>cell</key>
@@ -176,6 +166,17 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <string>AntiDarkSword (GitHub)</string>
             <key>action</key>
             <string>openGitHub</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Reset to Defaults</string>
+            <key>action</key>
+            <string>resetToDefaults</string>
+            <key>isDestructive</key>
+            <true/>
         </dict>
     </array>
     <key>title</key>
