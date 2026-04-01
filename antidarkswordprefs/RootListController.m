@@ -115,7 +115,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 }
 
-// Intercept the view appearing to cross-sync changes made from inside AltList
+// Intercept the view appearing to handle cross-syncing and dynamic UI updates
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
@@ -126,7 +126,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     BOOL modified = NO;
     
-    // Check if AltList toggled any of our Custom IDs ON or OFF and sync them to activeCustomDaemonIDs
+    // 1. Check if AltList toggled any of our Custom IDs ON or OFF and sync them to activeCustomDaemonIDs
     for (NSString *daemon in customIDs) {
         BOOL inRestricted = [restricted containsObject:daemon];
         BOOL inActive = [activeCustom containsObject:daemon];
@@ -140,13 +140,23 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
     }
     
+    // 2. Check if the UA dropdown changed and we need to show/hide the Custom Text Field dynamically
+    NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"] ?: @"CUSTOM";
+    BOOL shouldShowCustomText = [selectedUA isEqualToString:@"CUSTOM"];
+    BOOL isShowingCustomText = ([self specifierForID:@"CustomUATextField"] != nil);
+    
+    if (shouldShowCustomText != isShowingCustomText) {
+        _specifiers = nil; // Invalidate current specifiers
+        modified = YES;
+    }
+    
     if (modified) {
         [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
         [defaults synchronize];
     }
     
-    // Reload specifiers to visually reflect any newly synced state
-    if (_specifiers) {
+    // Reload if anything changed (AltList sync or UA text field visibility)
+    if (_specifiers == nil || modified) {
         [self reloadSpecifiers];
     }
 }
@@ -199,6 +209,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        
+        // 0. Dynamic UI: Hide Custom UA Text Field if Preset is not "CUSTOM"
+        NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"] ?: @"CUSTOM";
+        if (![selectedUA isEqualToString:@"CUSTOM"]) {
+            for (int i = 0; i < specs.count; i++) {
+                PSSpecifier *s = specs[i];
+                if ([[s propertyForKey:@"id"] isEqualToString:@"CustomUATextField"]) {
+                    [specs removeObjectAtIndex:i];
+                    break;
+                }
+            }
+        }
+        
         BOOL autoProtect = [defaults boolForKey:@"autoProtectEnabled"];
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
