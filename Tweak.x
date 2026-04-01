@@ -66,7 +66,6 @@ static void loadPrefs() {
     // 2. Evaluate Preset Rules OR "Select Apps..." 
     if (!isTargetRestricted) {
         if (autoProtectEnabled) {
-            // Level 1: All Native Apple Apps & Services
             NSArray *tier1 = @[
                 @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
                 @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
@@ -76,7 +75,6 @@ static void loadPrefs() {
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp"
             ];
 
-            // Level 2: Expanded 3rd Party Browsers, Email, Social Media, AI, Comms, Package Managers
             NSArray *tier2 = @[
                 @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
                 @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
@@ -92,7 +90,6 @@ static void loadPrefs() {
                 @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
 
-            // Level 3: Extreme Lockdown (System Daemons & Exploit Vectors)
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", 
                 @"mediaserverd", 
@@ -101,21 +98,18 @@ static void loadPrefs() {
                 @"identityservicesd"
             ];
 
-            // Check Bundle ID
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
                 if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
                 if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
             }
             
-            // Check Process Name (Critical for Level 3 Daemons)
             if (processName && !isTargetRestricted) {
                 if ([tier1 containsObject:processName]) isTargetRestricted = YES;
                 if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) isTargetRestricted = YES;
                 if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) isTargetRestricted = YES;
             }
         } else {
-            // Preset Rules are OFF. Evaluate "Select Apps..." manually defined rules.
             if (bundleID && [restrictedApps containsObject:bundleID]) {
                 isTargetRestricted = YES;
             } else if (processName && [restrictedApps containsObject:processName]) {
@@ -137,7 +131,7 @@ static BOOL isAppRestricted() {
 }
 
 // =========================================================
-// WEBKIT EXPLOIT MITIGATIONS
+// WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
 // =========================================================
 
 %hook WKWebView
@@ -172,9 +166,53 @@ static BOOL isAppRestricted() {
         }
     }
     
+    // ANTI-FINGERPRINTING LOGIC
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        
+        // 1. Dynamic Platform & Vendor Derivation based on the UA string
+        NSString *platform = @"iPhone";
+        if ([customUAString containsString:@"iPad"]) platform = @"iPad";
+        else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
+        else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
+        else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
+
+        NSString *vendor = @"Apple Computer, Inc.";
+        if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
+            vendor = @"Google Inc.";
+        }
+
+        // appVersion is standardly the UA string stripped of the "Mozilla/" prefix
+        NSString *appVersion = customUAString;
+        if ([customUAString hasPrefix:@"Mozilla/"]) {
+            appVersion = [customUAString substringFromIndex:8];
+        }
+
+        // Escape single quotes just in case a custom string has them
+        NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+        NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+
+        // 2. Build the JS Injection to override the Navigator object
+        NSString *jsSource = [NSString stringWithFormat:@"\
+            Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
+            Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
+        ", safeUA, safeAppVersion, platform, vendor];
+
+        WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
+                                                                     injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
+                                                                  forMainFrameOnly:NO];
+        
+        // Ensure userContentController exists
+        if (!configuration.userContentController) {
+            configuration.userContentController = [[WKUserContentController alloc] init];
+        }
+        [configuration.userContentController addUserScript:antiFingerprintScript];
+    }
+    
     WKWebView *webView = %orig(frame, configuration);
     
-    // Apply Custom User Agent ONLY if the global tweak is enabled AND a string is actually provided
+    // 3. Set the native property (handles the HTTP headers)
     if (globalTweakEnabled && customUAString && customUAString.length > 0) {
         if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
             webView.customUserAgent = customUAString;
