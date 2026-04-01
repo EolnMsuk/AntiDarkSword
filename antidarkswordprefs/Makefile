@@ -8,6 +8,8 @@ AntiDarkSwordPrefs_FILES = RootListController.m
 AntiDarkSwordPrefs_FRAMEWORKS = UIKit
 AntiDarkSwordPrefs_PRIVATE_FRAMEWORKS = Preferences
 AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles
-AntiDarkSwordPrefs_CFLAGS = -fobjc-arc
+# Enforce minimum version and classic linker here as well
+AntiDarkSwordPrefs_CFLAGS = -fobjc-arc -miphoneos-version-min=14.5
+AntiDarkSwordPrefs_LDFLAGS = -Wl,-ld_classic
 
 include $(THEOS_MAKE_PATH)/bundle.mk
