@@ -212,12 +212,27 @@
             <key>cell</key>
             <string>PSGroupCell</string>
         </dict>
-
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>About AntiDarkSword</string>
+            <string>Reset All Settings To Default</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Reset to Defaults</string>
+            <key>action</key>
+            <string>resetToDefaults</string>
+            <key>isDestructive</key>
+            <true/>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>About</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -234,17 +249,6 @@
             <string>AntiDarkSword (GitHub)</string>
             <key>action</key>
             <string>openGitHub</string>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>Reset to Defaults</string>
-            <key>action</key>
-            <string>resetToDefaults</string>
-            <key>isDestructive</key>
-            <true/>
         </dict>
     </array>
     <key>title</key>
