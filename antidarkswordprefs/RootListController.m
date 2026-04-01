@@ -110,6 +110,42 @@
     }
 }
 
+// Intercept the view appearing to cross-sync changes made from inside AltList
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
+    NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
+    NSArray *restricted = [defaults objectForKey:@"restrictedApps"] ?: @[];
+    
+    BOOL modified = NO;
+    
+    // Check if AltList toggled any of our Custom IDs ON or OFF and sync them to activeCustomDaemonIDs
+    for (NSString *daemon in customIDs) {
+        BOOL inRestricted = [restricted containsObject:daemon];
+        BOOL inActive = [activeCustom containsObject:daemon];
+        
+        if (inRestricted && !inActive) {
+            [activeCustom addObject:daemon];
+            modified = YES;
+        } else if (!inRestricted && inActive) {
+            [activeCustom removeObject:daemon];
+            modified = YES;
+        }
+    }
+    
+    if (modified) {
+        [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults synchronize];
+    }
+    
+    // Reload specifiers to visually reflect any newly synced state
+    if (_specifiers) {
+        [self reloadSpecifiers];
+    }
+}
+
 // Helper to get the lists for dynamic UI injection
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
     NSMutableArray *items = [NSMutableArray array];
@@ -314,24 +350,31 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (id)readCustomIDValue:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     NSArray *activeCustom = [defaults objectForKey:@"activeCustomDaemonIDs"] ?: [defaults objectForKey:@"customDaemonIDs"] ?: @[];
+    NSArray *restricted = [defaults objectForKey:@"restrictedApps"] ?: @[];
     NSString *daemonID = [specifier propertyForKey:@"daemonID"];
-    return @([activeCustom containsObject:daemonID]);
+    
+    return @([activeCustom containsObject:daemonID] || [restricted containsObject:daemonID]);
 }
 
 - (void)setCustomIDValue:(id)value specifier:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: [defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+    NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy] mutableCopy];
+    NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
     
     NSString *daemonID = [specifier propertyForKey:@"daemonID"];
     BOOL enabled = [value boolValue];
     
-    if (enabled && ![activeCustom containsObject:daemonID]) {
-        [activeCustom addObject:daemonID];
-    } else if (!enabled && [activeCustom containsObject:daemonID]) {
+    // Ensure perfectly synchronized state
+    if (enabled) {
+        if (![activeCustom containsObject:daemonID]) [activeCustom addObject:daemonID];
+        if (![restricted containsObject:daemonID]) [restricted addObject:daemonID];
+    } else {
         [activeCustom removeObject:daemonID];
+        [restricted removeObject:daemonID];
     }
     
     [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+    [defaults setObject:restricted forKey:@"restrictedApps"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize]; 
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
@@ -351,6 +394,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
             NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
             NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
+            NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
             
             BOOL changesMade = NO;
             
@@ -359,8 +403,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 
                 if (cleanID.length > 0 && ![customIDs containsObject:cleanID]) {
                     [customIDs addObject:cleanID];
+                    // Also forcibly toggle it ON in both synchronized locations
                     if (![activeCustom containsObject:cleanID]) {
                         [activeCustom addObject:cleanID];
+                    }
+                    if (![restricted containsObject:cleanID]) {
+                        [restricted addObject:cleanID];
                     }
                     changesMade = YES;
                 }
@@ -369,6 +417,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if (changesMade) {
                 [defaults setObject:customIDs forKey:@"customDaemonIDs"];
                 [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+                [defaults setObject:restricted forKey:@"restrictedApps"];
                 [defaults setBool:YES forKey:@"ADSNeedsRespring"];
                 [defaults synchronize];
                 
@@ -397,12 +446,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
         NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
+        NSMutableArray *restricted = [[defaults objectForKey:@"restrictedApps"] ?: @[] mutableCopy];
         
         [customIDs removeObject:daemonID];
         [activeCustom removeObject:daemonID];
+        [restricted removeObject:daemonID];
         
         [defaults setObject:customIDs forKey:@"customDaemonIDs"];
         [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults setObject:restricted forKey:@"restrictedApps"];
         [defaults setBool:YES forKey:@"ADSNeedsRespring"];
         [defaults synchronize];
         
