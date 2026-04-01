@@ -147,7 +147,7 @@
             <key>label</key>
             <string>User Agent Spoofing</string>
             <key>footerText</key>
-            <string>Spoofing your User Agent can prevent WebKit exploits targeting specific iOS versions by serving them incompatible payloads. Select a preset or choose 'Custom String' to manually type one below.</string>
+            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads. Select a known safe preset or manually enter a Custom String.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -178,17 +178,23 @@
             <string>Preset UA</string>
             <key>validTitles</key>
             <array>
-                <string>iPhone (iOS 17 Safari)</string>
-                <string>iPhone (iOS 14 Safari)</string>
-                <string>Android (Chrome)</string>
+                <string>iPhone (iOS 18.8) - Safe</string>
+                <string>iPhone (iOS 18.1) - Safe</string>
+                <string>iPhone (iOS 17.5.1) - Safe</string>
+                <string>iPhone (iOS 12.4.1) - Safe</string>
+                <string>iPad (iPadOS 18.1) - Safe</string>
+                <string>Android (Chrome 120)</string>
                 <string>Windows (Edge)</string>
                 <string>macOS (Safari)</string>
                 <string>Custom String</string>
             </array>
             <key>validValues</key>
             <array>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 12_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.2 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPad; CPU OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
                 <string>Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36</string>
                 <string>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69</string>
                 <string>Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15</string>
