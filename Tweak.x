@@ -133,7 +133,6 @@ static void loadPrefs() {
     // Evaluate if we should apply User Agent Spoofing to this specific process
     shouldSpoofUA = NO;
     if (globalTweakEnabled && customUAString && customUAString.length > 0) {
-        // Apps that legitimately need UA spoofing for anti-fingerprinting
         NSArray *uaSpoofTargets = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
@@ -144,7 +143,6 @@ static void loadPrefs() {
             @"org.telegram.messenger", @"net.whatsapp.WhatsApp"
         ];
         
-        // Critical daemons that MUST NOT have their UA spoofed
         NSArray *daemonDenylist = @[
             @"com.apple.appstored", @"com.apple.itunesstored",
             @"com.apple.imagent", @"com.apple.mediaserverd",
@@ -156,13 +154,11 @@ static void loadPrefs() {
         if (bundleID && [uaSpoofTargets containsObject:bundleID]) {
             shouldSpoofUA = YES;
         } else if (isTargetRestricted) {
-            // Allow user-restricted apps to have spoofed UA, as long as it isn't a known daemon
             if (!bundleID || ![daemonDenylist containsObject:bundleID]) {
                 shouldSpoofUA = YES;
             }
         }
         
-        // Extra safeguard: catch processes ending in 'd' or 'daemon' explicitly to avoid spoofing background tasks
         if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
             shouldSpoofUA = NO;
         }
@@ -184,7 +180,7 @@ static BOOL isAppRestricted() {
 
 %hook WKWebViewConfiguration
 
-// Intercept dynamic resetting of the content controller (common in Filza/Browsers)
+// Intercept dynamic resetting of the content controller
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA) {
@@ -267,7 +263,6 @@ static BOOL isAppRestricted() {
         if (!configuration.userContentController) {
             configuration.userContentController = [[WKUserContentController alloc] init];
         }
-        // Will be handled by WKWebViewConfiguration hook above!
     }
     
     WKWebView *webView = %orig(frame, configuration);
@@ -295,13 +290,13 @@ static BOOL isAppRestricted() {
         if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) {
             webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
         }
-        if ([webView respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) {
+        if ([webView.configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) {
             webView.configuration.allowsInlineMediaPlayback = NO;
         }
-        if ([webView respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) {
+        if ([webView.configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) {
             webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
         }
-        if ([webView respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) {
+        if ([webView.configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) {
             webView.configuration.allowsPictureInPictureMediaPlayback = NO;
         }
         if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
