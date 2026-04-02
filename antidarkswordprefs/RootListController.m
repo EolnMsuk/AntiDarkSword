@@ -42,7 +42,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"},
-            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}
+            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
         ];
         
         for (NSDictionary *feat in features) {
@@ -106,9 +107,25 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults synchronize]; // Ensure fresh read
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
-    
-    if (!rules) return @YES; // Default to ON
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
+    
+    if (!rules) { // Evaluate defaults based on app type
+        if ([featureKey isEqualToString:@"spoofUA"]) {
+            NSArray *daemonDenylist = @[
+                @"com.apple.appstored", @"com.apple.itunesstored",
+                @"com.apple.imagent", @"com.apple.mediaserverd",
+                @"com.apple.networkd", @"com.apple.apsd",
+                @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+                @"com.apple.cfnetwork"
+            ];
+            if ([daemonDenylist containsObject:self.targetID] || [self.targetID containsString:@"daemon"] || [self.targetID hasSuffix:@"d"]) {
+                return @NO;
+            }
+            return @YES;
+        }
+        return @YES; // All other restrictions ON by default
+    }
+    
     return rules[featureKey] ?: @YES;
 }
 
@@ -404,6 +421,51 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSInteger newLevel = [value integerValue];
     
     [defaults setObject:value forKey:@"autoProtectLevel"];
+    
+    if (oldLevel != newLevel) {
+        // Enforce the requested default rules configurations on preset apps whenever level is switched
+        NSArray *browsers = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        ];
+        
+        NSArray *daemonDenylist = @[
+            @"com.apple.appstored", @"com.apple.itunesstored",
+            @"com.apple.imagent", @"com.apple.mediaserverd",
+            @"com.apple.networkd", @"com.apple.apsd",
+            @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+            @"com.apple.cfnetwork"
+        ];
+        
+        NSArray *allProtected = [self autoProtectedItemsForLevel:3]; // Get all potential preset items
+        for (NSString *targetID in allProtected) {
+            NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
+            NSMutableDictionary *rules = [NSMutableDictionary dictionary];
+            
+            // Baseline protections
+            rules[@"disableMedia"] = @YES;
+            rules[@"disableRTC"] = @YES;
+            rules[@"disableFileAccess"] = @YES;
+            rules[@"disableIMessageDL"] = @YES;
+            
+            // Enable JavaScript for Browsers dynamically on Level 1 and 2
+            if ([browsers containsObject:targetID] && newLevel < 3) {
+                rules[@"disableJS"] = @NO;
+            } else {
+                rules[@"disableJS"] = @YES;
+            }
+            
+            // Turn Off UA spoofing on specific critical processes
+            if ([daemonDenylist containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
+                rules[@"spoofUA"] = @NO;
+            } else {
+                rules[@"spoofUA"] = @YES;
+            }
+            
+            [defaults setObject:rules forKey:dictKey];
+        }
+    }
     
     if (oldLevel >= 3 || newLevel >= 3) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
