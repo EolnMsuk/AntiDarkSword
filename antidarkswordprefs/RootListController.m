@@ -20,6 +20,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults setBool:NO forKey:@"ADSNeedsUserspaceReboot"];
         [defaults synchronize];
 
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
@@ -47,7 +48,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                                                                                   target:_self 
                                                                                   action:@selector(savePrompt)];
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-                    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
+                    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"] || [defaults boolForKey:@"ADSNeedsUserspaceReboot"];
                     ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
                     
                     // SAFE OBSERVER: Listen for toggles, but strictly prevent the infinite loop
@@ -94,16 +95,28 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 // --- Save Prompt Handler ---
                 SEL savePromptSel = @selector(savePrompt);
                 IMP savePromptImp = imp_implementationWithBlock(^(id _self) {
-                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes now?" preferredStyle:UIAlertControllerStyleAlert];
+                    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+                    BOOL needsReboot = [defaults boolForKey:@"ADSNeedsUserspaceReboot"];
+                    
+                    NSString *title = @"Save";
+                    NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes now?";
+                    NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
+                    
+                    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
                     [alert addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
-                    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+                    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+                        [defaults setBool:NO forKey:@"ADSNeedsUserspaceReboot"];
                         [defaults synchronize];
                         
                         pid_t pid;
-                        const char* args[] = {"killall", "backboardd", NULL};
-                        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+                        if (needsReboot) {
+                            const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+                            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+                        } else {
+                            const char* args[] = {"killall", "backboardd", NULL};
+                            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+                        }
                     }]];
                     [((UIViewController *)_self) presentViewController:alert animated:YES completion:nil];
                 });
@@ -152,6 +165,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if (modified) {
         [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
         [defaults synchronize];
     }
     
@@ -309,7 +323,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem = saveButton;
     
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
+    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"] || [defaults boolForKey:@"ADSNeedsUserspaceReboot"];
     
     // Listen for Darwin notification to catch any changes
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
@@ -357,6 +371,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults setObject:value forKey:@"autoProtectEnabled"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
+        [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
+    }
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
@@ -366,8 +383,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"];
+    NSInteger newLevel = [value integerValue];
+    
     [defaults setObject:value forKey:@"autoProtectLevel"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    
+    if (oldLevel >= 3 || newLevel >= 3) {
+        [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
+    }
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
@@ -405,6 +429,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
     [defaults setObject:restricted forKey:@"restrictedApps"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
     [defaults synchronize]; 
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
 }
@@ -448,6 +473,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
                 [defaults setObject:restricted forKey:@"restrictedApps"];
                 [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+                [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
                 [defaults synchronize];
                 
                 _specifiers = nil;
@@ -485,6 +511,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
         [defaults setObject:restricted forKey:@"restrictedApps"];
         [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+        [defaults setBool:YES forKey:@"ADSNeedsUserspaceReboot"];
         [defaults synchronize];
         
         [self removeSpecifier:spec animated:YES];
@@ -493,9 +520,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)resetToDefaults {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Respring required to apply changes." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
         NSDictionary *dict = [defaults dictionaryRepresentation];
@@ -506,28 +533,41 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
         
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults setBool:NO forKey:@"ADSNeedsUserspaceReboot"];
         [defaults synchronize];
         
         CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
         
         pid_t pid;
-        const char* args[] = {"killall", "backboardd", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+        const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)savePrompt {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save" message:@"Apply changes with respring?" preferredStyle:UIAlertControllerStyleAlert];
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSNeedsUserspaceReboot"];
+    
+    NSString *title = @"Save";
+    NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
+    NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"Respring" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults setBool:NO forKey:@"ADSNeedsUserspaceReboot"];
         [defaults synchronize];
         
         pid_t pid;
-        const char* args[] = {"killall", "backboardd", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+        if (needsReboot) {
+            const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+        } else {
+            const char* args[] = {"killall", "backboardd", NULL};
+            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+        }
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
