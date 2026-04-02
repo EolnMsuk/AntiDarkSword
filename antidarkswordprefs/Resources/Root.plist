@@ -26,6 +26,79 @@
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
+            <string>UserAgentGroup</string>
+            <key>label</key>
+            <string>User Agent Spoofing</string>
+            <key>footerText</key>
+            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
+If Global Protection is ON, this string will be enforced.
+Leave this set to None to disable UA spoofing.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSLinkListCell</string>
+            <key>detail</key>
+            <string>PSListItemsController</string>
+            <key>default</key>
+            <string>NONE</string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>selectedUAPreset</string>
+            <key>label</key>
+            <string>Select UA</string>
+            <key>validTitles</key>
+            <array>
+                <string>iPhone (iOS 18.1)</string>
+                <string>iPhone (iOS 17.6.1)</string>
+                <string>iPhone (iOS 16.7.8)</string>
+                <string>iPhone (iOS 15.8.2)</string>
+                <string>iPad (iPadOS 18.1)</string>
+                <string>Android (Chrome)</string>
+                <string>Windows (Edge)</string>
+                <string>Mac (macOS 14.5)</string>
+                <string>Custom String</string>
+                <string>None</string>
+            </array>
+            <key>validValues</key>
+            <array>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 17_6_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 16_7_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 15_8_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (iPad; CPU OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
+                <string>Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36</string>
+                <string>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0</string>
+                <string>Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15</string>
+                <string>CUSTOM</string>
+                <string>NONE</string>
+            </array>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSEditTextCell</string>
+            <key>id</key>
+            <string>CustomUATextField</string>
+            <key>default</key>
+            <string></string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>customUAString</string>
+            <key>label</key>
+            <string>Custom</string>
+            <key>placeholder</key>
+            <string>Type manual UA here...</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
         
         <dict>
             <key>cell</key>
@@ -124,9 +197,10 @@
             <key>id</key>
             <string>AdvancedRestrictionsGroup</string>
             <key>label</key>
-            <string>Advanced Restrictions</string>
+            <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
+            <string>Swipe left on any custom ID below to delete it.
+Add bundle IDs or process names for daemons you want to restrict manually.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -139,75 +213,6 @@
             <string>AddCustomIDButton</string>
         </dict>
 
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
-            <string>UserAgentGroup</string>
-            <key>label</key>
-            <string>User Agent Spoofing</string>
-            <key>footerText</key>
-            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads. If Global Protection is ON, this string will be enforced. Leave this empty or set to Custom String (with no text) to disable UA spoofing.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSLinkListCell</string>
-            <key>detail</key>
-            <string>PSListItemsController</string>
-            <key>default</key>
-            <string>CUSTOM</string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>selectedUAPreset</string>
-            <key>label</key>
-            <string>Preset UA</string>
-            <key>validTitles</key>
-            <array>
-                <string>iPhone (iOS 18.8)</string>
-                <string>iPhone (iOS 18.1) - Recommended</string>
-                <string>iPhone (iOS 17.5.1)</string>
-                <string>iPhone (iOS 12.4.1)</string>
-                <string>iPad (iPadOS 18.1)</string>
-                <string>Android (Chrome 120)</string>
-                <string>Windows (Edge)</string>
-                <string>macOS (Safari)</string>
-                <string>Custom String</string>
-            </array>
-            <key>validValues</key>
-            <array>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (iPhone; CPU iPhone OS 12_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.2 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (iPad; CPU OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
-                <string>Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36</string>
-                <string>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.69</string>
-                <string>Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15</string>
-                <string>CUSTOM</string>
-            </array>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSEditTextCell</string>
-            <key>id</key>
-            <string>CustomUATextField</string>
-            <key>default</key>
-            <string></string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>customUAString</string>
-            <key>label</key>
-            <string>Custom</string>
-            <key>placeholder</key>
-            <string>Type manual UA here...</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
