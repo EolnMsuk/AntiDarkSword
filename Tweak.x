@@ -18,6 +18,7 @@
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
 static NSString *customUAString = @"";
+static BOOL shouldSpoofUA = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
@@ -55,7 +56,6 @@ static void loadPrefs() {
         
         NSString *presetUA = prefs[@"selectedUAPreset"];
         NSString *manualUA = prefs[@"customUAString"];
-        
         if (!presetUA || [presetUA isEqualToString:@"CUSTOM"]) {
             customUAString = manualUA ?: @"";
         } else {
@@ -129,6 +129,44 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
+    
+    // Evaluate if we should apply User Agent Spoofing to this specific process
+    shouldSpoofUA = NO;
+    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+        // Apps that legitimately need UA spoofing for anti-fingerprinting
+        NSArray *uaSpoofTargets = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
+            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+            @"com.apple.news", @"com.reddit.Reddit", @"com.atebits.Tweetie2",
+            @"com.facebook.Facebook", @"com.burbn.instagram", @"com.google.ios.youtube",
+            @"com.hammerandchisel.discord", @"com.zhiliaoapp.musically",
+            @"org.telegram.messenger", @"net.whatsapp.WhatsApp"
+        ];
+        
+        // Critical daemons that MUST NOT have their UA spoofed
+        NSArray *daemonDenylist = @[
+            @"com.apple.appstored", @"com.apple.itunesstored",
+            @"com.apple.imagent", @"com.apple.mediaserverd",
+            @"com.apple.networkd", @"com.apple.apsd",
+            @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+            @"com.apple.cfnetwork"
+        ];
+        
+        if (bundleID && [uaSpoofTargets containsObject:bundleID]) {
+            shouldSpoofUA = YES;
+        } else if (isTargetRestricted) {
+            // Allow user-restricted apps to have spoofed UA, as long as it isn't a known daemon
+            if (!bundleID || ![daemonDenylist containsObject:bundleID]) {
+                shouldSpoofUA = YES;
+            }
+        }
+        
+        // Extra safeguard: catch processes ending in 'd' or 'daemon' explicitly to avoid spoofing background tasks
+        if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
+            shouldSpoofUA = NO;
+        }
+    }
 }
 
 static BOOL isAppRestricted() {
@@ -149,7 +187,7 @@ static BOOL isAppRestricted() {
 // Intercept dynamic resetting of the content controller (common in Filza/Browsers)
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         NSString *platform = @"iPhone";
         if ([customUAString containsString:@"iPad"]) platform = @"iPad";
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
@@ -174,7 +212,6 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -184,8 +221,8 @@ static BOOL isAppRestricted() {
 
 // Block apps from modifying the user agent suffix
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
-        return %orig(@""); 
+    if (shouldSpoofUA) {
+        return %orig(@"");
     }
     %orig;
 }
@@ -226,7 +263,7 @@ static BOOL isAppRestricted() {
         }
     }
     
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if (!configuration.userContentController) {
             configuration.userContentController = [[WKUserContentController alloc] init];
         }
@@ -234,8 +271,7 @@ static BOOL isAppRestricted() {
     }
     
     WKWebView *webView = %orig(frame, configuration);
-    
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
             webView.customUserAgent = customUAString;
         }
@@ -279,7 +315,7 @@ static BOOL isAppRestricted() {
         }
     }
     
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if (!webView.configuration.userContentController) {
             webView.configuration.userContentController = [[WKUserContentController alloc] init];
         }
@@ -302,7 +338,7 @@ static BOOL isAppRestricted() {
         }
     }
     
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
             self.customUserAgent = customUAString;
         }
@@ -331,7 +367,7 @@ static BOOL isAppRestricted() {
         }
     }
     
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
             self.customUserAgent = customUAString;
         }
@@ -366,7 +402,7 @@ static BOOL isAppRestricted() {
 
 // 5. Prevent the app from forcefully overwriting our spoofed agent property
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         %orig(customUAString);
     } else {
         %orig;
@@ -418,7 +454,7 @@ static BOOL isAppRestricted() {
 
 %hook NSMutableURLRequest
 - (void)setValue:(NSString *)value forHTTPHeaderField:(NSString *)field {
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([field caseInsensitiveCompare:@"User-Agent"] == NSOrderedSame) {
             return %orig(customUAString, field);
         }
@@ -433,7 +469,7 @@ static BOOL isAppRestricted() {
 
 %hook NSUserDefaults
 - (id)objectForKey:(NSString *)defaultName {
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([defaultName isEqualToString:@"UserAgent"] || [defaultName isEqualToString:@"User-Agent"]) {
             return customUAString;
         }
@@ -442,7 +478,7 @@ static BOOL isAppRestricted() {
 }
 
 - (NSString *)stringForKey:(NSString *)defaultName {
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (shouldSpoofUA) {
         if ([defaultName isEqualToString:@"UserAgent"] || [defaultName isEqualToString:@"User-Agent"]) {
             return customUAString;
         }
