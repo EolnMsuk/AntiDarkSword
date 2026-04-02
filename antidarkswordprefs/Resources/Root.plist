@@ -10,7 +10,7 @@
             <key>label</key>
             <string>Global Settings</string>
             <key>footerText</key>
-            <string>You must enable this AND the rules below to protect your device.</string>
+            <string>You must also enable preset or custom rules below to protect your device.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -35,8 +35,9 @@
             <key>label</key>
             <string>User Agent Spoofing</string>
             <key>footerText</key>
-            <string>Spoofing User Agent (iOS version) bypasses browser fingerprinting modules used by Coruna / DarkSword.
-Allowing you to browse (mostly safe) without disabling JavaScript or WebGL. This doesn't protect from mail and msgs (thats below).</string>
+            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
+If Global Protection is ON, this string will be enforced.
+Leave this set to None to disable UA spoofing.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -53,7 +54,7 @@ Allowing you to browse (mostly safe) without disabling JavaScript or WebGL. This
             <string>Select UA</string>
             <key>validTitles</key>
             <array>
-                <string>iPhone (iOS 18.1) - Recommended</string>
+                <string>iPhone (iOS 18.1)</string>
                 <string>iPhone (iOS 17.6.1)</string>
                 <string>iPhone (iOS 16.7.8)</string>
                 <string>iPhone (iOS 15.8.2)</string>
@@ -103,6 +104,48 @@ Allowing you to browse (mostly safe) without disabling JavaScript or WebGL. This
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>id</key>
+            <string>AppPermissionsGroup</string>
+            <key>label</key>
+            <string>Manual Rules</string>
+            <key>footerText</key>
+            <string>Manually selecting an app neutralizes its WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>id</key>
+            <string>SelectApps</string>
+            <key>detail</key>
+            <string>ATLApplicationListMultiSelectionController</string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>restrictedApps</string>
+            <key>label</key>
+            <string>Select Apps...</string>
+            <key>sections</key>
+            <array>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Visible</string>
+                </dict>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Hidden</string>
+                </dict>
+            </array>
+            <key>showIdentifiersAsSubtitle</key>
+            <true/>
+            <key>defaultApplicationSwitchValue</key>
+            <false/>
+            <key>useSearchBar</key>
+            <true/>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
             <string>PresetRulesGroup</string>
             <key>label</key>
             <string>Preset Rules</string>
@@ -146,48 +189,6 @@ Allowing you to browse (mostly safe) without disabling JavaScript or WebGL. This
             </array>
             <key>set</key>
             <string>setAutoProtectLevel:specifier:</string>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
-            <string>AppPermissionsGroup</string>
-            <key>label</key>
-            <string>Manual Rules</string>
-            <key>footerText</key>
-            <string>Manually selecting (or using presets) neutralizes that app's WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSLinkCell</string>
-            <key>id</key>
-            <string>SelectApps</string>
-            <key>detail</key>
-            <string>ATLApplicationListMultiSelectionController</string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>restrictedApps</string>
-            <key>label</key>
-            <string>Select Apps...</string>
-            <key>sections</key>
-            <array>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Visible</string>
-                </dict>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Hidden</string>
-                </dict>
-            </array>
-            <key>showIdentifiersAsSubtitle</key>
-            <true/>
-            <key>defaultApplicationSwitchValue</key>
-            <false/>
-            <key>useSearchBar</key>
-            <true/>
         </dict>
 
         <dict>
