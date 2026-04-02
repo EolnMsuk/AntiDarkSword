@@ -22,7 +22,7 @@ static BOOL shouldSpoofUA = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
-    
+
     // Attempt standard file read
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
@@ -30,7 +30,7 @@ static void loadPrefs() {
         prefs = [NSDictionary dictionaryWithContentsOfFile:ROOTFUL_PREFS_PATH];
     }
     
-    // Fallback: If sandbox blocks direct file access (e.g., WebContent daemons, SafariViewService), use IPC via CFPreferences
+    // Fallback: If sandbox blocks direct file access, use IPC via CFPreferences
     if (!prefs) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
@@ -44,15 +44,30 @@ static void loadPrefs() {
 
     BOOL autoProtectEnabled = NO;
     NSInteger autoProtectLevel = 1;
-    NSArray *restrictedApps = @[];
     NSArray *activeCustomDaemonIDs = @[];
+    NSArray *disabledPresetRules = @[];
     
+    // Safety check block for extracting AltList dictionaries correctly without crashing!
+    NSArray *restrictedAppsArray = @[];
     if (prefs) {
+        id restrictedAppsRaw = prefs[@"restrictedApps"];
+        if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
+            NSMutableArray *temp = [NSMutableArray array];
+            for (NSString *key in [restrictedAppsRaw allKeys]) {
+                if ([restrictedAppsRaw[key] boolValue]) {
+                    [temp addObject:key];
+                }
+            }
+            restrictedAppsArray = temp;
+        } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
+            restrictedAppsArray = restrictedAppsRaw;
+        }
+
         globalTweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
         autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
-        restrictedApps = prefs[@"restrictedApps"] ?: @[];
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
         
         NSString *presetUA = prefs[@"selectedUAPreset"];
         NSString *manualUA = prefs[@"customUAString"];
@@ -66,7 +81,8 @@ static void loadPrefs() {
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
-    
+
+    // Highest Priority: Custom Daemons Override
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
     } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
@@ -74,7 +90,12 @@ static void loadPrefs() {
     }
 
     if (!isTargetRestricted) {
-        if (autoProtectEnabled) {
+        // Priority 2: Manual Select Apps (Combined safely)
+        if (bundleID && [restrictedAppsArray containsObject:bundleID]) isTargetRestricted = YES;
+        else if (processName && [restrictedAppsArray containsObject:processName]) isTargetRestricted = YES;
+        
+        // Priority 3: Auto Protect evaluation combined with disable-list tracking
+        if (!isTargetRestricted && autoProtectEnabled) {
             NSArray *tier1 = @[
                 @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
                 @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
@@ -84,7 +105,6 @@ static void loadPrefs() {
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
                 @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
             ];
-            
             NSArray *tier2 = @[
                 @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
                 @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
@@ -99,40 +119,34 @@ static void loadPrefs() {
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
                 @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
-            
             NSArray *tier3 = @[
-                @"com.apple.imagent", @"imagent", 
-                @"mediaserverd", 
-                @"networkd",
-                @"apsd",
-                @"identityservicesd"
+                @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
             
+            NSString *targetMatch = nil;
             if (bundleID) {
-                if ([tier1 containsObject:bundleID]) isTargetRestricted = YES;
-                if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) isTargetRestricted = YES;
-                if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) isTargetRestricted = YES;
+                if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
+                else if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) targetMatch = bundleID;
+                else if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) targetMatch = bundleID;
+            }
+            if (!targetMatch && processName) {
+                if ([tier1 containsObject:processName]) targetMatch = processName;
+                else if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) targetMatch = processName;
+                else if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) targetMatch = processName;
             }
             
-            if (processName && !isTargetRestricted) {
-                if ([tier1 containsObject:processName]) isTargetRestricted = YES;
-                if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) isTargetRestricted = YES;
-                if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) isTargetRestricted = YES;
-            }
-        } else {
-            if (bundleID && [restrictedApps containsObject:bundleID]) {
-                isTargetRestricted = YES;
-            } else if (processName && [restrictedApps containsObject:processName]) {
+            // Only restrict if the matched preset tier item wasn't manually switched off 
+            if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
             }
         }
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-    
+
     // Evaluate if we should apply User Agent Spoofing to this specific process
     shouldSpoofUA = NO;
-    if (globalTweakEnabled && customUAString && customUAString.length > 0) {
+    if (globalTweakEnabled && customUAString && customUAString.length > 0 && ![customUAString isEqualToString:@"NONE"]) {
         NSArray *uaSpoofTargets = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
@@ -142,7 +156,6 @@ static void loadPrefs() {
             @"com.hammerandchisel.discord", @"com.zhiliaoapp.musically",
             @"org.telegram.messenger", @"net.whatsapp.WhatsApp"
         ];
-        
         NSArray *daemonDenylist = @[
             @"com.apple.appstored", @"com.apple.itunesstored",
             @"com.apple.imagent", @"com.apple.mediaserverd",
@@ -150,7 +163,7 @@ static void loadPrefs() {
             @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
             @"com.apple.cfnetwork"
         ];
-        
+
         if (bundleID && [uaSpoofTargets containsObject:bundleID]) {
             shouldSpoofUA = YES;
         } else if (isTargetRestricted) {
@@ -180,7 +193,6 @@ static BOOL isAppRestricted() {
 
 %hook WKWebViewConfiguration
 
-// Intercept dynamic resetting of the content controller
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA) {
@@ -208,6 +220,7 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -215,7 +228,6 @@ static BOOL isAppRestricted() {
     }
 }
 
-// Block apps from modifying the user agent suffix
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
     if (shouldSpoofUA) {
         return %orig(@"");
@@ -227,7 +239,6 @@ static BOOL isAppRestricted() {
 
 %hook WKWebView
 
-// 1. Hook code-based initialization
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if (isAppRestricted()) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
@@ -275,11 +286,10 @@ static BOOL isAppRestricted() {
     return webView;
 }
 
-// 2. Hook Storyboard/Interface Builder initialization
 - (instancetype)initWithCoder:(NSCoder *)coder {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
-    
+
     if (isAppRestricted()) {
         if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
@@ -322,7 +332,6 @@ static BOOL isAppRestricted() {
     return webView;
 }
 
-// 3. Late Binding Hooks: Catch dynamic loads
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
     if (isAppRestricted()) {
         if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
@@ -338,7 +347,6 @@ static BOOL isAppRestricted() {
             self.customUserAgent = customUAString;
         }
         
-        // Intercept inline NSMutableURLRequest header overrides natively
         if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
             NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
             if (existingUA && ![existingUA isEqualToString:customUAString]) {
@@ -371,7 +379,6 @@ static BOOL isAppRestricted() {
     return %orig;
 }
 
-// 4. Forcefully block native JS execution triggers 
 - (void)evaluateJavaScript:(NSString *)javaScriptString completionHandler:(void (^)(id, NSError *))completionHandler {
     if (isAppRestricted()) {
         if (completionHandler) {
@@ -383,7 +390,6 @@ static BOOL isAppRestricted() {
     %orig;
 }
 
-// Async API for iOS 14+ 
 - (void)evaluateJavaScript:(NSString *)javaScriptString inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
     if (isAppRestricted()) {
         if (completionHandler) {
@@ -395,7 +401,6 @@ static BOOL isAppRestricted() {
     %orig;
 }
 
-// 5. Prevent the app from forcefully overwriting our spoofed agent property
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
     if (shouldSpoofUA) {
         %orig(customUAString);
