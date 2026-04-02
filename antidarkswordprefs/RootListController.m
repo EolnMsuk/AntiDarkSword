@@ -13,6 +13,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 @implementation AntiDarkSwordPrefsRootListController
 
++ (void)initialize {
+    if (self == [AntiDarkSwordPrefsRootListController class]) {
+        // MUST load the AltList bundle into memory so the plist can find ATLApplicationListMultiSelectionController
+        NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
+        if (![altListBundle isLoaded]) {
+            [altListBundle load];
+        }
+    }
+}
+
 // Intercept the view appearing to handle cross-syncing and dynamic UI updates
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
