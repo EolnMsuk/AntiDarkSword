@@ -29,6 +29,7 @@ static BOOL disableIMessageDL = YES;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
+
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
@@ -54,6 +55,7 @@ static void loadPrefs() {
     
     // Safety check block for extracting AltList dictionaries correctly without crashing!
     NSArray *restrictedAppsArray = @[];
+
     if (prefs) {
         id restrictedAppsRaw = prefs[@"restrictedApps"];
         if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
@@ -69,7 +71,8 @@ static void loadPrefs() {
         }
 
         globalTweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
-        autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
+        autoProtectEnabled = prefs[@"autoProtectEnabled"] ?
+        [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
@@ -90,17 +93,21 @@ static void loadPrefs() {
 
     // Highest Priority: Custom Daemons Override
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
-        isTargetRestricted = YES; matchedID = bundleID;
+        isTargetRestricted = YES;
+        matchedID = bundleID;
     } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
-        isTargetRestricted = YES; matchedID = processName;
+        isTargetRestricted = YES;
+        matchedID = processName;
     }
 
     if (!isTargetRestricted) {
         // Priority 2: Manual Select Apps (Combined safely)
         if (bundleID && [restrictedAppsArray containsObject:bundleID]) {
-            isTargetRestricted = YES; matchedID = bundleID;
+            isTargetRestricted = YES;
+            matchedID = bundleID;
         } else if (processName && [restrictedAppsArray containsObject:processName]) {
-            isTargetRestricted = YES; matchedID = processName;
+            isTargetRestricted = YES;
+            matchedID = processName;
         }
         
         // Priority 3: Auto Protect evaluation combined with disable-list tracking
@@ -131,7 +138,7 @@ static void loadPrefs() {
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
-            
+
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -153,13 +160,28 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-    
+
     // Read App-Specific Granular Rules
     disableJS = YES;
     disableMedia = YES;
     disableRTC = YES;
     disableFileAccess = YES;
     disableIMessageDL = YES;
+    BOOL spoofUARule = YES; // New UA Mitigation rule (default yes)
+
+    NSArray *daemonDenylist = @[
+        @"com.apple.appstored", @"com.apple.itunesstored",
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd",
+        @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+
+    if (matchedID && [daemonDenylist containsObject:matchedID]) {
+        spoofUARule = NO;
+    } else if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
+        spoofUARule = NO;
+    }
 
     if (currentProcessRestricted && matchedID && prefs) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
@@ -170,29 +192,14 @@ static void loadPrefs() {
             if (appRules[@"disableRTC"] != nil) disableRTC = [appRules[@"disableRTC"] boolValue];
             if (appRules[@"disableFileAccess"] != nil) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
             if (appRules[@"disableIMessageDL"] != nil) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
+            if (appRules[@"spoofUA"] != nil) spoofUARule = [appRules[@"spoofUA"] boolValue];
         }
     }
 
-    // Evaluate Global User Agent Spoofing (Applied to everything except daemons)
+    // Evaluate App-Specific User Agent Spoofing 
     shouldSpoofUA = NO;
-    if (globalTweakEnabled && customUAString && customUAString.length > 0 && ![customUAString isEqualToString:@"NONE"]) {
+    if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0 && ![customUAString isEqualToString:@"NONE"]) {
         shouldSpoofUA = YES;
-        
-        NSArray *daemonDenylist = @[
-            @"com.apple.appstored", @"com.apple.itunesstored",
-            @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.networkd", @"com.apple.apsd",
-            @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
-            @"com.apple.cfnetwork"
-        ];
-        
-        if (bundleID && [daemonDenylist containsObject:bundleID]) {
-            shouldSpoofUA = NO;
-        }
-        
-        if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
-            shouldSpoofUA = NO;
-        }
     }
 }
 
@@ -238,6 +245,7 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -304,7 +312,7 @@ static BOOL isAppRestricted() {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
-    
+
     if (isAppRestricted()) {
         if (disableJS) {
             if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
