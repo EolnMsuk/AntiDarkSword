@@ -58,6 +58,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (id)getMasterEnable:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults synchronize]; // Ensure fresh read
+    
     if (self.ruleType == 0) { // Preset
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
         return @(![disabled containsObject:self.targetID]);
@@ -101,6 +103,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults synchronize]; // Ensure fresh read
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     
@@ -142,6 +145,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    
+    // FORCE SYNC: AltList saves via CFPreferences behind our back. 
+    // We must dump our stale cache so the UI populates the newly selected apps.
+    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults synchronize];
+    
     _specifiers = nil;
     [self reloadSpecifiers];
 }
@@ -249,9 +259,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if (selectAppsIndex != NSNotFound) {
             NSUInteger insertIdx = selectAppsIndex + 1;
-            id restrictedAppsRaw = [defaults objectForKey:@"restrictedApps"];
+            
+            // Bypass NSUserDefaults entirely and pull raw data to ensure AltList selections are caught instantly
+            CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
+            NSDictionary *restrictedAppsRaw = (__bridge_transfer NSDictionary *)CFPreferencesCopyAppValue(CFSTR("restrictedApps"), CFSTR("com.eolnmsuk.antidarkswordprefs"));
+            
             if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-                NSArray *keys = [restrictedAppsRaw allKeys];
+                // Sort keys alphabetically so the list looks neat
+                NSArray *keys = [[restrictedAppsRaw allKeys] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
                 for (NSString *appID in keys) {
                     if ([restrictedAppsRaw[appID] boolValue]) {
                         PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
@@ -346,7 +361,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if ([key isEqualToString:@"selectedUAPreset"]) {
         if (![value isEqualToString:@"NONE"]) {
-            // Requirement 2: Auto-enable protection when UA spoofing is set
             if (![defaults boolForKey:@"enabled"]) {
                 [defaults setBool:YES forKey:@"enabled"];
                 [defaults synchronize];
@@ -363,11 +377,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setObject:value forKey:@"autoProtectEnabled"];
     
     if (enabled) {
-        // Requirement 2: Auto-enable Global Protection
         if (![defaults boolForKey:@"enabled"]) {
             [defaults setBool:YES forKey:@"enabled"];
         }
-        // Requirement 3: Auto-fill User Agent to iOS 18.1 if it's currently none
         NSString *currentUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!currentUA || [currentUA isEqualToString:@"NONE"]) {
             NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -462,7 +474,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [customIDs removeObject:daemonID];
         [activeCustom removeObject:daemonID];
         
-        // Also wipe granular rules related to it
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", daemonID];
         [defaults removeObjectForKey:dictKey];
         
