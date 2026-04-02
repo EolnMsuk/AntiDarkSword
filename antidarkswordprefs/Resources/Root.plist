@@ -10,7 +10,7 @@
             <key>label</key>
             <string>Global Settings</string>
             <key>footerText</key>
-            <string>You must also enable preset or custom rules below to protect your device.</string>
+            <string>You must enable this AND the rules below to protect your device.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -35,9 +35,8 @@
             <key>label</key>
             <string>User Agent Spoofing</string>
             <key>footerText</key>
-            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
-If Global Protection is ON, this string will be enforced.
-Leave this set to None to disable UA spoofing.</string>
+            <string>⚠️ENABLE: Spoofing User Agent bypasses all known browser fingerprinting modules used by Coruna / DarkSword.
+This does not disable JavaScript (fakes iOS to dodge known payload). This doesn't from mail and msg apps (rules below).</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -54,7 +53,7 @@ Leave this set to None to disable UA spoofing.</string>
             <string>Select UA</string>
             <key>validTitles</key>
             <array>
-                <string>iPhone (iOS 18.1)</string>
+                <string>iPhone (iOS 18.1) - Recommended</string>
                 <string>iPhone (iOS 17.6.1)</string>
                 <string>iPhone (iOS 16.7.8)</string>
                 <string>iPhone (iOS 15.8.2)</string>
@@ -157,7 +156,7 @@ Leave this set to None to disable UA spoofing.</string>
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually selecting an app neutralizes its WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
+            <string>Manually selecting (or using presets) neutralizes that app's WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -165,7 +164,7 @@ Leave this set to None to disable UA spoofing.</string>
             <key>id</key>
             <string>SelectApps</string>
             <key>detail</key>
-            <string>AntiDarkSwordAppListController</string>
+            <string>ATLApplicationListMultiSelectionController</string>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
@@ -227,7 +226,7 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Reset to Defaults</string>
+            <string>Reset to Default</string>
             <key>action</key>
             <string>resetToDefaults</string>
             <key>isDestructive</key>
