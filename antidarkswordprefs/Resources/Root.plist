@@ -33,10 +33,10 @@
             <key>id</key>
             <string>UserAgentGroup</string>
             <key>label</key>
-            <string>User Agent Spoofing</string>
+            <string>Global User Agent Spoofing</string>
             <key>footerText</key>
             <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
-If Global Protection is ON, this string will be enforced.
+If Global Protection is ON, this string will be enforced globally on all web views (excluding critical background daemons).
 Leave this set to None to disable UA spoofing.</string>
         </dict>
         <dict>
@@ -108,7 +108,7 @@ Leave this set to None to disable UA spoofing.</string>
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually selecting an app neutralizes its WebKit exploit vectors (disables JavaScript, WebGL) and blocks its automatic media/message downloads.</string>
+            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.</string>
         </dict>
         <dict>
             <key>cell</key>
