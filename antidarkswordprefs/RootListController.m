@@ -18,7 +18,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 + (void)initialize {
     if (self == [AntiDarkSwordPrefsRootListController class]) {
         
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         // Ensure the AltList bundle is loaded safely
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
