@@ -19,10 +19,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (self == [AntiDarkSwordPrefsRootListController class]) {
         
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-        // Do NOT reset ADSPendingDaemonChanges here, so it persists across settings app launches
-        [defaults synchronize];
-
+        // Ensure the AltList bundle is loaded safely
         NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
         if (![altListBundle isLoaded]) {
             [altListBundle load];
@@ -49,9 +46,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                                                                                   action:@selector(savePrompt)];
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     
-                    // Only enable if protection is ON and changes are pending
                     BOOL isEnabled = [defaults boolForKey:@"enabled"];
-                    saveButton.enabled = isEnabled && [defaults boolForKey:@"ADSNeedsRespring"];
+                    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+                    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+                    
+                    saveButton.enabled = isEnabled && (needsRespring || needsReboot);
                     ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
                     
                     // SAFE OBSERVER: Listen for toggles, but strictly prevent the infinite loop
@@ -61,15 +60,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                                                                                 usingBlock:^(NSNotification * _Nonnull note) {
                         NSUserDefaults *checkDefaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                         
-                        // ONLY write if it is currently NO. This stops the infinite loop dead in its tracks.
                         if (![checkDefaults boolForKey:@"ADSNeedsRespring"]) {
                             [checkDefaults setBool:YES forKey:@"ADSNeedsRespring"];
                             [checkDefaults synchronize];
                         }
                         
-                        // Visually enable the button ONLY if protection is enabled
                         BOOL checkEnabled = [checkDefaults boolForKey:@"enabled"];
-                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = checkEnabled;
+                        BOOL checkRespring = [checkDefaults boolForKey:@"ADSNeedsRespring"];
+                        BOOL checkReboot = [checkDefaults boolForKey:@"ADSPendingDaemonChanges"];
+                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = checkEnabled && (checkRespring || checkReboot);
                     }];
                     
                     // Store the observer safely attached to this specific view controller instance
@@ -87,7 +86,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                         originalMsg(_self, viewWillDisappearSel, animated);
                     }
                     
-                    // Safely retrieve and remove ONLY our specific observer, leaving AltList's internal observers intact
                     id observer = objc_getAssociatedObject(_self, @selector(savePrompt));
                     if (observer) {
                         [[NSNotificationCenter defaultCenter] removeObserver:observer];
@@ -101,8 +99,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 IMP savePromptImp = imp_implementationWithBlock(^(id _self) {
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
                     BOOL isEnabled = [defaults boolForKey:@"enabled"];
-                    BOOL pendingDaemons = [defaults boolForKey:@"ADSPendingDaemonChanges"];
-                    BOOL needsReboot = isEnabled && pendingDaemons;
+                    BOOL needsReboot = isEnabled && [defaults boolForKey:@"ADSPendingDaemonChanges"];
                     
                     NSString *title = @"Save";
                     NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes now?";
@@ -112,9 +109,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                     [alert addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
                     [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-                        if (needsReboot) {
-                            [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
-                        }
+                        [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
                         [defaults synchronize];
                         
                         pid_t pid;
@@ -173,6 +168,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if (modified) {
         [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults setBool:YES forKey:@"ADSNeedsRespring"];
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
     }
@@ -332,7 +328,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     BOOL isEnabled = [defaults boolForKey:@"enabled"];
-    saveButton.enabled = isEnabled && [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    
+    saveButton.enabled = isEnabled && (needsRespring || needsReboot);
     
     // Listen for Darwin notification to catch any changes
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
@@ -358,8 +357,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults synchronize];
         
         BOOL isEnabled = [defaults boolForKey:@"enabled"];
+        BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+        BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+        
         dispatch_async(dispatch_get_main_queue(), ^{
-            controller.navigationItem.rightBarButtonItem.enabled = isEnabled;
+            controller.navigationItem.rightBarButtonItem.enabled = isEnabled && (needsRespring || needsReboot);
         });
     }
 }
@@ -372,7 +374,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults synchronize];
     
     BOOL isEnabled = [defaults boolForKey:@"enabled"];
-    self.navigationItem.rightBarButtonItem.enabled = isEnabled;
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    self.navigationItem.rightBarButtonItem.enabled = isEnabled && (needsRespring || needsReboot);
 }
 
 - (id)getAlwaysTrue:(PSSpecifier*)specifier {
@@ -560,8 +564,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)savePrompt {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     BOOL isEnabled = [defaults boolForKey:@"enabled"];
-    BOOL pendingDaemons = [defaults boolForKey:@"ADSPendingDaemonChanges"];
-    BOOL needsReboot = isEnabled && pendingDaemons;
+    BOOL needsReboot = isEnabled && [defaults boolForKey:@"ADSPendingDaemonChanges"];
     
     NSString *title = @"Save";
     NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
@@ -571,9 +574,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-        if (needsReboot) {
-            [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
-        }
+        [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
         
         pid_t pid;
