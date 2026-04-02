@@ -48,7 +48,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                                                                                   target:_self 
                                                                                   action:@selector(savePrompt)];
                     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-                    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
+                    
+                    // Only enable if protection is ON and changes are pending
+                    BOOL isEnabled = [defaults boolForKey:@"enabled"];
+                    saveButton.enabled = isEnabled && [defaults boolForKey:@"ADSNeedsRespring"];
                     ((UIViewController *)_self).navigationItem.rightBarButtonItem = saveButton;
                     
                     // SAFE OBSERVER: Listen for toggles, but strictly prevent the infinite loop
@@ -64,8 +67,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                             [checkDefaults synchronize];
                         }
                         
-                        // Visually enable the button
-                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = YES;
+                        // Visually enable the button ONLY if protection is enabled
+                        BOOL checkEnabled = [checkDefaults boolForKey:@"enabled"];
+                        ((UIViewController *)_self).navigationItem.rightBarButtonItem.enabled = checkEnabled;
                     }];
                     
                     // Store the observer safely attached to this specific view controller instance
@@ -327,7 +331,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem = saveButton;
     
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    saveButton.enabled = [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL isEnabled = [defaults boolForKey:@"enabled"];
+    saveButton.enabled = isEnabled && [defaults boolForKey:@"ADSNeedsRespring"];
     
     // Listen for Darwin notification to catch any changes
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
@@ -352,8 +357,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setBool:YES forKey:@"ADSNeedsRespring"];
         [defaults synchronize];
         
+        BOOL isEnabled = [defaults boolForKey:@"enabled"];
         dispatch_async(dispatch_get_main_queue(), ^{
-            controller.navigationItem.rightBarButtonItem.enabled = YES;
+            controller.navigationItem.rightBarButtonItem.enabled = isEnabled;
         });
     }
 }
@@ -364,7 +370,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
-    self.navigationItem.rightBarButtonItem.enabled = YES;
+    
+    BOOL isEnabled = [defaults boolForKey:@"enabled"];
+    self.navigationItem.rightBarButtonItem.enabled = isEnabled;
 }
 
 - (id)getAlwaysTrue:(PSSpecifier*)specifier {
