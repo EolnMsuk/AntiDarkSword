@@ -16,6 +16,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 
 * **WebKit Hardening:** Forcibly disables JavaScript execution, inline media playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views.
 * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation.
+* **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
 * **Tiered Protection:**
   * **Level 1:** Protects native Apple apps and services.
   * **Level 2:** Expands protection to major third-party browsers and social media apps.
@@ -76,20 +77,18 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 4. Select the `.deb` file and let the app convert the rootless paths to dynamic Roothide paths.
 5. Open the newly generated `-roothide.deb` file in **Sileo** or **Filza**, tap Install, and Respring.
 
-### Option 3: Installation (Rootful)
-1. Navigate to the rootful version of this tweak: [AntiDarkSword-rootful](https://github.com/EolnMsuk/AntiDarkSword-rootful)
-
 ## ⚙️ Configuration
 
 1. Open your iPhone's native **Settings** app.
 2. Scroll down to the Tweak section and tap **AntiDarkSword**.
 3. Toggle **ON** the master `Enable Protection` switch.
-4. Choose your protection method:
-   * **Preset Rules:** Turn on `Enable Preset Rules` and select Level 1, 2, or 3 for immediate, system-wide coverage.
-   * **Manual Selection:** If Preset Rules are off, use the **Select Apps...** menu to individually turn ON restrictions for specific apps (all are OFF by default).
-5. Use the **Add Custom Bundle ID / Process** button to paste comma-separated lists of hidden background daemons you wish to restrict. Swipe left on any generated custom ID to delete it.
-6. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring.
-7. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
+4. **User Agent Spoofing:** Select a preset modern user agent (or enter a custom string) to spoof fingerprinting payloads. Select "None" to disable.
+5. Choose your protection rules (Preset and Manual rules can be combined!):
+   * **Preset Rules:** Turn on `Enable Preset Rules` and select Level 1, 2, or 3 for immediate, system-wide coverage. You can individually toggle specific apps from that tier on or off directly on the main page.
+   * **Manual Selection:** Use the **Select Apps...** menu to individually turn ON restrictions for specific apps. Active apps will appear as a quick-toggle list directly below the button.
+6. Use the **Add Custom Bundle ID / Process** button to paste comma-separated lists of hidden background daemons you wish to restrict. Active custom rules will appear as a list; swipe left on any ID to delete it.
+7. Tap the **Save** button in the top right corner (available in both the main menu and app list) to apply your new security rules and respring/reboot userspace.
+8. To quickly clear your settings, use the **Reset to Defaults** button at the bottom of the main menu.
 
 > [!WARNING]
 > **Remove any apps you want secured from Roothide's Blacklist app.** This allows the tweak to filter that app.
