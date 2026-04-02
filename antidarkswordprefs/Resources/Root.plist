@@ -33,10 +33,10 @@
             <key>id</key>
             <string>UserAgentGroup</string>
             <key>label</key>
-            <string>Global User Agent Spoofing</string>
+            <string>Configure User Agent Spoofing</string>
             <key>footerText</key>
             <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
-If Global Protection is ON, this string will be enforced globally on all web views (excluding critical background daemons).
+If Global Protection is ON, this string will be applied to restricted apps and web views (excluding critical background daemons by default).
 Leave this set to None to disable UA spoofing.</string>
         </dict>
         <dict>
@@ -104,48 +104,6 @@ Leave this set to None to disable UA spoofing.</string>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>id</key>
-            <string>AppPermissionsGroup</string>
-            <key>label</key>
-            <string>Manual Rules</string>
-            <key>footerText</key>
-            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSLinkCell</string>
-            <key>id</key>
-            <string>SelectApps</string>
-            <key>detail</key>
-            <string>ATLApplicationListMultiSelectionController</string>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>restrictedApps</string>
-            <key>label</key>
-            <string>Select Apps...</string>
-            <key>sections</key>
-            <array>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Visible</string>
-                </dict>
-                <dict>
-                    <key>sectionType</key>
-                    <string>Hidden</string>
-                </dict>
-            </array>
-            <key>showIdentifiersAsSubtitle</key>
-            <true/>
-            <key>defaultApplicationSwitchValue</key>
-            <false/>
-            <key>useSearchBar</key>
-            <true/>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
             <string>PresetRulesGroup</string>
             <key>label</key>
             <string>Preset Rules</string>
@@ -189,6 +147,49 @@ Leave this set to None to disable UA spoofing.</string>
             </array>
             <key>set</key>
             <string>setAutoProtectLevel:specifier:</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
+            <string>AppPermissionsGroup</string>
+            <key>label</key>
+            <string>Manual Rules</string>
+            <key>footerText</key>
+            <string>Manually select apps to establish a baseline rule.
+You can then tap the active app below to configure its specific mitigations. Rules enabled here overpower preset rules.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>id</key>
+            <string>SelectApps</string>
+            <key>detail</key>
+            <string>ATLApplicationListMultiSelectionController</string>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>restrictedApps</string>
+            <key>label</key>
+            <string>Select Apps...</string>
+            <key>sections</key>
+            <array>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Visible</string>
+                </dict>
+                <dict>
+                    <key>sectionType</key>
+                    <string>Hidden</string>
+                </dict>
+            </array>
+            <key>showIdentifiersAsSubtitle</key>
+            <true/>
+            <key>defaultApplicationSwitchValue</key>
+            <false/>
+            <key>useSearchBar</key>
+            <true/>
         </dict>
 
         <dict>
