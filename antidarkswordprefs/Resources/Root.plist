@@ -35,8 +35,8 @@
             <key>label</key>
             <string>User Agent Spoofing</string>
             <key>footerText</key>
-            <string>⚠️ENABLE: Spoofing User Agent bypasses all known browser fingerprinting modules used by Coruna / DarkSword.
-This does not disable JavaScript (fakes iOS to dodge known payload). This doesn't from mail and msg apps (rules below).</string>
+            <string>Spoofing User Agent (iOS version) bypasses browser fingerprinting modules used by Coruna / DarkSword.
+Allowing you to browse (mostly safe) without disabling JavaScript or WebGL. This doesn't protect from mail and msgs (thats below).</string>
         </dict>
         <dict>
             <key>cell</key>
