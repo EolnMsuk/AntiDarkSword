@@ -220,22 +220,6 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Reset All Settings To Default</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>Reset to Default</string>
-            <key>action</key>
-            <string>resetToDefaults</string>
-            <key>isDestructive</key>
-            <true/>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>label</key>
             <string>About</string>
         </dict>
         <dict>
@@ -257,5 +241,21 @@ Add bundle IDs or process names for daemons you want to restrict manually.</stri
     </array>
     <key>title</key>
     <string>AntiDarkSword</string>
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>label</key>
+            <string>Reset All Settings To Default</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Reset to Default</string>
+            <key>action</key>
+            <string>resetToDefaults</string>
+            <key>isDestructive</key>
+            <true/>
+        </dict>
 </dict>
 </plist>
