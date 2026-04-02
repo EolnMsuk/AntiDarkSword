@@ -1,16 +1,18 @@
 {
     Filter = {
         Bundles = (
-            "com.apple.Foundation",
             "com.apple.UIKit",
             "com.apple.WebKit",
             "com.apple.JavaScriptCore",
             "com.apple.IMCore",
-            "com.apple.ChatKit",
-            "com.apple.CFNetwork"
+            "com.apple.ChatKit"
         );
         Executables = (
-            "imagent"
+            "imagent",
+            "mediaserverd",
+            "networkd",
+            "apsd",
+            "identityservicesd"
         );
     };
 }
