@@ -14,6 +14,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 @interface AntiDarkSwordPrefsRootListController : PSListController
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
 @end
 
 // ==========================================
@@ -200,7 +201,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    if (!rules) { 
+    // Fallback if rule dictionary or specific key is entirely missing
+    if (!rules || rules[featureKey] == nil) { 
         if ([featureKey isEqualToString:@"spoofUA"]) {
             NSArray *daemonDenylist = @[
                 @"com.apple.appstored", @"com.apple.itunesstored",
@@ -214,10 +216,24 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
             return @YES;
         }
+        
+        if ([featureKey isEqualToString:@"disableJS"]) {
+            NSArray *browsers = @[
+                @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+            ];
+            NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+            if (level == 0) level = 1;
+            if ([browsers containsObject:self.targetID] && level < 3) {
+                return @NO;
+            }
+        }
+        
         return @YES; 
     }
     
-    return rules[featureKey] ?: @YES;
+    return rules[featureKey];
 }
 
 - (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
@@ -238,6 +254,60 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // ==========================================
 
 @implementation AntiDarkSwordPrefsRootListController
+
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
+        return;
+    }
+
+    NSArray *browsers = @[
+        @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+    ];
+    
+    NSArray *daemonDenylist = @[
+        @"com.apple.appstored", @"com.apple.itunesstored",
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd",
+        @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+
+    NSArray *allProtected = [self autoProtectedItemsForLevel:3];
+    for (NSString *targetID in allProtected) {
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
+        
+        if (!force && [defaults objectForKey:dictKey]) {
+            continue;
+        }
+
+        NSMutableDictionary *rules = [NSMutableDictionary dictionary];
+        
+        rules[@"disableMedia"] = @YES;
+        rules[@"disableRTC"] = @YES;
+        rules[@"disableFileAccess"] = @YES;
+        rules[@"disableIMessageDL"] = @YES;
+        
+        if ([browsers containsObject:targetID] && level < 3) {
+            rules[@"disableJS"] = @NO;
+        } else {
+            rules[@"disableJS"] = @YES;
+        }
+        
+        if ([daemonDenylist containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
+            rules[@"spoofUA"] = @NO;
+        } else {
+            rules[@"spoofUA"] = @YES;
+        }
+        
+        [defaults setObject:rules forKey:dictKey];
+    }
+    
+    [defaults setBool:YES forKey:@"hasInitializedDefaultRules"];
+    [defaults synchronize];
+}
 
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
     NSMutableArray *items = [NSMutableArray array];
@@ -444,10 +514,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    // Ensure default rules are fully populated so nothing is assumed correctly just in the UI visually
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger currentLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
+    [self populateDefaultRulesForLevel:currentLevel force:NO];
+    
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)];
     self.navigationItem.rightBarButtonItem = saveButton;
     
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     BOOL isEnabled = [defaults boolForKey:@"enabled"];
     BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
     BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
@@ -559,44 +634,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setObject:value forKey:@"autoProtectLevel"];
     
     if (oldLevel != newLevel) {
-        NSArray *browsers = @[
-            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
-        ];
-        
-        NSArray *daemonDenylist = @[
-            @"com.apple.appstored", @"com.apple.itunesstored",
-            @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.networkd", @"com.apple.apsd",
-            @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
-            @"com.apple.cfnetwork"
-        ];
-        
-        NSArray *allProtected = [self autoProtectedItemsForLevel:3];
-        for (NSString *targetID in allProtected) {
-            NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
-            NSMutableDictionary *rules = [NSMutableDictionary dictionary];
-            
-            rules[@"disableMedia"] = @YES;
-            rules[@"disableRTC"] = @YES;
-            rules[@"disableFileAccess"] = @YES;
-            rules[@"disableIMessageDL"] = @YES;
-            
-            if ([browsers containsObject:targetID] && newLevel < 3) {
-                rules[@"disableJS"] = @NO;
-            } else {
-                rules[@"disableJS"] = @YES;
-            }
-            
-            if ([daemonDenylist containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
-                rules[@"spoofUA"] = @NO;
-            } else {
-                rules[@"spoofUA"] = @YES;
-            }
-            
-            [defaults setObject:rules forKey:dictKey];
-        }
+        [self populateDefaultRulesForLevel:newLevel force:YES];
     }
     
     if (oldLevel >= 3 || newLevel >= 3) {
