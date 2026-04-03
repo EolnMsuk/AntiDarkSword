@@ -880,11 +880,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 }
 
-- (void)setGlobalUASpoofing:(id)value specifier:(PSSpecifier *)specifier {
+- (void)setGlobalMitigation:(id)value specifier:(PSSpecifier *)specifier {
     BOOL enabled = [value boolValue];
     if (enabled) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Warning" message:@"Global UA Spoofing applies the User Agent to ALL processes indiscriminately. This is unsafe for daily use and should only be used for testing. It overrides all app-specific UA mitigations." preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Enable" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        NSString *featureName = [specifier name];
+        NSString *msg = [NSString stringWithFormat:@"Enabling '%@' globally applies this mitigation to ALL processes indiscriminately. This may break core functionality across the system and is intended for testing/emergency lockdown only.", featureName];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Warning" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [self setPreferenceValue:value specifier:specifier];
         }]];
         [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
@@ -986,7 +988,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return [[spec propertyForKey:@"isCustomDaemon"] boolValue];
 }
 
-// Cleaned up for custom IDs only
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
