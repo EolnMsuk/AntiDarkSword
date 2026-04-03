@@ -245,10 +245,12 @@ static void loadPrefs() {
     }
 
     shouldSpoofUA = NO;
-    if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
-        shouldSpoofUA = YES; // Global override
-    } else if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0) {
-        shouldSpoofUA = YES; // App-specific rule
+    if (globalTweakEnabled) {
+        if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
+            shouldSpoofUA = YES; // Global override
+        } else if (currentProcessRestricted && spoofUARule && customUAString && customUAString.length > 0) {
+            shouldSpoofUA = YES; // App-specific rule
+        }
     }
 }
 
