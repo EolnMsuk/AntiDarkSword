@@ -143,7 +143,7 @@
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually restrict apps that are not in the current preset.</string>
+            <string>Manually protect apps that are not in the current Level preset.</string>
         </dict>
         <dict>
             <key>cell</key>
