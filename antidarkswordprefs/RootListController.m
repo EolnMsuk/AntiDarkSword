@@ -386,48 +386,33 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
         @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
         @"com.apple.QuickLookDaemon", @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
+        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork",
+        // Literal binary strings natively trusted:
+        @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
     ];
+    
     if ([coreServices containsObject:targetID]) {
         return YES;
     }
     
-    // 2. Handle literal path processes (The Bonus Points request)
-    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
-        NSDictionary *knownPaths = @{
-            @"imagent": @"/System/Library/PrivateFrameworks/IMCore.framework/imagent",
-            @"mediaserverd": @"/usr/sbin/mediaserverd",
-            @"networkd": @"/usr/libexec/networkd",
-            @"apsd": @"/System/Library/PrivateFrameworks/ApplePushService.framework/apsd",
-            @"identityservicesd": @"/System/Library/PrivateFrameworks/IDS.framework/identityservicesd"
-        };
-        NSString *path = knownPaths[targetID];
-        if (path) {
-            return [[NSFileManager defaultManager] fileExistsAtPath:path];
-        }
-        return YES; // Default back to YES if we don't have a specific binary path check built-in yet to be safe
-    }
-
-    NSString *bundleToCheck = [targetID isEqualToString:@"pinterest"] ? @"com.pinterest" : targetID;
-
-    // 3. Reliable standard check via LSApplicationWorkspace 
+    // 2. Reliable standard check via LSApplicationWorkspace 
     @try {
         Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
         if (LSAppWorkspace) {
             LSApplicationWorkspace *workspace = [LSAppWorkspace defaultWorkspace];
             if (workspace && [workspace respondsToSelector:@selector(applicationIsInstalled:)]) {
-                if ([workspace applicationIsInstalled:bundleToCheck]) {
+                if ([workspace applicationIsInstalled:targetID]) {
                     return YES;
                 }
             }
         }
     } @catch (NSException *e) {}
 
-    // 4. Fallback check for dynamic app plugins / services using LSApplicationProxy
+    // 3. Fallback check for dynamic app plugins / services using LSApplicationProxy
     @try {
         Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
         if (LSAppProxy) {
-            LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:bundleToCheck];
+            LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
             if (proxy && [proxy respondsToSelector:@selector(bundleURL)]) {
                 NSURL *bundleURL = [proxy bundleURL];
                 if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) {
@@ -490,7 +475,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.google.GoogleMobile": @"Google",
         @"org.mozilla.ios.Firefox": @"Firefox",
         @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
-        @"pinterest": @"Pinterest",
+        @"com.pinterest": @"Pinterest",
         @"com.facebook.Facebook": @"Facebook",
         @"com.atebits.Tweetie2": @"X (Twitter)",
         @"com.burbn.instagram": @"Instagram",
@@ -512,7 +497,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return knownNames[targetID];
     }
 
-    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; // Leave literal string processes alone
+    if (![targetID containsString:@"."]) return targetID; // Leave literal string processes alone
     
     // Explicitly exclude system services that lack a clean localized name
     NSArray *daemons = @[
@@ -549,7 +534,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIImage *icon = nil;
     
     // Try to fetch real application icon
-    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
+    if ([targetID containsString:@"."]) {
         NSArray *daemons = @[
             @"com.apple.imagent", @"com.apple.mediaserverd",
             @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
@@ -682,7 +667,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.hammerandchisel.discord",
         @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-        @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
         @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
         @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
@@ -887,6 +872,22 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
         _specifiers = nil;
         [self reloadSpecifiers];
+    }
+}
+
+- (void)setGlobalUASpoofing:(id)value specifier:(PSSpecifier *)specifier {
+    BOOL enabled = [value boolValue];
+    if (enabled) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Warning" message:@"Global UA Spoofing applies the User Agent to ALL processes indiscriminately. This is unsafe for daily use and should only be used for testing. It overrides all app-specific UA mitigations." preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Enable" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            [self setPreferenceValue:value specifier:specifier];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+            [self reloadSpecifiers]; // Revert switch UI bounce back
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+    } else {
+        [self setPreferenceValue:value specifier:specifier];
     }
 }
 
