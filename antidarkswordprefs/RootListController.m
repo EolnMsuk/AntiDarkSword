@@ -395,6 +395,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return YES;
     }
     
+    // Catch daemon literal strings but explicitly exempt pinterest so it gets passed to the workspace check
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
+        return YES; 
+    }
+
     // 2. Reliable standard check via LSApplicationWorkspace 
     @try {
         Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
@@ -475,7 +480,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.google.GoogleMobile": @"Google",
         @"org.mozilla.ios.Firefox": @"Firefox",
         @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
-        @"com.pinterest": @"Pinterest",
+        @"pinterest": @"Pinterest",
         @"com.facebook.Facebook": @"Facebook",
         @"com.atebits.Tweetie2": @"X (Twitter)",
         @"com.burbn.instagram": @"Instagram",
@@ -497,7 +502,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return knownNames[targetID];
     }
 
-    if (![targetID containsString:@"."]) return targetID; // Leave literal string processes alone
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; // Leave literal string processes alone
     
     // Explicitly exclude system services that lack a clean localized name
     NSArray *daemons = @[
@@ -534,7 +539,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIImage *icon = nil;
     
     // Try to fetch real application icon
-    if ([targetID containsString:@"."]) {
+    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
         NSArray *daemons = @[
             @"com.apple.imagent", @"com.apple.mediaserverd",
             @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
@@ -667,7 +672,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.hammerandchisel.discord",
         @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-        @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
         @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
         @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
