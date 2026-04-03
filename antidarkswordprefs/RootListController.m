@@ -239,15 +239,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 @implementation AntiDarkSwordPrefsRootListController
 
-+ (void)initialize {
-    if (self == [AntiDarkSwordPrefsRootListController class]) {
-        NSBundle *altListBundle = [NSBundle bundleWithPath:@"/var/jb/Library/Frameworks/AltList.framework"];
-        if (![altListBundle isLoaded]) {
-            [altListBundle load];
-        }
-    }
-}
-
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
     NSMutableArray *items = [NSMutableArray array];
     
@@ -354,6 +345,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
         for (PSSpecifier *s in specs) {
+            // Automatically inject our custom AltList controller class so you don't have to edit Root.plist
+            if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
+                s.detailControllerClass = [AntiDarkSwordAltListController class];
+            }
+            
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, and other built-in iOS apps.";
@@ -531,6 +527,28 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         _specifiers = nil;
         [self reloadSpecifiers];
     }
+}
+
+- (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL enabled = [value boolValue];
+    [defaults setObject:value forKey:@"autoProtectEnabled"];
+    
+    if (enabled) {
+        if (![defaults boolForKey:@"enabled"]) {
+            [defaults setBool:YES forKey:@"enabled"];
+        }
+    }
+    
+    if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+    }
+    [defaults synchronize];
+    [self flagSaveRequirement];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    _specifiers = nil;
+    [self reloadSpecifiers];
 }
 
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
