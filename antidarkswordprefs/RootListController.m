@@ -7,6 +7,18 @@
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
+// ==========================================
+// Internal iOS APIs for App Names & Icons
+// ==========================================
+@interface LSApplicationProxy : NSObject
++ (id)applicationProxyForIdentifier:(NSString *)identifier;
+- (NSString *)localizedName;
+@end
+
+@interface UIImage (Private)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
+@end
+
 // Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
 @interface UITableViewCell (PreferencesUI)
 - (id)control;
@@ -15,6 +27,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @interface AntiDarkSwordPrefsRootListController : PSListController
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
+- (NSString *)displayNameForTargetID:(NSString *)targetID;
+- (UIImage *)iconForTargetID:(NSString *)targetID;
 @end
 
 // ==========================================
@@ -138,7 +152,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [super setSpecifier:specifier];
     self.targetID = [specifier propertyForKey:@"targetID"];
     self.ruleType = [[specifier propertyForKey:@"ruleType"] integerValue];
-    self.title = self.targetID;
+    // Use the localized friendly name passed by the specifier, otherwise fall back to raw ID
+    self.title = [specifier name] ?: self.targetID;
 }
 
 - (NSArray *)specifiers {
@@ -300,6 +315,68 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 @implementation AntiDarkSwordPrefsRootListController
 
+- (NSString *)displayNameForTargetID:(NSString *)targetID {
+    if (![targetID containsString:@"."]) return targetID; // Leave literal string processes alone
+    
+    // Explicitly exclude system services that lack a clean localized name
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+    
+    if ([daemons containsObject:targetID]) {
+        return targetID;
+    }
+
+    @try {
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
+        if (LSAppProxy) {
+            id proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
+            if (proxy && [proxy respondsToSelector:@selector(localizedName)]) {
+                NSString *name = [proxy localizedName];
+                if (name && name.length > 0) {
+                    return name;
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+    
+    return targetID;
+}
+
+- (UIImage *)iconForTargetID:(NSString *)targetID {
+    if (![targetID containsString:@"."]) return nil; 
+    
+    // Exclude daemons to prevent empty image gaps
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+    
+    if ([daemons containsObject:targetID]) {
+        return nil;
+    }
+
+    @try {
+        if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+            // Format 29 gets the standard iOS small settings icon
+            return [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
+        }
+    } @catch (NSException *e) {}
+    
+    return nil;
+}
+
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
@@ -455,9 +532,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
-                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:item target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                NSString *displayName = [self displayNameForTargetID:item];
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:item forKey:@"targetID"];
                 [spec setProperty:@(0) forKey:@"ruleType"]; // Preset rule
+                
+                // Add Native App Icon
+                UIImage *icon = [self iconForTargetID:item];
+                if (icon) {
+                    [spec setProperty:icon forKey:@"iconImage"];
+                }
+                
                 [specs insertObject:spec atIndex:insertIndexAuto++];
             }
         }
@@ -470,11 +555,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (insertIndexCustom != NSNotFound) {
             insertIndexCustom++;
             for (NSString *daemonID in customIDs) {
-                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                NSString *displayName = [self displayNameForTargetID:daemonID];
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:daemonID forKey:@"targetID"];
                 [spec setProperty:daemonID forKey:@"daemonID"]; // Keep for swipe-to-delete
                 [spec setProperty:@(2) forKey:@"ruleType"]; // Custom rule
                 [spec setProperty:@YES forKey:@"isCustomDaemon"];
+                
+                // Native App Icon 
+                UIImage *icon = [self iconForTargetID:daemonID];
+                if (icon) {
+                    [spec setProperty:icon forKey:@"iconImage"];
+                }
+                
                 [specs insertObject:spec atIndex:insertIndexCustom++];
             }
         }
@@ -501,14 +594,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     saveButton.enabled = needsRespring || (isEnabled && needsReboot);
     
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-    
-    if (![defaults boolForKey:@"hasOpenedGitHubBefore"]) {
-        [defaults setBool:YES forKey:@"hasOpenedGitHubBefore"];
-        [defaults synchronize];
-        
-        NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/blob/main/README.md"];
-        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
-    }
 }
 
 - (void)dealloc {
@@ -698,11 +783,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
+        // Purge ALL settings 
         NSDictionary *dict = [defaults dictionaryRepresentation];
         for (NSString *key in dict) {
-            if (![key isEqualToString:@"hasOpenedGitHubBefore"]) {
-                [defaults removeObjectForKey:key];
-            }
+            [defaults removeObjectForKey:key];
         }
         
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
