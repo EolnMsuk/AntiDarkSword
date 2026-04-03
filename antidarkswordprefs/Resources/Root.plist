@@ -33,25 +33,9 @@
             <key>id</key>
             <string>UserAgentGroup</string>
             <key>label</key>
-            <string>Configure User Agent Spoofing</string>
+            <string>User Agent Configuration</string>
             <key>footerText</key>
             <string>Spoofing User Agent bypasses standard fingerprinting modules used by Coruna and DarkSword.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalUASpoofingEnabled</string>
-            <key>label</key>
-            <string>Global UA Spoofing (Test Mode)</string>
-            <key>set</key>
-            <string>setGlobalUASpoofing:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -205,7 +189,7 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names for daemons. Swipe left on any custom ID below to delete it.</string>
+            <string>Add bundle IDs or process names. Swipe left on any custom ID below to delete it.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -216,6 +200,113 @@
             <string>addCustomID</string>
             <key>id</key>
             <string>AddCustomIDButton</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
+            <string>GlobalMitigationsGroup</string>
+            <key>label</key>
+            <string>Global Mitigation Rules (BETA)</string>
+            <key>footerText</key>
+            <string>Warning: Enabling any of these options forces the respective mitigation system-wide onto EVERY process that the tweak hooks into, completely overriding individual App &amp; Preset rule configurations. "Enable Protection" at the top must remain ON for these to apply.</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableJS</string>
+            <key>label</key>
+            <string>Global Disable JS</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableMedia</string>
+            <key>label</key>
+            <string>Global Disable Media Auto-Play</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableRTC</string>
+            <key>label</key>
+            <string>Global Disable WebGL &amp; WebRTC</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableFileAccess</string>
+            <key>label</key>
+            <string>Global Disable Local File Access</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableIMessageDL</string>
+            <key>label</key>
+            <string>Global Disable Msg Auto-Download</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalUASpoofingEnabled</string>
+            <key>label</key>
+            <string>Global Spoof User Agent</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
 
         <dict>
