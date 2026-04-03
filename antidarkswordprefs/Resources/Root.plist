@@ -36,8 +36,7 @@
             <string>Configure User Agent Spoofing</string>
             <key>footerText</key>
             <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
-If Global Protection is ON, this string will be applied to restricted apps and web views (excluding critical background daemons by default).
-Leave this set to None to disable UA spoofing.</string>
+If Global Protection is ON, this string will be applied to restricted apps and web views (excluding critical background daemons by default).</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -45,7 +44,7 @@ Leave this set to None to disable UA spoofing.</string>
             <key>detail</key>
             <string>PSListItemsController</string>
             <key>default</key>
-            <string>NONE</string>
+            <string>Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1</string>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
@@ -63,7 +62,6 @@ Leave this set to None to disable UA spoofing.</string>
                 <string>Windows (Edge)</string>
                 <string>Mac (macOS 14.5)</string>
                 <string>Custom String</string>
-                <string>None</string>
             </array>
             <key>validValues</key>
             <array>
@@ -76,7 +74,6 @@ Leave this set to None to disable UA spoofing.</string>
                 <string>Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0</string>
                 <string>Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15</string>
                 <string>CUSTOM</string>
-                <string>NONE</string>
             </array>
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
