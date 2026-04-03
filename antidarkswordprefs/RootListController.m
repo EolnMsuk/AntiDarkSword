@@ -38,8 +38,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [specs addObject:featGroup];
         
         NSArray *features = @[
-            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
             @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"},
