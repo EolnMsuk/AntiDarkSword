@@ -17,6 +17,7 @@
 
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
+static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
 
@@ -29,7 +30,6 @@ static BOOL disableIMessageDL = YES;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
-
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
     } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
@@ -85,6 +85,7 @@ static void loadPrefs() {
         }
 
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
+        globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
@@ -121,7 +122,6 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
-
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
         matchedID = bundleID;
@@ -149,7 +149,6 @@ static void loadPrefs() {
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
                 @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
             ];
-            
             NSArray *tier2 = @[
                 @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
                 @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
@@ -158,17 +157,15 @@ static void loadPrefs() {
                 @"com.hammerandchisel.discord",
                 @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
                 @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+                @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
                 @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
-
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
-            
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -189,7 +186,6 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-
     // Fallback default rules
     disableMedia = YES;
     disableRTC = YES;
@@ -205,13 +201,11 @@ static void loadPrefs() {
         @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
-
     NSArray *browsers = @[
         @"com.apple.mobilesafari", @"com.apple.SafariViewService",
         @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
     ];
-
     NSArray *utilsAndAI = @[
         @"com.github.stormbreaker.prod", @"com.google.gemini",
         @"com.openai.chat", @"com.deepseek.chat",
@@ -219,7 +213,6 @@ static void loadPrefs() {
         @"com.apple.Maps", @"com.apple.weather", @"com.apple.mobilenotes",
         @"com.apple.mobilecal", @"com.apple.stocks", @"com.apple.iBooks"
     ];
-
     if (matchedID) {
         if ([daemons containsObject:matchedID]) {
             spoofUARule = NO;
@@ -252,8 +245,10 @@ static void loadPrefs() {
     }
 
     shouldSpoofUA = NO;
-    if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0) {
-        shouldSpoofUA = YES;
+    if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
+        shouldSpoofUA = YES; // Global override
+    } else if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0) {
+        shouldSpoofUA = YES; // App-specific rule
     }
 }
 
@@ -299,7 +294,6 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
