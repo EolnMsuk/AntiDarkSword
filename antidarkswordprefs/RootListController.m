@@ -7,8 +7,8 @@
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
-// Explicitly tell the compiler about PSTableCell to prevent ARC method signature errors
-@interface PSTableCell : UITableViewCell
+// Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
+@interface UITableViewCell (PreferencesUI)
 - (id)control;
 @end
 
@@ -56,7 +56,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
             
             if ([cell respondsToSelector:@selector(control)]) {
-                id control = [(PSTableCell *)cell control];
+                id control = [cell control];
                 if ([control isKindOfClass:[UISwitch class]]) {
                     [((UISwitch *)control) setOn:YES animated:NO];
                     ((UISwitch *)control).enabled = NO;
@@ -76,7 +76,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
             
             if ([cell respondsToSelector:@selector(control)]) {
-                id control = [(PSTableCell *)cell control];
+                id control = [cell control];
                 if ([control isKindOfClass:[UISwitch class]]) {
                     ((UISwitch *)control).enabled = YES;
                 }
