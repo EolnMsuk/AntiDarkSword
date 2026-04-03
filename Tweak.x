@@ -121,7 +121,7 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
-    
+
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
         matchedID = bundleID;
@@ -149,6 +149,7 @@ static void loadPrefs() {
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
                 @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
             ];
+            
             NSArray *tier2 = @[
                 @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
                 @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
@@ -163,9 +164,11 @@ static void loadPrefs() {
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
                 @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
+
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
+            
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -186,12 +189,12 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-    
+
     // Fallback default rules
     disableMedia = YES;
     disableRTC = YES;
     disableIMessageDL = YES;
-    BOOL spoofUARule = YES; 
+    BOOL spoofUARule = YES;
     disableJS = YES;
     disableFileAccess = YES;
 
@@ -202,13 +205,13 @@ static void loadPrefs() {
         @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
-    
+
     NSArray *browsers = @[
         @"com.apple.mobilesafari", @"com.apple.SafariViewService",
         @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
     ];
-    
+
     NSArray *utilsAndAI = @[
         @"com.github.stormbreaker.prod", @"com.google.gemini",
         @"com.openai.chat", @"com.deepseek.chat",
@@ -221,8 +224,10 @@ static void loadPrefs() {
         if ([daemons containsObject:matchedID]) {
             spoofUARule = NO;
         } else if ([utilsAndAI containsObject:matchedID]) {
-            disableJS = NO;
-            disableFileAccess = NO;
+            if (autoProtectLevel < 3) {
+                disableJS = NO;
+                disableFileAccess = NO;
+            }
         } else if ([browsers containsObject:matchedID] && autoProtectLevel < 3) {
             disableJS = NO;
         }
@@ -294,6 +299,7 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
