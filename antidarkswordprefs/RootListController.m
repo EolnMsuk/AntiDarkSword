@@ -350,29 +350,47 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (UIImage *)iconForTargetID:(NSString *)targetID {
-    if (![targetID containsString:@"."]) return nil; 
+    UIImage *icon = nil;
     
-    // Exclude daemons to prevent empty image gaps
-    NSArray *daemons = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd",
-        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
-        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
-        @"com.apple.cfnetwork"
-    ];
-    
-    if ([daemons containsObject:targetID]) {
-        return nil;
-    }
-
-    @try {
-        if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
-            // Format 29 gets the standard iOS small settings icon
-            return [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
+    // Try to fetch real application icon
+    if ([targetID containsString:@"."]) {
+        NSArray *daemons = @[
+            @"com.apple.imagent", @"com.apple.mediaserverd",
+            @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+            @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+            @"com.apple.cfnetwork"
+        ];
+        
+        if (![daemons containsObject:targetID]) {
+            @try {
+                if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+                    // Format 29 gets the standard iOS small settings icon
+                    icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
+                }
+            } @catch (NSException *e) {}
         }
-    } @catch (NSException *e) {}
+    }
+    
+    // Fallback: Default gear icon for daemons or missing icons
+    if (!icon) {
+        if (@available(iOS 13.0, *)) {
+            icon = [UIImage systemImageNamed:@"gearshape.fill"];
+            icon = [icon imageWithTintColor:[UIColor systemGrayColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
+        }
+    }
+    
+    // Resize the icon to be ~20% smaller (23x23 instead of standard 29x29)
+    if (icon) {
+        CGSize newSize = CGSizeMake(23, 23);
+        UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
+        [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+        UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        return resizedIcon;
+    }
     
     return nil;
 }
@@ -445,18 +463,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     ];
     
     NSArray *tier2 = @[
-        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
-        @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
+        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
+        @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
         @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
         @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
-        @"ph.telegra.Telegraph", @"com.hammerandchisel.discord",
+        @"com.hammerandchisel.discord",
         @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-        @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
         @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-        @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-        @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+        @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
     ];
     
     NSArray *tier3 = @[
@@ -783,7 +801,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        // Purge ALL settings 
         NSDictionary *dict = [defaults dictionaryRepresentation];
         for (NSString *key in dict) {
             [defaults removeObjectForKey:key];
