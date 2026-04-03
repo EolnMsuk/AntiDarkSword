@@ -220,9 +220,9 @@
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>globalDisableJS</string>
+            <string>globalUASpoofingEnabled</string>
             <key>label</key>
-            <string>Disable JavaScript</string>
+            <string>Spoof User Agent</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -236,9 +236,9 @@
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>globalDisableMedia</string>
+            <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable Media Auto-Play</string>
+            <string>Disable JavaScript</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -268,9 +268,9 @@
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>globalDisableFileAccess</string>
+            <string>globalDisableMedia</string>
             <key>label</key>
-            <string>Disable Local File Access</string>
+            <string>Disable Media Auto-Play</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -300,9 +300,9 @@
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>globalUASpoofingEnabled</string>
+            <string>globalDisableFileAccess</string>
             <key>label</key>
-            <string>Spoof User Agent</string>
+            <string>Disable Local File Access</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
