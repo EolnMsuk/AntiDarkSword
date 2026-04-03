@@ -48,21 +48,20 @@ static void loadPrefs() {
         }
     }
 
-    BOOL autoProtectEnabled = NO;
     NSInteger autoProtectLevel = 1;
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
     
-    // Extract AltList selections properly via prefix scanning
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
-        // Fallback checks for old installations still saving via dictionary
         id restrictedAppsRaw = prefs[@"restrictedApps"];
         if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
             for (id key in [restrictedAppsRaw allKeys]) {
-                if ([key isKindOfClass:[NSString class]] && [restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)] && [restrictedAppsRaw[key] boolValue]) {
-                    [restrictedAppsArray addObject:key];
+                if ([key isKindOfClass:[NSString class]] && [restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)]) {
+                    if ([restrictedAppsRaw[key] boolValue]) {
+                        [restrictedAppsArray addObject:key];
+                    }
                 }
             }
         } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
@@ -76,17 +75,18 @@ static void loadPrefs() {
         // Standard AltList prefix fetching strategy safely handled
         for (id key in [prefs allKeys]) {
             if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
-                if ([prefs[key] respondsToSelector:@selector(boolValue)] && [prefs[key] boolValue]) {
+                if ([prefs[key] respondsToSelector:@selector(boolValue)]) {
                     NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
-                    if (![restrictedAppsArray containsObject:appID]) {
-                        [restrictedAppsArray addObject:appID];
+                    if ([prefs[key] boolValue]) {
+                        if (![restrictedAppsArray containsObject:appID]) {
+                            [restrictedAppsArray addObject:appID];
+                        }
                     }
                 }
             }
         }
 
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
-        autoProtectEnabled = [prefs[@"autoProtectEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
@@ -146,8 +146,9 @@ static void loadPrefs() {
             matchedID = processName;
         }
         
-        // Priority 3: Auto Protect evaluation combined with disable-list tracking
-        if (!isTargetRestricted && autoProtectEnabled) {
+        // Priority 3: Auto Protect evaluation
+        // Now automatically applied whenever globalTweakEnabled is true
+        if (!isTargetRestricted && globalTweakEnabled) {
             NSArray *tier1 = @[
                 @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
                 @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
@@ -187,7 +188,6 @@ static void loadPrefs() {
                 else if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) targetMatch = processName;
             }
             
-            // Only restrict if the matched preset tier item wasn't manually switched off 
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
