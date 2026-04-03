@@ -27,12 +27,12 @@ jobs:
         run: |
           echo "Fetching latest AltList release from GitHub..."
           
-          # Query ALL releases (since repo lacks a "latest" tag) and grab the first .deb URL
-          ALTLIST_URL=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/opa334/AltList/releases | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -n 1)
+          # FIXED: Specifically target the rootless 'arm64' .deb instead of the first available one
+          ALTLIST_URL=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/opa334/AltList/releases | grep "browser_download_url.*iphoneos-arm64\.deb" | cut -d '"' -f 4 | head -n 1)
           
           # Safety check to prevent silent failures
           if [ -z "$ALTLIST_URL" ]; then
-            echo "Error: Failed to retrieve the download URL. The API response might have changed or rate limits were exceeded."
+            echo "Error: Failed to retrieve the rootless AltList download URL."
             exit 1
           fi
           
