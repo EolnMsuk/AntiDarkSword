@@ -13,10 +13,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @interface LSApplicationProxy : NSObject
 + (id)applicationProxyForIdentifier:(NSString *)identifier;
 - (NSString *)localizedName;
+- (NSURL *)bundleURL;
 @end
 
-@interface UIImage (Private)
-+ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
+@interface LSApplicationWorkspace : NSObject
++ (id)defaultWorkspace;
+- (BOOL)applicationIsInstalled:(NSString *)appIdentifier;
 @end
 
 // Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
@@ -29,6 +31,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
 - (NSString *)displayNameForTargetID:(NSString *)targetID;
 - (UIImage *)iconForTargetID:(NSString *)targetID;
+- (BOOL)isTargetInstalled:(NSString *)targetID;
 @end
 
 // ==========================================
@@ -370,6 +373,94 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // ==========================================
 
 @implementation AntiDarkSwordPrefsRootListController
+
+- (BOOL)isTargetInstalled:(NSString *)targetID {
+    // 1. Hardcoded daemon core-service list that CANNOT be uninstalled by user in iOS 16
+    NSArray *coreServices = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.networkd",
+        @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.SafariViewService",
+        @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
+        @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
+        @"com.apple.QuickLookDaemon", @"com.apple.appstored", @"com.apple.itunesstored",
+        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
+    ];
+    if ([coreServices containsObject:targetID]) {
+        return YES;
+    }
+    
+    // 2. Handle literal path processes (The Bonus Points request)
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
+        NSDictionary *knownPaths = @{
+            @"imagent": @"/System/Library/PrivateFrameworks/IMCore.framework/imagent",
+            @"mediaserverd": @"/usr/sbin/mediaserverd",
+            @"networkd": @"/usr/libexec/networkd",
+            @"apsd": @"/System/Library/PrivateFrameworks/ApplePushService.framework/apsd",
+            @"identityservicesd": @"/System/Library/PrivateFrameworks/IDS.framework/identityservicesd"
+        };
+        NSString *path = knownPaths[targetID];
+        if (path) {
+            return [[NSFileManager defaultManager] fileExistsAtPath:path];
+        }
+        return YES; // Default back to YES if we don't have a specific binary path check built-in yet to be safe
+    }
+
+    NSString *bundleToCheck = [targetID isEqualToString:@"pinterest"] ? @"com.pinterest" : targetID;
+
+    // 3. Reliable standard check via LSApplicationWorkspace 
+    @try {
+        Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
+        if (LSAppWorkspace) {
+            LSApplicationWorkspace *workspace = [LSAppWorkspace defaultWorkspace];
+            if (workspace && [workspace respondsToSelector:@selector(applicationIsInstalled:)]) {
+                if ([workspace applicationIsInstalled:bundleToCheck]) {
+                    return YES;
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+
+    // 4. Fallback check for dynamic app plugins / services using LSApplicationProxy
+    @try {
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
+        if (LSAppProxy) {
+            LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:bundleToCheck];
+            if (proxy && [proxy respondsToSelector:@selector(bundleURL)]) {
+                NSURL *bundleURL = [proxy bundleURL];
+                if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) {
+                    return YES;
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+
+    return NO;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    NSString *targetID = [spec propertyForKey:@"targetID"];
+    NSNumber *ruleType = [spec propertyForKey:@"ruleType"];
+
+    if (targetID && ruleType && [ruleType integerValue] == 0) { // Check only for Preset rules in root list
+        BOOL isInstalled = [self isTargetInstalled:targetID];
+
+        if (!isInstalled) {
+            cell.textLabel.alpha = 0.5;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
+            if (cell.imageView) cell.imageView.alpha = 0.5;
+            cell.userInteractionEnabled = NO; // Darkens and stops them from drilling into an uninstalled target 
+        } else {
+            cell.textLabel.alpha = 1.0;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
+            if (cell.imageView) cell.imageView.alpha = 1.0;
+            cell.userInteractionEnabled = YES;
+        }
+    }
+
+    return cell;
+}
 
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
     // 1. Hardcoded dictionary for foolproof localization, even if the app isn't installed
