@@ -83,8 +83,13 @@ static void loadPrefs() {
         disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
         
         NSString *presetUA = prefs[@"selectedUAPreset"];
+        // Fallback/Upgrade Migration check natively if legacy string left behind or never set.
+        if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
+            presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+        }
+        
         NSString *manualUA = prefs[@"customUAString"];
-        if (!presetUA || [presetUA isEqualToString:@"CUSTOM"]) {
+        if ([presetUA isEqualToString:@"CUSTOM"]) {
             customUAString = manualUA ?: @"";
         } else {
             customUAString = presetUA;
