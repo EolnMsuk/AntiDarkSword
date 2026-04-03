@@ -83,14 +83,21 @@ static void loadPrefs() {
         disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
         
         NSString *presetUA = prefs[@"selectedUAPreset"];
-        // Fallback/Upgrade Migration check natively if legacy string left behind or never set.
+        // Fallback natively if legacy string left behind or never set.
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         }
         
         NSString *manualUA = prefs[@"customUAString"];
         if ([presetUA isEqualToString:@"CUSTOM"]) {
-            customUAString = manualUA ?: @"";
+            // Trim whitespace out to catch the spacebar edgecase
+            NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (!trimmedUA || trimmedUA.length == 0) {
+                // Secondary safety net: if the plist somehow has a blank custom string, default to iOS 18.1 natively
+                customUAString = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+            } else {
+                customUAString = trimmedUA;
+            }
         } else {
             customUAString = presetUA;
         }
@@ -207,7 +214,7 @@ static void loadPrefs() {
 
     // Evaluate App-Specific User Agent Spoofing 
     shouldSpoofUA = NO;
-    if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0 && ![customUAString isEqualToString:@"NONE"]) {
+    if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0) {
         shouldSpoofUA = YES;
     }
 }
