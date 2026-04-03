@@ -51,7 +51,6 @@ static void loadPrefs() {
     NSInteger autoProtectLevel = 1;
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
-    
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
@@ -76,6 +75,7 @@ static void loadPrefs() {
         for (id key in [prefs allKeys]) {
             if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
                 if ([prefs[key] respondsToSelector:@selector(boolValue)]) {
+            
                     NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
                     if ([prefs[key] boolValue]) {
                         if (![restrictedAppsArray containsObject:appID]) {
@@ -101,7 +101,6 @@ static void loadPrefs() {
         
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
-
         // Fallback natively if legacy string left behind or never set.
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -109,7 +108,6 @@ static void loadPrefs() {
         
         id manualUARaw = prefs[@"customUAString"];
         NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
-
         if ([presetUA isEqualToString:@"CUSTOM"]) {
             NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (!trimmedUA || trimmedUA.length == 0) {
@@ -126,7 +124,7 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
-
+    
     // Highest Priority: Custom Daemons Override
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
@@ -175,7 +173,6 @@ static void loadPrefs() {
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
-
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -196,7 +193,7 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-
+    
     // Read App-Specific Granular Rules
     disableJS = YES;
     disableMedia = YES;
@@ -212,11 +209,22 @@ static void loadPrefs() {
         @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
-
     if (matchedID && [daemonDenylist containsObject:matchedID]) {
         spoofUARule = NO;
     } else if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
         spoofUARule = NO;
+    }
+    
+    // Ensure browsers fallback gracefully even if preference rules dictionary hasn't initialized
+    if (currentProcessRestricted && matchedID) {
+        NSArray *browsers = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        ];
+        if ([browsers containsObject:matchedID] && autoProtectLevel < 3) {
+            disableJS = NO;
+        }
     }
 
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
@@ -275,14 +283,12 @@ static BOOL isAppRestricted() {
 
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -349,7 +355,6 @@ static BOOL isAppRestricted() {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
-
     if (isAppRestricted()) {
         if (disableJS) {
             if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
