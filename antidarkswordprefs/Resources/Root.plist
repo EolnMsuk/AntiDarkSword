@@ -40,6 +40,22 @@ If Global Protection is ON, this string will be applied to restricted apps and w
         </dict>
         <dict>
             <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalUASpoofingEnabled</string>
+            <key>label</key>
+            <string>Global UA Spoofing (Test Mode)</string>
+            <key>set</key>
+            <string>setGlobalUASpoofing:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
             <string>PSLinkListCell</string>
             <key>detail</key>
             <string>PSListItemsController</string>
@@ -144,7 +160,8 @@ If Global Protection is ON, this string will be applied to restricted apps and w
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations. Rules enabled here overpower preset rules.</string>
+            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.
+Rules enabled here overpower preset rules.</string>
         </dict>
         <dict>
             <key>cell</key>
