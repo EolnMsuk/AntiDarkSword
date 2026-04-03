@@ -7,6 +7,83 @@
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
+@interface AntiDarkSwordPrefsRootListController : PSListController
+- (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
+@end
+
+// ==========================================
+// Custom AltList Controller to Lock Presets
+// ==========================================
+@interface ATLApplicationListMultiSelectionController : PSListController
+@end
+
+@interface AntiDarkSwordAltListController : ATLApplicationListMultiSelectionController
+@end
+
+@implementation AntiDarkSwordAltListController
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    
+    // Safely fetch bundle ID from AltList specifier
+    NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
+    if (!bundleID) {
+        NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
+        if ([alKey hasPrefix:@"restrictedApps-"]) {
+            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
+        }
+    }
+    
+    if (bundleID) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
+        
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
+        
+        if ([presetApps containsObject:bundleID]) {
+            // Lock and grey out UI for preset apps
+            cell.userInteractionEnabled = NO;
+            cell.textLabel.alpha = 0.5;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
+            
+            if ([cell respondsToSelector:@selector(control)]) {
+                id control = [(id)cell control];
+                if ([control isKindOfClass:[UISwitch class]]) {
+                    [((UISwitch *)control) setOn:YES animated:NO];
+                    ((UISwitch *)control).enabled = NO;
+                    
+                    // Force the underlying setting to YES so it works seamlessly on backend
+                    NSString *alKey = [spec propertyForKey:@"ALSettingsKey"] ?: [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+                    if (![defaults boolForKey:alKey]) {
+                        [defaults setBool:YES forKey:alKey];
+                        [defaults synchronize];
+                    }
+                }
+            }
+        } else {
+            // Leave manual apps accessible 
+            cell.userInteractionEnabled = YES;
+            cell.textLabel.alpha = 1.0;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
+            
+            if ([cell respondsToSelector:@selector(control)]) {
+                id control = [(id)cell control];
+                if ([control isKindOfClass:[UISwitch class]]) {
+                    ((UISwitch *)control).enabled = YES;
+                }
+            }
+        }
+    }
+    
+    return cell;
+}
+
+@end
+
 // ==========================================
 // App-Specific Feature Drill-Down Controller
 // ==========================================
@@ -155,9 +232,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @end
 // ==========================================
 
-@interface AntiDarkSwordPrefsRootListController : PSListController
-@end
-
 @implementation AntiDarkSwordPrefsRootListController
 
 + (void)initialize {
@@ -167,14 +241,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [altListBundle load];
         }
     }
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    
-    // Safely instruct PreferenceLoader to re-evaluate the specifiers array during the pop transition.
-    // By NOT setting `_specifiers = nil` explicitly, we avoid the internal inconsistency crash.
-    [self reloadSpecifiers];
 }
 
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
@@ -220,11 +286,47 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return items;
 }
 
+- (void)syncPresetsToAltList {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+    if (level == 0) level = 1;
+    
+    NSArray *presetItems = [self autoProtectedItemsForLevel:level];
+    BOOL madeChanges = NO;
+    
+    for (NSString *bundleID in presetItems) {
+        if (![bundleID containsString:@"."] || 
+            [bundleID isEqualToString:@"imagent"] || 
+            [bundleID isEqualToString:@"mediaserverd"] || 
+            [bundleID isEqualToString:@"networkd"] || 
+            [bundleID isEqualToString:@"apsd"] || 
+            [bundleID isEqualToString:@"identityservicesd"]) {
+            continue;
+        }
+        
+        NSString *key = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+        if (![defaults boolForKey:key]) {
+            [defaults setBool:YES forKey:key];
+            madeChanges = YES;
+        }
+    }
+    if (madeChanges) {
+        [defaults synchronize];
+    }
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    
+    [self syncPresetsToAltList];
+    [self reloadSpecifiers];
+}
+
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        [defaults synchronize]; // Ensure memory state is caught up with disk
+        [defaults synchronize]; 
         
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
@@ -243,7 +345,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
         
-        BOOL autoProtect = [defaults boolForKey:@"autoProtectEnabled"];
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
@@ -257,23 +358,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        if (autoProtect) {
-            NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
-                return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
-            }];
+        NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+            return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
+        }];
+        
+        if (insertIndexAuto != NSNotFound) {
+            insertIndexAuto++;
+            PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+            [specs insertObject:groupSpec atIndex:insertIndexAuto++];
             
-            if (insertIndexAuto != NSNotFound) {
-                insertIndexAuto++;
-                PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-                [specs insertObject:groupSpec atIndex:insertIndexAuto++];
-                
-                NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
-                for (NSString *item in autoItems) {
-                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:item target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
-                    [spec setProperty:item forKey:@"targetID"];
-                    [spec setProperty:@(0) forKey:@"ruleType"]; // Preset rule
-                    [specs insertObject:spec atIndex:insertIndexAuto++];
-                }
+            NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
+            for (NSString *item in autoItems) {
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:item target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                [spec setProperty:item forKey:@"targetID"];
+                [spec setProperty:@(0) forKey:@"ruleType"]; // Preset rule
+                [specs insertObject:spec atIndex:insertIndexAuto++];
             }
         }
         
@@ -284,7 +383,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (selectAppsIndex != NSNotFound) {
             NSUInteger insertIdx = selectAppsIndex + 1;
             
-            // Read directly from NSUserDefaults dictionary representation to bypass CFPreferences sandboxing lag
             NSDictionary *allPrefsRaw = [defaults dictionaryRepresentation];
             NSMutableArray *appIDs = [NSMutableArray array];
             
@@ -297,7 +395,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 }
             }
             
-            // Legacy AltList structure fallback
             id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
             if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
                 for (NSString *appID in [restrictedAppsDict allKeys]) {
@@ -309,11 +406,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 }
             }
 
+            NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             NSArray *sortedKeys = [appIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+            
             for (NSString *appID in sortedKeys) {
+                // Ensure apps that ARE in the preset do not populate in the main root page list
+                if ([autoItems containsObject:appID]) continue;
+                
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:appID forKey:@"targetID"];
-                [spec setProperty:@(1) forKey:@"ruleType"]; // AltList rule
+                [spec setProperty:@(1) forKey:@"ruleType"]; // AltList manual rule
                 [specs insertObject:spec atIndex:insertIdx++];
             }
         }
@@ -426,28 +528,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 }
 
-- (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    BOOL enabled = [value boolValue];
-    [defaults setObject:value forKey:@"autoProtectEnabled"];
-    
-    if (enabled) {
-        if (![defaults boolForKey:@"enabled"]) {
-            [defaults setBool:YES forKey:@"enabled"];
-        }
-    }
-    
-    if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
-        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-    }
-    [defaults synchronize];
-    [self flagSaveRequirement];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
-    
-    _specifiers = nil;
-    [self reloadSpecifiers];
-}
-
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"];
@@ -500,6 +580,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     [defaults synchronize];
+    [self syncPresetsToAltList];
     [self flagSaveRequirement];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
