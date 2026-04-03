@@ -71,11 +71,9 @@ static void loadPrefs() {
             }
         }
 
-        // Standard AltList prefix fetching strategy safely handled
         for (id key in [prefs allKeys]) {
             if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
                 if ([prefs[key] respondsToSelector:@selector(boolValue)]) {
-            
                     NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
                     if ([prefs[key] boolValue]) {
                         if (![restrictedAppsArray containsObject:appID]) {
@@ -101,7 +99,6 @@ static void loadPrefs() {
         
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
-        // Fallback natively if legacy string left behind or never set.
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         }
@@ -125,7 +122,6 @@ static void loadPrefs() {
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
     
-    // Highest Priority: Custom Daemons Override
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
         matchedID = bundleID;
@@ -135,7 +131,6 @@ static void loadPrefs() {
     }
 
     if (!isTargetRestricted) {
-        // Priority 2: Manual Select Apps
         if (bundleID && [restrictedAppsArray containsObject:bundleID]) {
             isTargetRestricted = YES;
             matchedID = bundleID;
@@ -144,8 +139,6 @@ static void loadPrefs() {
             matchedID = processName;
         }
         
-        // Priority 3: Auto Protect evaluation
-        // Now automatically applied whenever globalTweakEnabled is true
         if (!isTargetRestricted && globalTweakEnabled) {
             NSArray *tier1 = @[
                 @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
@@ -157,18 +150,18 @@ static void loadPrefs() {
                 @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
             ];
             NSArray *tier2 = @[
-                @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.ios",
-                @"org.whispersystems.signal", @"org.telegram.messenger", @"com.facebook.Messenger", 
+                @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
+                @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
                 @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
                 @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
-                @"ph.telegra.Telegraph", @"com.hammerandchisel.discord",
+                @"com.hammerandchisel.discord",
                 @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
                 @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+                @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.ios",
-                @"org.coolstar.sileo", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
             ];
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
@@ -194,7 +187,6 @@ static void loadPrefs() {
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     
-    // Read App-Specific Granular Rules
     disableJS = YES;
     disableMedia = YES;
     disableRTC = YES;
@@ -215,7 +207,6 @@ static void loadPrefs() {
         spoofUARule = NO;
     }
     
-    // Ensure browsers fallback gracefully even if preference rules dictionary hasn't initialized
     if (currentProcessRestricted && matchedID) {
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
@@ -240,7 +231,6 @@ static void loadPrefs() {
         }
     }
 
-    // Evaluate App-Specific User Agent Spoofing 
     shouldSpoofUA = NO;
     if (currentProcessRestricted && spoofUARule && globalTweakEnabled && customUAString && customUAString.length > 0) {
         shouldSpoofUA = YES;
