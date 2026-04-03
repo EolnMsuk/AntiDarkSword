@@ -157,7 +157,7 @@ static void loadPrefs() {
                 @"com.hammerandchisel.discord",
                 @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
                 @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"com.pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+                @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
