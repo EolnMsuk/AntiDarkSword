@@ -22,10 +22,22 @@ jobs:
           theos-sdks: 'https://github.com/theos/sdks'
 
       - name: Fetch & Install AltList Framework
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Fetching latest AltList release from GitHub..."
-          ALTLIST_URL=$(curl -s https://api.github.com/repos/opa334/AltList/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -n 1)
-          curl -sL $ALTLIST_URL -o altlist.deb
+          
+          # Authenticate the API request to bypass strict rate limits
+          ALTLIST_URL=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/opa334/AltList/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -n 1)
+          
+          # Safety check to prevent silent failures
+          if [ -z "$ALTLIST_URL" ]; then
+            echo "Error: Failed to retrieve the download URL. The API response might have changed or rate limits were exceeded."
+            exit 1
+          fi
+          
+          echo "Downloading from: $ALTLIST_URL"
+          curl -sL "$ALTLIST_URL" -o altlist.deb
           
           echo "Extracting deb..."
           dpkg-deb -x altlist.deb altlist_extracted
