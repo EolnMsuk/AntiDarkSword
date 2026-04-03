@@ -23,25 +23,24 @@ jobs:
 
       - name: Fetch & Install AltList Framework
         env:
-          # The GitHub CLI expects the token to be stored in GH_TOKEN
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Fetching latest AltList release using GitHub CLI..."
+          echo "Fetching latest AltList release from GitHub..."
           
-          # Use GitHub's official CLI to securely download the .deb asset natively
-          gh release download --repo opa334/AltList --pattern "*.deb"
+          # Query ALL releases (since repo lacks a "latest" tag) and grab the first .deb URL
+          ALTLIST_URL=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/opa334/AltList/releases | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -n 1)
           
-          # Find the downloaded file dynamically
-          DEB_FILE=$(ls *.deb | head -n 1)
-          
-          # Safety check
-          if [ -z "$DEB_FILE" ]; then
-            echo "Error: Failed to retrieve the .deb file from the release."
+          # Safety check to prevent silent failures
+          if [ -z "$ALTLIST_URL" ]; then
+            echo "Error: Failed to retrieve the download URL. The API response might have changed or rate limits were exceeded."
             exit 1
           fi
           
-          echo "Extracting $DEB_FILE..."
-          dpkg-deb -x "$DEB_FILE" altlist_extracted
+          echo "Downloading from: $ALTLIST_URL"
+          curl -sL "$ALTLIST_URL" -o altlist.deb
+          
+          echo "Extracting deb..."
+          dpkg-deb -x altlist.deb altlist_extracted
           
           echo "Installing AltList.framework to Theos..."
           FRAMEWORK_PATH=$(find altlist_extracted -type d -name "AltList.framework")
