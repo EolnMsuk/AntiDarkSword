@@ -21,6 +21,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (BOOL)applicationIsInstalled:(NSString *)appIdentifier;
 @end
 
+@interface UIImage (Private)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
+@end
+
 // Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
 @interface UITableViewCell (PreferencesUI)
 - (id)control;
