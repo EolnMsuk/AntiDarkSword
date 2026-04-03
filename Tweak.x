@@ -37,7 +37,7 @@ static void loadPrefs() {
     }
     
     // Fallback: If sandbox blocks direct file access, use IPC via CFPreferences
-    if (!prefs) {
+    if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
             CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
@@ -55,45 +55,64 @@ static void loadPrefs() {
     
     // Extract AltList selections properly via prefix scanning
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-    if (prefs) {
+
+    if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         // Fallback checks for old installations still saving via dictionary
         id restrictedAppsRaw = prefs[@"restrictedApps"];
         if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-            for (NSString *key in [restrictedAppsRaw allKeys]) {
-                if ([restrictedAppsRaw[key] boolValue]) [restrictedAppsArray addObject:key];
+            for (id key in [restrictedAppsRaw allKeys]) {
+                if ([key isKindOfClass:[NSString class]] && [restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)] && [restrictedAppsRaw[key] boolValue]) {
+                    [restrictedAppsArray addObject:key];
+                }
             }
         } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
-            [restrictedAppsArray addObjectsFromArray:restrictedAppsRaw];
-        }
-
-        // Standard AltList prefix fetching strategy
-        for (NSString *key in [prefs allKeys]) {
-            if ([key hasPrefix:@"restrictedApps-"] && [prefs[key] boolValue]) {
-                NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
-                if (![restrictedAppsArray containsObject:appID]) {
-                    [restrictedAppsArray addObject:appID];
+            for (id item in restrictedAppsRaw) {
+                if ([item isKindOfClass:[NSString class]]) {
+                    [restrictedAppsArray addObjectsFromArray:restrictedAppsRaw];
                 }
             }
         }
 
-        globalTweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
-        autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
-        autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
-        activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
-        disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
+        // Standard AltList prefix fetching strategy safely handled
+        for (id key in [prefs allKeys]) {
+            if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
+                if ([prefs[key] respondsToSelector:@selector(boolValue)] && [prefs[key] boolValue]) {
+                    NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
+                    if (![restrictedAppsArray containsObject:appID]) {
+                        [restrictedAppsArray addObject:appID];
+                    }
+                }
+            }
+        }
+
+        globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
+        autoProtectEnabled = [prefs[@"autoProtectEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
+        autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
-        NSString *presetUA = prefs[@"selectedUAPreset"];
+        id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
+        if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) {
+            activeCustomDaemonIDs = customDaemonIDsRaw;
+        }
+
+        id disabledPresetRaw = prefs[@"disabledPresetRules"];
+        if ([disabledPresetRaw isKindOfClass:[NSArray class]]) {
+            disabledPresetRules = disabledPresetRaw;
+        }
+        
+        id presetUARaw = prefs[@"selectedUAPreset"];
+        NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
+
         // Fallback natively if legacy string left behind or never set.
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         }
         
-        NSString *manualUA = prefs[@"customUAString"];
+        id manualUARaw = prefs[@"customUAString"];
+        NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
+
         if ([presetUA isEqualToString:@"CUSTOM"]) {
-            // Trim whitespace out to catch the spacebar edgecase
             NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             if (!trimmedUA || trimmedUA.length == 0) {
-                // Secondary safety net: if the plist somehow has a blank custom string, default to iOS 18.1 natively
                 customUAString = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
             } else {
                 customUAString = trimmedUA;
@@ -193,22 +212,23 @@ static void loadPrefs() {
         @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
+
     if (matchedID && [daemonDenylist containsObject:matchedID]) {
         spoofUARule = NO;
     } else if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
         spoofUARule = NO;
     }
 
-    if (currentProcessRestricted && matchedID && prefs) {
+    if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
         if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
-            if (appRules[@"disableJS"] != nil) disableJS = [appRules[@"disableJS"] boolValue];
-            if (appRules[@"disableMedia"] != nil) disableMedia = [appRules[@"disableMedia"] boolValue];
-            if (appRules[@"disableRTC"] != nil) disableRTC = [appRules[@"disableRTC"] boolValue];
-            if (appRules[@"disableFileAccess"] != nil) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
-            if (appRules[@"disableIMessageDL"] != nil) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
-            if (appRules[@"spoofUA"] != nil) spoofUARule = [appRules[@"spoofUA"] boolValue];
+            if ([appRules[@"disableJS"] respondsToSelector:@selector(boolValue)]) disableJS = [appRules[@"disableJS"] boolValue];
+            if ([appRules[@"disableMedia"] respondsToSelector:@selector(boolValue)]) disableMedia = [appRules[@"disableMedia"] boolValue];
+            if ([appRules[@"disableRTC"] respondsToSelector:@selector(boolValue)]) disableRTC = [appRules[@"disableRTC"] boolValue];
+            if ([appRules[@"disableFileAccess"] respondsToSelector:@selector(boolValue)]) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
+            if ([appRules[@"disableIMessageDL"] respondsToSelector:@selector(boolValue)]) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
+            if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)]) spoofUARule = [appRules[@"spoofUA"] boolValue];
         }
     }
 
@@ -262,6 +282,7 @@ static BOOL isAppRestricted() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
