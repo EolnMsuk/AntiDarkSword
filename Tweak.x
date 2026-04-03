@@ -196,7 +196,7 @@ static void loadPrefs() {
 
     NSArray *daemonDenylist = @[
         @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd",
         @"com.apple.networkd", @"com.apple.apsd",
         @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
