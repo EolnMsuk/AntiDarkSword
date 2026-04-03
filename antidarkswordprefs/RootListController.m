@@ -19,7 +19,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 // ==========================================
 // App-Specific Feature Drill-Down Controller
-// (Moved interface to top so AltList knows about its properties)
 // ==========================================
 @interface AntiDarkSwordAppController : PSListController
 @property (nonatomic, strong) NSString *targetID;
@@ -157,6 +156,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         PSSpecifier *enableSpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Rule" target:self set:@selector(setMasterEnable:specifier:) get:@selector(getMasterEnable:) detail:nil cell:PSSwitchCell edit:nil];
         [specs addObject:enableSpec];
         
+        // Check state to properly grey out options if the rule is off
+        BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
+        
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [featGroup setProperty:@"Disabling specific mitigations can improve app compatibility while slightly reducing your security posture." forKey:@"footerText"];
         [specs addObject:featGroup];
@@ -173,6 +175,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         for (NSDictionary *feat in features) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:feat[@"key"] forKey:@"featureKey"];
+            // PreferenceLoader will automatically grey out the cell visually when passed @NO
+            [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
             [specs addObject:spec];
         }
         
@@ -233,6 +237,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    // Smoothly reload the specifiers asynchronously so the greyed-out options apply visually right away 
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
 }
 
 - (id)getFeatureValue:(PSSpecifier *)specifier {
