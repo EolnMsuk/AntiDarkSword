@@ -39,11 +39,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
-            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"},
             @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
         ];
         
         for (NSDictionary *feat in features) {
@@ -231,8 +231,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        // 0. Dynamic UI: Hide Custom UA Text Field if Preset is not "CUSTOM"
-        NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"] ?: @"NONE";
+        // 0. Update/Migration Fix: If upgrading from an older tweak version where NONE was active, force to iOS 18.1
+        NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
+        if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
+            selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+            [defaults setObject:selectedUA forKey:@"selectedUAPreset"];
+            [defaults synchronize];
+        }
+
+        // 1. Dynamic UI: Hide Custom UA Text Field if Preset is not "CUSTOM"
         if (![selectedUA isEqualToString:@"CUSTOM"]) {
             for (int i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
@@ -247,7 +254,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        // 1. Dynamic footers
+        // 2. Dynamic footers
         for (PSSpecifier *s in specs) {
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
@@ -258,7 +265,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        // 2. Inject dynamic "Current Preset Rules" visual list as clickable links
+        // 3. Inject dynamic "Current Preset Rules" visual list as clickable links
         if (autoProtect) {
             NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
                 return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
@@ -279,7 +286,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
         
-        // 3. Inject visual list of AltList's actively selected applications directly under "Select Apps"
+        // 4. Inject visual list of AltList's actively selected applications directly under "Select Apps"
         NSUInteger selectAppsIndex = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"SelectApps"];
         }];
@@ -323,7 +330,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        // 4. Inject Custom IDs dynamically as clickable links
+        // 5. Inject Custom IDs dynamically as clickable links
         NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
         }];
@@ -405,11 +412,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     
     if ([key isEqualToString:@"selectedUAPreset"]) {
-        if (![value isEqualToString:@"NONE"]) {
-            if (![defaults boolForKey:@"enabled"]) {
-                [defaults setBool:YES forKey:@"enabled"];
-                [defaults synchronize];
-            }
+        if (![defaults boolForKey:@"enabled"]) {
+            [defaults setBool:YES forKey:@"enabled"];
+            [defaults synchronize];
         }
         _specifiers = nil;
         [self reloadSpecifiers];
@@ -424,11 +429,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (enabled) {
         if (![defaults boolForKey:@"enabled"]) {
             [defaults setBool:YES forKey:@"enabled"];
-        }
-        NSString *currentUA = [defaults stringForKey:@"selectedUAPreset"];
-        if (!currentUA || [currentUA isEqualToString:@"NONE"]) {
-            NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-            [defaults setObject:ios18UA forKey:@"selectedUAPreset"];
         }
     }
     
