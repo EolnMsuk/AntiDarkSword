@@ -39,11 +39,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
-            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"},
-            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}
+            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}
         ];
         
         for (NSDictionary *feat in features) {
@@ -59,7 +59,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (id)getMasterEnable:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    [defaults synchronize]; // Ensure fresh read
+    [defaults synchronize]; 
     
     if (self.ruleType == 0) { // Preset
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
@@ -69,7 +69,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if ([defaults objectForKey:prefKey]) {
             return @([defaults boolForKey:prefKey]);
         }
-        // Legacy fallback
         NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
         return apps[self.targetID] ?: @NO;
     } else { // Custom Daemons
@@ -91,7 +90,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
         [defaults setBool:enabled forKey:prefKey];
         
-        // Clean up legacy dictionary if it still exists so it doesn't conflict
         NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
         if (apps && apps[self.targetID]) {
             [apps removeObjectForKey:self.targetID];
@@ -115,12 +113,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    [defaults synchronize]; // Ensure fresh read
+    [defaults synchronize]; 
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    if (!rules) { // Evaluate defaults based on app type
+    if (!rules) { 
         if ([featureKey isEqualToString:@"spoofUA"]) {
             NSArray *daemonDenylist = @[
                 @"com.apple.appstored", @"com.apple.itunesstored",
@@ -134,7 +132,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
             return @YES;
         }
-        return @YES; // All other restrictions ON by default
+        return @YES; 
     }
     
     return rules[featureKey] ?: @YES;
@@ -174,7 +172,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
-    // FORCE SYNC: Flush caches so returning from sub-menus immediately regenerates active apps
     CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize];
@@ -231,7 +228,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
-        // 0. Update/Migration Fix: If upgrading from an older tweak version where NONE was active, force to iOS 18.1
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
             selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -239,7 +235,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [defaults synchronize];
         }
 
-        // 1. Dynamic UI: Hide Custom UA Text Field if Preset is not "CUSTOM"
         if (![selectedUA isEqualToString:@"CUSTOM"]) {
             for (int i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
@@ -254,7 +249,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        // 2. Dynamic footers
         for (PSSpecifier *s in specs) {
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
@@ -265,7 +259,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        // 3. Inject dynamic "Current Preset Rules" visual list as clickable links
         if (autoProtect) {
             NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
                 return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
@@ -286,7 +279,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
         
-        // 4. Inject visual list of AltList's actively selected applications directly under "Select Apps"
         NSUInteger selectAppsIndex = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"SelectApps"];
         }];
@@ -294,14 +286,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (selectAppsIndex != NSNotFound) {
             NSUInteger insertIdx = selectAppsIndex + 1;
             
-            // Extract whole raw prefs to pull out AltList prefix-styled keys
             CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
             NSDictionary *allPrefsRaw = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
             
             if ([allPrefsRaw isKindOfClass:[NSDictionary class]]) {
                 NSMutableArray *appIDs = [NSMutableArray array];
                 
-                // Scan for the proper key prefix
                 for (NSString *key in allPrefsRaw) {
                     if ([key hasPrefix:@"restrictedApps-"] && [allPrefsRaw[key] boolValue]) {
                         NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
@@ -309,7 +299,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                     }
                 }
                 
-                // Legacy dictionary support just in case
                 id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
                 if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
                     for (NSString *appID in [restrictedAppsDict allKeys]) {
@@ -319,7 +308,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                     }
                 }
 
-                // Sort keys alphabetically so the list looks neat
                 NSArray *sortedKeys = [appIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
                 for (NSString *appID in sortedKeys) {
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
@@ -330,7 +318,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        // 5. Inject Custom IDs dynamically as clickable links
         NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
         }];
@@ -405,11 +392,32 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
-    [super setPreferenceValue:value specifier:specifier];
-    [self flagSaveRequirement];
-    
     NSString *key = [specifier propertyForKey:@"key"];
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+
+    // The Spacebar/Blank safety net 
+    if ([key isEqualToString:@"customUAString"]) {
+        NSString *input = (NSString *)value;
+        NSString *trimmed = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        
+        if (trimmed.length == 0) {
+            NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+            value = ios18UA; // Save the 18.1 string instead
+            
+            // Revert the main preset selection dropdown back to iOS 18.1
+            [defaults setObject:ios18UA forKey:@"selectedUAPreset"];
+            [defaults synchronize];
+            
+            // Force the UI to visually refresh (collapsing the text box and updating the dropdown)
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }
+    }
+
+    [super setPreferenceValue:value specifier:specifier];
+    [self flagSaveRequirement];
     
     if ([key isEqualToString:@"selectedUAPreset"]) {
         if (![defaults boolForKey:@"enabled"]) {
