@@ -12,12 +12,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (id)control;
 @end
 
-// Forward declaration to fix compilation error
-@class AntiDarkSwordAppController;
-
 @interface AntiDarkSwordPrefsRootListController : PSListController
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
+@end
+
+// ==========================================
+// App-Specific Feature Drill-Down Controller
+// (Moved interface to top so AltList knows about its properties)
+// ==========================================
+@interface AntiDarkSwordAppController : PSListController
+@property (nonatomic, strong) NSString *targetID;
+@property (nonatomic, assign) NSInteger ruleType;
 @end
 
 // ==========================================
@@ -131,13 +137,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @end
 
 // ==========================================
-// App-Specific Feature Drill-Down Controller
+// App-Specific Feature Drill-Down Implementation
 // ==========================================
-@interface AntiDarkSwordAppController : PSListController
-@property (nonatomic, strong) NSString *targetID;
-@property (nonatomic, assign) NSInteger ruleType;
-@end
-
 @implementation AntiDarkSwordAppController
 - (void)setSpecifier:(PSSpecifier *)specifier {
     [super setSpecifier:specifier];
