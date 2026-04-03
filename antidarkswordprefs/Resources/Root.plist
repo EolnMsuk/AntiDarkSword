@@ -157,8 +157,8 @@ Leave this set to None to disable UA spoofing.</string>
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually select apps to establish a baseline rule.
-You can then tap the active app below to configure its specific mitigations. Rules enabled here overpower preset rules.</string>
+            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.
+Rules enabled here overpower preset rules.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -170,7 +170,11 @@ You can then tap the active app below to configure its specific mitigations. Rul
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>restrictedApps</string>
+            <string>restrictedApps-</string>
+            <key>ALSettingsKeyPrefix</key>
+            <string>restrictedApps-</string>
+            <key>ALChangeNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
             <key>label</key>
             <string>Select Apps...</string>
             <key>sections</key>
@@ -200,8 +204,7 @@ You can then tap the active app below to configure its specific mitigations. Rul
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Swipe left on any custom ID below to delete it.
-Add bundle IDs or process names for daemons you want to restrict manually.</string>
+            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
         </dict>
         <dict>
             <key>cell</key>
