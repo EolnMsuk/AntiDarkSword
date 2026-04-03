@@ -12,6 +12,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (id)control;
 @end
 
+// Forward declaration to fix compilation error
+@class AntiDarkSwordAppController;
+
 @interface AntiDarkSwordPrefsRootListController : PSListController
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
