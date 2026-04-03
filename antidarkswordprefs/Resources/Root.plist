@@ -222,7 +222,7 @@
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Global Disable JS</string>
+            <string>Disable JavaScript</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -238,7 +238,7 @@
             <key>key</key>
             <string>globalDisableMedia</string>
             <key>label</key>
-            <string>Global Disable Media Auto-Play</string>
+            <string>Disable Media Auto-Play</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -254,7 +254,7 @@
             <key>key</key>
             <string>globalDisableRTC</string>
             <key>label</key>
-            <string>Global Disable WebGL &amp; WebRTC</string>
+            <string>Disable WebGL &amp; WebRTC</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -270,7 +270,7 @@
             <key>key</key>
             <string>globalDisableFileAccess</string>
             <key>label</key>
-            <string>Global Disable Local File Access</string>
+            <string>Disable Local File Access</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -286,7 +286,7 @@
             <key>key</key>
             <string>globalDisableIMessageDL</string>
             <key>label</key>
-            <string>Global Disable Msg Auto-Download</string>
+            <string>Disable Msg Auto-Download</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -302,7 +302,7 @@
             <key>key</key>
             <string>globalUASpoofingEnabled</string>
             <key>label</key>
-            <string>Global Spoof User Agent</string>
+            <string>Spoof User Agent</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
