@@ -175,7 +175,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize];
+
+    // Safely removed `_specifiers = nil; [self reloadSpecifiers];` here
+    // doing this while the View is animating its appearance breaks the UITableView rendering stack.
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
     
+    // Safely recalculating the table and specifiers ONLY once the return animation completes.
     _specifiers = nil;
     [self reloadSpecifiers];
 }
@@ -292,18 +300,23 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if ([allPrefsRaw isKindOfClass:[NSDictionary class]]) {
                 NSMutableArray *appIDs = [NSMutableArray array];
                 
-                for (NSString *key in allPrefsRaw) {
-                    if ([key hasPrefix:@"restrictedApps-"] && [allPrefsRaw[key] boolValue]) {
-                        NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
-                        [appIDs addObject:appID];
+                // Fixed type checks - bulletproofing dictionary iteration
+                for (id key in [allPrefsRaw allKeys]) {
+                    if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
+                        if ([allPrefsRaw[key] respondsToSelector:@selector(boolValue)] && [allPrefsRaw[key] boolValue]) {
+                            NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
+                            [appIDs addObject:appID];
+                        }
                     }
                 }
                 
                 id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
                 if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
-                    for (NSString *appID in [restrictedAppsDict allKeys]) {
-                        if ([restrictedAppsDict[appID] boolValue] && ![appIDs containsObject:appID]) {
-                            [appIDs addObject:appID];
+                    for (id appID in [restrictedAppsDict allKeys]) {
+                        if ([appID isKindOfClass:[NSString class]]) {
+                            if ([restrictedAppsDict[appID] respondsToSelector:@selector(boolValue)] && [restrictedAppsDict[appID] boolValue] && ![appIDs containsObject:appID]) {
+                                [appIDs addObject:appID];
+                            }
                         }
                     }
                 }
