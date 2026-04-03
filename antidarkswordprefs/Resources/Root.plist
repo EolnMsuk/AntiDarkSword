@@ -210,7 +210,7 @@
             <key>label</key>
             <string>Global Mitigation Rules (BETA)</string>
             <key>footerText</key>
-            <string>Warning: Enabling any of these options forces the respective mitigation system-wide onto EVERY process that the tweak hooks into, completely overriding individual App &amp; Preset rule configurations. "Enable Protection" at the top must remain ON for these to apply.</string>
+            <string>Enabling these options enables that mitigation system-wide. "Enable Protection" at the top must remain ON for these to apply.</string>
         </dict>
         <dict>
             <key>cell</key>
