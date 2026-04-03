@@ -53,26 +53,31 @@ static void loadPrefs() {
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
     
-    // Safety check block for extracting AltList dictionaries correctly without crashing!
-    NSArray *restrictedAppsArray = @[];
-
+    // Extract AltList selections properly via prefix scanning
+    NSMutableArray *restrictedAppsArray = [NSMutableArray array];
     if (prefs) {
+        // Fallback checks for old installations still saving via dictionary
         id restrictedAppsRaw = prefs[@"restrictedApps"];
         if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-            NSMutableArray *temp = [NSMutableArray array];
             for (NSString *key in [restrictedAppsRaw allKeys]) {
-                if ([restrictedAppsRaw[key] boolValue]) {
-                    [temp addObject:key];
+                if ([restrictedAppsRaw[key] boolValue]) [restrictedAppsArray addObject:key];
+            }
+        } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
+            [restrictedAppsArray addObjectsFromArray:restrictedAppsRaw];
+        }
+
+        // Standard AltList prefix fetching strategy
+        for (NSString *key in [prefs allKeys]) {
+            if ([key hasPrefix:@"restrictedApps-"] && [prefs[key] boolValue]) {
+                NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
+                if (![restrictedAppsArray containsObject:appID]) {
+                    [restrictedAppsArray addObject:appID];
                 }
             }
-            restrictedAppsArray = temp;
-        } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
-            restrictedAppsArray = restrictedAppsRaw;
         }
 
         globalTweakEnabled = prefs[@"enabled"] ? [prefs[@"enabled"] boolValue] : NO;
-        autoProtectEnabled = prefs[@"autoProtectEnabled"] ?
-        [prefs[@"autoProtectEnabled"] boolValue] : NO;
+        autoProtectEnabled = prefs[@"autoProtectEnabled"] ? [prefs[@"autoProtectEnabled"] boolValue] : NO;
         autoProtectLevel = prefs[@"autoProtectLevel"] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         activeCustomDaemonIDs = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         disabledPresetRules = prefs[@"disabledPresetRules"] ?: @[];
@@ -101,7 +106,7 @@ static void loadPrefs() {
     }
 
     if (!isTargetRestricted) {
-        // Priority 2: Manual Select Apps (Combined safely)
+        // Priority 2: Manual Select Apps
         if (bundleID && [restrictedAppsArray containsObject:bundleID]) {
             isTargetRestricted = YES;
             matchedID = bundleID;
@@ -167,7 +172,7 @@ static void loadPrefs() {
     disableRTC = YES;
     disableFileAccess = YES;
     disableIMessageDL = YES;
-    BOOL spoofUARule = YES; // New UA Mitigation rule (default yes)
+    BOOL spoofUARule = YES; 
 
     NSArray *daemonDenylist = @[
         @"com.apple.appstored", @"com.apple.itunesstored",
@@ -176,7 +181,6 @@ static void loadPrefs() {
         @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
-
     if (matchedID && [daemonDenylist containsObject:matchedID]) {
         spoofUARule = NO;
     } else if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
@@ -239,13 +243,13 @@ static BOOL isAppRestricted() {
 
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
