@@ -35,8 +35,7 @@
             <key>label</key>
             <string>Configure User Agent Spoofing</string>
             <key>footerText</key>
-            <string>Spoofing your User Agent bypasses the strict fingerprinting modules used by Coruna and DarkSword payloads.
-If Global Protection is ON, this string will be applied to restricted apps and web views (excluding critical background daemons by default).</string>
+            <string>Spoofing User Agent bypasses standard fingerprinting modules used by Coruna and DarkSword.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -69,11 +68,11 @@ If Global Protection is ON, this string will be applied to restricted apps and w
             <string>Select UA</string>
             <key>validTitles</key>
             <array>
-                <string>iPhone (iOS 18.1)</string>
-                <string>iPhone (iOS 17.6.1)</string>
-                <string>iPhone (iOS 16.7.8)</string>
-                <string>iPhone (iOS 15.8.2)</string>
-                <string>iPad (iPadOS 18.1)</string>
+                <string>iPhone (18.1) - Default</string>
+                <string>iPhone (17.6.1)</string>
+                <string>iPhone (16.7.8)</string>
+                <string>iPhone (15.8.2)</string>
+                <string>iPad (18.1)</string>
                 <string>Android (Chrome)</string>
                 <string>Windows (Edge)</string>
                 <string>Mac (macOS 14.5)</string>
@@ -160,8 +159,7 @@ If Global Protection is ON, this string will be applied to restricted apps and w
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.
-Rules enabled here overpower preset rules.</string>
+            <string>Manually restrict apps that are not in the current preset.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -207,7 +205,7 @@ Rules enabled here overpower preset rules.</string>
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Swipe left on any custom ID below to delete it. Add bundle IDs or process names for daemons you want to restrict manually.</string>
+            <string>Add bundle IDs or process names for daemons. Swipe left on any custom ID below to delete it.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -229,23 +227,23 @@ Rules enabled here overpower preset rules.</string>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>About</string>
+            <string>Info</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>EolnMsuk (Donate)</string>
-            <key>action</key>
-            <string>openVenmo</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSButtonCell</string>
-            <key>label</key>
-            <string>AntiDarkSword (GitHub)</string>
+            <string>GitHub</string>
             <key>action</key>
             <string>openGitHub</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Donate</string>
+            <key>action</key>
+            <string>openVenmo</string>
         </dict>
 
         <dict>
