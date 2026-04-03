@@ -343,6 +343,51 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @implementation AntiDarkSwordPrefsRootListController
 
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
+    // 1. Hardcoded dictionary for foolproof localization, even if the app isn't installed
+    NSDictionary *knownNames = @{
+        @"com.google.Gmail": @"Gmail",
+        @"com.microsoft.Office.Outlook": @"Outlook",
+        @"com.tinyspeck.chatlyio": @"Slack",
+        @"com.microsoft.skype.teams": @"Microsoft Teams",
+        @"com.google.chrome.ios": @"Chrome",
+        @"com.brave.ios.browser": @"Brave",
+        @"com.tumblr.tumblr": @"Tumblr",
+        @"com.yahoo.Aerogram": @"Yahoo Mail",
+        @"ch.protonmail.protonmail": @"Proton Mail",
+        @"org.whispersystems.signal": @"Signal",
+        @"ph.telegra.Telegraph": @"Telegram",
+        @"com.facebook.Messenger": @"Messenger",
+        @"com.toyopagroup.picaboo": @"Snapchat",
+        @"com.tencent.xin": @"WeChat",
+        @"com.viber": @"Viber",
+        @"jp.naver.line": @"LINE",
+        @"net.whatsapp.WhatsApp": @"WhatsApp",
+        @"com.hammerandchisel.discord": @"Discord",
+        @"com.google.GoogleMobile": @"Google",
+        @"org.mozilla.ios.Firefox": @"Firefox",
+        @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
+        @"pinterest": @"Pinterest",
+        @"com.facebook.Facebook": @"Facebook",
+        @"com.atebits.Tweetie2": @"X (Twitter)",
+        @"com.burbn.instagram": @"Instagram",
+        @"com.zhiliaoapp.musically": @"TikTok",
+        @"com.linkedin.LinkedIn": @"LinkedIn",
+        @"com.reddit.Reddit": @"Reddit",
+        @"com.google.ios.youtube": @"YouTube",
+        @"tv.twitch": @"Twitch",
+        @"com.google.gemini": @"Google Gemini",
+        @"com.openai.chat": @"ChatGPT",
+        @"com.deepseek.chat": @"DeepSeek",
+        @"com.github.stormbreaker.prod": @"GitHub",
+        @"org.coolstar.SileoStore": @"Sileo",
+        @"xyz.willy.Zebra": @"Zebra",
+        @"com.tigisoftware.Filza": @"Filza"
+    };
+
+    if (knownNames[targetID]) {
+        return knownNames[targetID];
+    }
+
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; // Leave literal string processes alone
     
     // Explicitly exclude system services that lack a clean localized name
