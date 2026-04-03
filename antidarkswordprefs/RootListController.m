@@ -172,19 +172,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
-    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    [defaults synchronize];
-
-    // Safely removed `_specifiers = nil; [self reloadSpecifiers];` here
-    // doing this while the View is animating its appearance breaks the UITableView rendering stack.
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    
-    // Safely recalculating the table and specifiers ONLY once the return animation completes.
-    _specifiers = nil;
+    // Safely instruct PreferenceLoader to re-evaluate the specifiers array during the pop transition.
+    // By NOT setting `_specifiers = nil` explicitly, we avoid the internal inconsistency crash.
     [self reloadSpecifiers];
 }
 
@@ -235,6 +224,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults synchronize]; // Ensure memory state is caught up with disk
         
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
@@ -294,40 +284,37 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (selectAppsIndex != NSNotFound) {
             NSUInteger insertIdx = selectAppsIndex + 1;
             
-            CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
-            NSDictionary *allPrefsRaw = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            // Read directly from NSUserDefaults dictionary representation to bypass CFPreferences sandboxing lag
+            NSDictionary *allPrefsRaw = [defaults dictionaryRepresentation];
+            NSMutableArray *appIDs = [NSMutableArray array];
             
-            if ([allPrefsRaw isKindOfClass:[NSDictionary class]]) {
-                NSMutableArray *appIDs = [NSMutableArray array];
-                
-                // Fixed type checks - bulletproofing dictionary iteration
-                for (id key in [allPrefsRaw allKeys]) {
-                    if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
-                        if ([allPrefsRaw[key] respondsToSelector:@selector(boolValue)] && [allPrefsRaw[key] boolValue]) {
-                            NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
+            for (NSString *key in allPrefsRaw) {
+                if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
+                    if ([defaults boolForKey:key]) {
+                        NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
+                        [appIDs addObject:appID];
+                    }
+                }
+            }
+            
+            // Legacy AltList structure fallback
+            id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
+            if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
+                for (NSString *appID in [restrictedAppsDict allKeys]) {
+                    if ([appID isKindOfClass:[NSString class]]) {
+                        if ([restrictedAppsDict[appID] respondsToSelector:@selector(boolValue)] && [restrictedAppsDict[appID] boolValue] && ![appIDs containsObject:appID]) {
                             [appIDs addObject:appID];
                         }
                     }
                 }
-                
-                id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
-                if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
-                    for (id appID in [restrictedAppsDict allKeys]) {
-                        if ([appID isKindOfClass:[NSString class]]) {
-                            if ([restrictedAppsDict[appID] respondsToSelector:@selector(boolValue)] && [restrictedAppsDict[appID] boolValue] && ![appIDs containsObject:appID]) {
-                                [appIDs addObject:appID];
-                            }
-                        }
-                    }
-                }
+            }
 
-                NSArray *sortedKeys = [appIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-                for (NSString *appID in sortedKeys) {
-                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
-                    [spec setProperty:appID forKey:@"targetID"];
-                    [spec setProperty:@(1) forKey:@"ruleType"]; // AltList rule
-                    [specs insertObject:spec atIndex:insertIdx++];
-                }
+            NSArray *sortedKeys = [appIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+            for (NSString *appID in sortedKeys) {
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                [spec setProperty:appID forKey:@"targetID"];
+                [spec setProperty:@(1) forKey:@"ruleType"]; // AltList rule
+                [specs insertObject:spec atIndex:insertIdx++];
             }
         }
 
@@ -408,20 +395,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSString *key = [specifier propertyForKey:@"key"];
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
 
-    // The Spacebar/Blank safety net 
     if ([key isEqualToString:@"customUAString"]) {
         NSString *input = (NSString *)value;
         NSString *trimmed = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
         if (trimmed.length == 0) {
             NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-            value = ios18UA; // Save the 18.1 string instead
+            value = ios18UA;
             
-            // Revert the main preset selection dropdown back to iOS 18.1
             [defaults setObject:ios18UA forKey:@"selectedUAPreset"];
             [defaults synchronize];
             
-            // Force the UI to visually refresh (collapsing the text box and updating the dropdown)
             dispatch_async(dispatch_get_main_queue(), ^{
                 self->_specifiers = nil;
                 [self reloadSpecifiers];
