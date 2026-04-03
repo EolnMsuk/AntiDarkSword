@@ -7,6 +7,7 @@
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
+// Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
 @interface UITableViewCell (PreferencesUI)
 - (id)control;
 @end
@@ -17,7 +18,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @end
 
 // ==========================================
-// Custom AltList Controller to Lock Presets
+// Custom AltList Controller
 // ==========================================
 @interface ATLApplicationListMultiSelectionController : PSListController
 @end
@@ -48,21 +49,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
-        // Fix: Only check the actively selected preset level.
         if ([presetApps containsObject:bundleID]) {
             // Lock and grey out UI for preset apps
             cell.userInteractionEnabled = NO;
             cell.textLabel.alpha = 0.5;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
             
-            // Check if the user bypassed this preset via Master Enable rule
             NSArray *disabledPresetRules = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
             BOOL isDisabled = [disabledPresetRules containsObject:bundleID];
             
             if ([cell respondsToSelector:@selector(control)]) {
                 id control = [cell control];
                 if ([control isKindOfClass:[UISwitch class]]) {
-                    // Visually display status but DO NOT force write to NSUserDefaults (prevents the loop)
                     [((UISwitch *)control) setOn:!isDisabled animated:NO];
                     ((UISwitch *)control).enabled = NO;
                 }
@@ -83,6 +81,48 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
     
     return cell;
+}
+
+// Override tap behavior to push detail options screen instead of just toggling switch natively
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
+    if (!bundleID) {
+        NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
+        if ([alKey hasPrefix:@"restrictedApps-"]) {
+            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
+        }
+    }
+
+    if (bundleID) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
+        
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
+        
+        // Prevent opening detailed view if preset enforces it (User must manage via Preset Rules UI)
+        if ([presetApps containsObject:bundleID]) {
+            return; 
+        }
+
+        // Forward to the app specific detail controller
+        AntiDarkSwordAppController *detailController = [[AntiDarkSwordAppController alloc] init];
+        detailController.targetID = bundleID;
+        detailController.ruleType = 1; // AltList rule type
+        detailController.rootController = self.rootController ?: self;
+        detailController.parentController = self;
+        
+        PSSpecifier *dummySpec = [PSSpecifier preferenceSpecifierNamed:[spec name] ?: bundleID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+        [dummySpec setProperty:bundleID forKey:@"targetID"];
+        [dummySpec setProperty:@(1) forKey:@"ruleType"];
+        [detailController setSpecifier:dummySpec];
+
+        [self pushController:detailController];
+    }
 }
 
 @end
@@ -380,6 +420,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
         for (PSSpecifier *s in specs) {
+            // Automatically inject our custom AltList controller
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
             }
@@ -393,7 +434,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
-        // 1) Current Preset Rules Builder
+        // Current Preset Rules Menu Render
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
         }];
@@ -412,62 +453,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
         
-        // Setup App Collection for Custom / Manual Items
-        NSDictionary *allPrefsRaw = [defaults dictionaryRepresentation];
-        NSMutableArray *manualAppIDs = [NSMutableArray array];
-        
-        for (NSString *key in allPrefsRaw) {
-            if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
-                if ([defaults boolForKey:key]) {
-                    NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
-                    [manualAppIDs addObject:appID];
-                }
-            }
-        }
-        
-        id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
-        if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
-            for (NSString *appID in [restrictedAppsDict allKeys]) {
-                if ([appID isKindOfClass:[NSString class]]) {
-                    if ([restrictedAppsDict[appID] respondsToSelector:@selector(boolValue)] && [restrictedAppsDict[appID] boolValue] && ![manualAppIDs containsObject:appID]) {
-                        [manualAppIDs addObject:appID];
-                    }
-                }
-            }
-        }
-        
-        NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
-        NSArray *sortedManualKeys = [manualAppIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-
-        // 2) Custom ID Bundle List Builder (Combines Manual AltList Selections AND Custom Daemons)
+        // Advanced Custom Rules Menu Render (Strictly Custom Process Strings Now)
         NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
         }];
         
         if (insertIndexCustom != NSNotFound) {
             insertIndexCustom++;
-            
-            // Render manual AltList apps inside the Custom App list
-            for (NSString *appID in sortedManualKeys) {
-                if ([autoItems containsObject:appID]) continue; // Prevent showing duplicates if already in preset
-                
-                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
-                [spec setProperty:appID forKey:@"targetID"];
-                [spec setProperty:appID forKey:@"daemonID"]; // Passed for swipe-to-delete targeting
-                [spec setProperty:@(1) forKey:@"ruleType"]; // AltList manual rule
-                [spec setProperty:@YES forKey:@"isCustomDaemon"]; // Allows swipe-to-delete flag
-                [spec setProperty:@YES forKey:@"isManualApp"]; // Custom flag to delete from correct UserDefaults key
-                [specs insertObject:spec atIndex:insertIndexCustom++];
-            }
-            
-            // Render native custom string typed daemons
             for (NSString *daemonID in customIDs) {
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:daemonID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:daemonID forKey:@"targetID"];
-                [spec setProperty:daemonID forKey:@"daemonID"];
+                [spec setProperty:daemonID forKey:@"daemonID"]; // Keep for swipe-to-delete
                 [spec setProperty:@(2) forKey:@"ruleType"]; // Custom rule
                 [spec setProperty:@YES forKey:@"isCustomDaemon"];
-                [spec setProperty:@NO forKey:@"isManualApp"];
                 [specs insertObject:spec atIndex:insertIndexCustom++];
             }
         }
@@ -658,39 +656,25 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return [[spec propertyForKey:@"isCustomDaemon"] boolValue];
 }
 
+// Cleaned up for custom IDs only
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
         NSString *daemonID = [spec propertyForKey:@"daemonID"];
-        BOOL isManualApp = [[spec propertyForKey:@"isManualApp"] boolValue];
         
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+        NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
         
-        // Target correct backend storage based on the ruleType the cell was mapped to
-        if (isManualApp) {
-            NSString *key = [NSString stringWithFormat:@"restrictedApps-%@", daemonID];
-            [defaults setBool:NO forKey:key];
-            
-            NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
-            if (apps && apps[daemonID]) {
-                [apps removeObjectForKey:daemonID];
-                [defaults setObject:apps forKey:@"restrictedApps"];
-            }
-        } else {
-            NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
-            NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
-            
-            [customIDs removeObject:daemonID];
-            [activeCustom removeObject:daemonID];
-            
-            [defaults setObject:customIDs forKey:@"customDaemonIDs"];
-            [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
-            [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-        }
+        [customIDs removeObject:daemonID];
+        [activeCustom removeObject:daemonID];
         
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", daemonID];
         [defaults removeObjectForKey:dictKey];
         
+        [defaults setObject:customIDs forKey:@"customDaemonIDs"];
+        [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
         [self flagSaveRequirement];
         
