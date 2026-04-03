@@ -21,6 +21,19 @@ jobs:
         with:
           theos-sdks: 'https://github.com/theos/sdks'
 
+      - name: Fetch & Install AltList Framework
+        run: |
+          echo "Fetching latest AltList release from GitHub..."
+          ALTLIST_URL=$(curl -s https://api.github.com/repos/opa334/AltList/releases/latest | grep "browser_download_url.*\.deb" | cut -d '"' -f 4 | head -n 1)
+          curl -sL $ALTLIST_URL -o altlist.deb
+          
+          echo "Extracting deb..."
+          dpkg-deb -x altlist.deb altlist_extracted
+          
+          echo "Installing AltList.framework to Theos..."
+          FRAMEWORK_PATH=$(find altlist_extracted -type d -name "AltList.framework")
+          cp -r "$FRAMEWORK_PATH" $THEOS/lib/
+
       - name: Compile the Tweak
         run: make package FINALPACKAGE=1
 
