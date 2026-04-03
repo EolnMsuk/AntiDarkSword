@@ -10,7 +10,7 @@
             <key>label</key>
             <string>Global Settings</string>
             <key>footerText</key>
-            <string>You must also enable preset or custom rules below to protect your device.</string>
+            <string>You must also enable a preset level or custom rules below to protect your device.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -111,20 +111,6 @@ If Global Protection is ON, this string will be applied to restricted apps and w
         </dict>
         <dict>
             <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>autoProtectEnabled</string>
-            <key>label</key>
-            <string>Enable Preset Rules</string>
-            <key>set</key>
-            <string>setAutoProtect:specifier:</string>
-        </dict>
-        <dict>
-            <key>cell</key>
             <string>PSSegmentCell</string>
             <key>id</key>
             <string>AutoProtectLevelSegment</string>
@@ -158,8 +144,7 @@ If Global Protection is ON, this string will be applied to restricted apps and w
             <key>label</key>
             <string>Manual Rules</string>
             <key>footerText</key>
-            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations.
-Rules enabled here overpower preset rules.</string>
+            <string>Manually select apps to establish a baseline rule. You can then tap the active app below to configure its specific mitigations. Rules enabled here overpower preset rules.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -167,7 +152,7 @@ Rules enabled here overpower preset rules.</string>
             <key>id</key>
             <string>SelectApps</string>
             <key>detail</key>
-            <string>ATLApplicationListMultiSelectionController</string>
+            <string>AntiDarkSwordAltListController</string>
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
