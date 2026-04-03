@@ -50,6 +50,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 @implementation AntiDarkSwordAltListController
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // Reload so highlights instantly update when swiping back from the detail view
+    [self reloadSpecifiers];
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     
@@ -84,16 +90,39 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault; // Ensure row highlights when tapped
         
+        // Check if a manual rule is currently active for this bundle ID
+        BOOL isManualRuleActive = NO;
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+        if ([defaults objectForKey:prefKey]) {
+            isManualRuleActive = [defaults boolForKey:prefKey];
+        } else {
+            NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
+            isManualRuleActive = [apps[bundleID] boolValue];
+        }
+
         if ([presetApps containsObject:bundleID]) {
             // Lock and grey out UI for preset apps
             cell.userInteractionEnabled = NO;
             cell.textLabel.alpha = 0.5;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
+            cell.backgroundColor = [UIColor clearColor]; // Reset background for presets
         } else {
             // Leave manual apps accessible 
             cell.userInteractionEnabled = YES;
             cell.textLabel.alpha = 1.0;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
+            
+            // Apply green highlight if the manual rule is enabled
+            if (isManualRuleActive) {
+                if (@available(iOS 13.0, *)) {
+                    cell.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+                } else {
+                    // Fallback for older iOS versions
+                    cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
+                }
+            } else {
+                cell.backgroundColor = [UIColor clearColor]; // Reset background if disabled
+            }
         }
     }
     
