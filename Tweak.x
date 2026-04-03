@@ -21,12 +21,26 @@ static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
 
+// Global Overrides
+static BOOL globalDisableJS = NO;
+static BOOL globalDisableMedia = NO;
+static BOOL globalDisableRTC = NO;
+static BOOL globalDisableFileAccess = NO;
+static BOOL globalDisableIMessageDL = NO;
+
 // App-Specific Granular Features
 static BOOL disableJS = YES;
 static BOOL disableMedia = YES;
 static BOOL disableRTC = YES;
 static BOOL disableFileAccess = YES;
 static BOOL disableIMessageDL = YES;
+
+// Final Evaluated States
+static BOOL applyDisableJS = NO;
+static BOOL applyDisableMedia = NO;
+static BOOL applyDisableRTC = NO;
+static BOOL applyDisableFileAccess = NO;
+static BOOL applyDisableIMessageDL = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
@@ -86,6 +100,13 @@ static void loadPrefs() {
 
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
+        
+        globalDisableJS = [prefs[@"globalDisableJS"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJS"] boolValue] : NO;
+        globalDisableMedia = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableMedia"] boolValue] : NO;
+        globalDisableRTC = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableRTC"] boolValue] : NO;
+        globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
+        globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
+
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
@@ -122,6 +143,7 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
+    
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
         isTargetRestricted = YES;
         matchedID = bundleID;
@@ -166,6 +188,7 @@ static void loadPrefs() {
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
+            
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -186,6 +209,7 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
+
     // Fallback default rules
     disableMedia = YES;
     disableRTC = YES;
@@ -213,6 +237,7 @@ static void loadPrefs() {
         @"com.apple.Maps", @"com.apple.weather", @"com.apple.mobilenotes",
         @"com.apple.mobilecal", @"com.apple.stocks", @"com.apple.iBooks"
     ];
+
     if (matchedID) {
         if ([daemons containsObject:matchedID]) {
             spoofUARule = NO;
@@ -244,6 +269,13 @@ static void loadPrefs() {
         }
     }
 
+    // Evaluate final applicability state checking global overrides
+    applyDisableJS = globalTweakEnabled && (globalDisableJS || (currentProcessRestricted && disableJS));
+    applyDisableMedia = globalTweakEnabled && (globalDisableMedia || (currentProcessRestricted && disableMedia));
+    applyDisableRTC = globalTweakEnabled && (globalDisableRTC || (currentProcessRestricted && disableRTC));
+    applyDisableFileAccess = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
+    applyDisableIMessageDL = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
+
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
@@ -252,10 +284,6 @@ static void loadPrefs() {
             shouldSpoofUA = YES; // App-specific rule
         }
     }
-}
-
-static BOOL isAppRestricted() {
-    return currentProcessRestricted;
 }
 
 %ctor {
@@ -315,32 +343,30 @@ static BOOL isAppRestricted() {
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    if (isAppRestricted()) {
-        if (disableJS) {
-            if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-            if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
-            if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-        }
-        
-        if (disableMedia) {
-            if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) configuration.allowsInlineMediaPlayback = NO;
-            if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-            if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) configuration.allowsPictureInPictureMediaPlayback = NO;
-        }
-        
-        if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-            @try {
-                if (disableFileAccess) {
-                    [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                    [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-                }
-                if (disableRTC) {
-                    [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                    [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                    [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-                }
-            } @catch (NSException *e) {}
-        }
+    if (applyDisableJS) {
+        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
+        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+    }
+    
+    if (applyDisableMedia) {
+        if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) configuration.allowsInlineMediaPlayback = NO;
+        if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+        if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) configuration.allowsPictureInPictureMediaPlayback = NO;
+    }
+    
+    if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
+        @try {
+            if (applyDisableFileAccess) {
+                [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
+                [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
+            }
+            if (applyDisableRTC) {
+                [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
+                [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
+                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
+            }
+        } @catch (NSException *e) {}
     }
     
     if (shouldSpoofUA) {
@@ -362,32 +388,31 @@ static BOOL isAppRestricted() {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
-    if (isAppRestricted()) {
-        if (disableJS) {
-            if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-            if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
-            if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-        }
-        
-        if (disableMedia) {
-            if ([webView.configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) webView.configuration.allowsInlineMediaPlayback = NO;
-            if ([webView.configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-            if ([webView.configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) webView.configuration.allowsPictureInPictureMediaPlayback = NO;
-        }
-        
-        if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-            @try {
-                if (disableFileAccess) {
-                    [webView.configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                    [webView.configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-                }
-                if (disableRTC) {
-                    [webView.configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                    [webView.configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                    [webView.configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-                }
-            } @catch (NSException *e) {}
-        }
+    
+    if (applyDisableJS) {
+        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
+        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+    }
+    
+    if (applyDisableMedia) {
+        if ([webView.configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) webView.configuration.allowsInlineMediaPlayback = NO;
+        if ([webView.configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+        if ([webView.configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) webView.configuration.allowsPictureInPictureMediaPlayback = NO;
+    }
+    
+    if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
+        @try {
+            if (applyDisableFileAccess) {
+                [webView.configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
+                [webView.configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
+            }
+            if (applyDisableRTC) {
+                [webView.configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
+                [webView.configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
+                [webView.configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
+            }
+        } @catch (NSException *e) {}
     }
     
     if (shouldSpoofUA) {
@@ -403,7 +428,7 @@ static BOOL isAppRestricted() {
 }
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         }
@@ -431,7 +456,7 @@ static BOOL isAppRestricted() {
 }
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         }
@@ -450,7 +475,7 @@ static BOOL isAppRestricted() {
 }
 
 - (void)evaluateJavaScript:(NSString *)javaScriptString completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         if (completionHandler) {
             NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
             completionHandler(nil, err);
@@ -461,7 +486,7 @@ static BOOL isAppRestricted() {
 }
 
 - (void)evaluateJavaScript:(NSString *)javaScriptString inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         if (completionHandler) {
             NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
             completionHandler(nil, err);
@@ -482,7 +507,7 @@ static BOOL isAppRestricted() {
 
 %hook WKWebpagePreferences
 - (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (isAppRestricted() && disableJS && allowed) {
+    if (applyDisableJS && allowed) {
         return %orig(NO);
     }
     %orig;
@@ -491,7 +516,7 @@ static BOOL isAppRestricted() {
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (isAppRestricted() && disableJS && enabled) {
+    if (applyDisableJS && enabled) {
         return %orig(NO);
     }
     %orig;
@@ -499,7 +524,7 @@ static BOOL isAppRestricted() {
 %end
 
 %hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         return NULL;
     }
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
@@ -511,7 +536,7 @@ static BOOL isAppRestricted() {
 
 %hook UIWebView
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (isAppRestricted() && disableJS) {
+    if (applyDisableJS) {
         return @"";
     }
     return %orig;
@@ -563,13 +588,13 @@ static BOOL isAppRestricted() {
 
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
-    if (isAppRestricted() && disableIMessageDL) {
+    if (applyDisableIMessageDL) {
         return NO;
     }
     return %orig;
 }
 - (BOOL)canAutoDownload {
-    if (isAppRestricted() && disableIMessageDL) {
+    if (applyDisableIMessageDL) {
         return NO;
     }
     return %orig;
@@ -578,7 +603,7 @@ static BOOL isAppRestricted() {
 
 %hook CKAttachmentMessagePartChatItem
 - (BOOL)_needsPreviewGeneration {
-    if (isAppRestricted() && disableIMessageDL) {
+    if (applyDisableIMessageDL) {
         return NO;
     }
     return %orig;
