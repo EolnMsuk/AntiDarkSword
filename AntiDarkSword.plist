@@ -7,12 +7,5 @@
             "com.apple.IMCore",
             "com.apple.ChatKit"
         );
-        Executables = (
-            "imagent",
-            "mediaserverd",
-            "networkd",
-            "apsd",
-            "identityservicesd"
-        );
     };
 }
