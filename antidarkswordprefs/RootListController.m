@@ -263,31 +263,52 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
     if (!rules || rules[featureKey] == nil) { 
+        NSArray *daemons = @[
+            @"com.apple.appstored", @"com.apple.itunesstored",
+            @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+            @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+            @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.nsurlsessiond",
+            @"com.apple.cfnetwork"
+        ];
+        
+        NSArray *browsers = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        ];
+        
+        NSArray *utilsAndAI = @[
+            @"com.github.stormbreaker.prod", @"com.google.gemini",
+            @"com.openai.chat", @"com.deepseek.chat",
+            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+            @"com.apple.Maps", @"com.apple.weather", @"com.apple.mobilenotes",
+            @"com.apple.mobilecal", @"com.apple.stocks", @"com.apple.iBooks"
+        ];
+
         if ([featureKey isEqualToString:@"spoofUA"]) {
-            NSArray *daemonDenylist = @[
-                @"com.apple.appstored", @"com.apple.itunesstored",
-                @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd",
-                @"com.apple.networkd", @"com.apple.apsd",
-                @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
-                @"com.apple.cfnetwork"
-            ];
-            if ([daemonDenylist containsObject:self.targetID] || [self.targetID containsString:@"daemon"] || [self.targetID hasSuffix:@"d"]) {
+            if ([daemons containsObject:self.targetID] || [self.targetID containsString:@"daemon"] || [self.targetID hasSuffix:@"d"]) {
                 return @NO;
             }
             return @YES;
         }
         
         if ([featureKey isEqualToString:@"disableJS"]) {
-            NSArray *browsers = @[
-                @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
-            ];
-            NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-            if (level == 0) level = 1;
-            if ([browsers containsObject:self.targetID] && level < 3) {
+            if ([utilsAndAI containsObject:self.targetID]) {
                 return @NO;
             }
+            if ([browsers containsObject:self.targetID]) {
+                NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+                if (level == 0) level = 1;
+                if (level < 3) return @NO;
+            }
+            return @YES;
+        }
+        
+        if ([featureKey isEqualToString:@"disableFileAccess"]) {
+            if ([utilsAndAI containsObject:self.targetID]) {
+                return @NO;
+            }
+            return @YES;
         }
         
         return @YES; 
@@ -407,12 +428,20 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
     ];
     
-    NSArray *daemonDenylist = @[
+    NSArray *daemons = @[
         @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd",
-        @"com.apple.networkd", @"com.apple.apsd",
-        @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
+    ];
+
+    NSArray *utilsAndAI = @[
+        @"com.github.stormbreaker.prod", @"com.google.gemini",
+        @"com.openai.chat", @"com.deepseek.chat",
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+        @"com.apple.Maps", @"com.apple.weather", @"com.apple.mobilenotes",
+        @"com.apple.mobilecal", @"com.apple.stocks", @"com.apple.iBooks"
     ];
 
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
@@ -425,20 +454,28 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
         NSMutableDictionary *rules = [NSMutableDictionary dictionary];
         
+        // Universal Defaults
         rules[@"disableMedia"] = @YES;
         rules[@"disableRTC"] = @YES;
-        rules[@"disableFileAccess"] = @YES;
         rules[@"disableIMessageDL"] = @YES;
         
-        if ([browsers containsObject:targetID] && level < 3) {
+        // Category Specific Rules
+        if ([browsers containsObject:targetID]) {
+            rules[@"disableJS"] = (level < 3) ? @NO : @YES;
+            rules[@"disableFileAccess"] = @YES;
+            rules[@"spoofUA"] = @YES;
+        } else if ([utilsAndAI containsObject:targetID]) {
             rules[@"disableJS"] = @NO;
-        } else {
+            rules[@"disableFileAccess"] = @NO;
+            rules[@"spoofUA"] = @YES;
+        } else if ([daemons containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
             rules[@"disableJS"] = @YES;
-        }
-        
-        if ([daemonDenylist containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
+            rules[@"disableFileAccess"] = @YES;
             rules[@"spoofUA"] = @NO;
         } else {
+            // Social Media and Secure Messaging default strictly locked down
+            rules[@"disableJS"] = @YES;
+            rules[@"disableFileAccess"] = @YES;
             rules[@"spoofUA"] = @YES;
         }
         
@@ -801,6 +838,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         
+        // Purge ALL settings 
         NSDictionary *dict = [defaults dictionaryRepresentation];
         for (NSString *key in dict) {
             [defaults removeObjectForKey:key];
