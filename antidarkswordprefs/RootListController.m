@@ -65,6 +65,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
         return @(![disabled containsObject:self.targetID]);
     } else if (self.ruleType == 1) { // AltList
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
+        if ([defaults objectForKey:prefKey]) {
+            return @([defaults boolForKey:prefKey]);
+        }
+        // Legacy fallback
         NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
         return apps[self.targetID] ?: @NO;
     } else { // Custom Daemons
@@ -83,9 +88,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         else if (![disabled containsObject:self.targetID]) [disabled addObject:self.targetID];
         [defaults setObject:disabled forKey:@"disabledPresetRules"];
     } else if (self.ruleType == 1) { // AltList
-        NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy] ?: [NSMutableDictionary dictionary];
-        apps[self.targetID] = value;
-        [defaults setObject:apps forKey:@"restrictedApps"];
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
+        [defaults setBool:enabled forKey:prefKey];
+        
+        // Clean up legacy dictionary if it still exists so it doesn't conflict
+        NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
+        if (apps && apps[self.targetID]) {
+            [apps removeObjectForKey:self.targetID];
+            [defaults setObject:apps forKey:@"restrictedApps"];
+        }
     } else { // Custom Daemons
         NSMutableArray *active = [[defaults arrayForKey:@"activeCustomDaemonIDs"] mutableCopy] ?: [[defaults arrayForKey:@"customDaemonIDs"] mutableCopy] ?: [NSMutableArray array];
         if (enabled) {
@@ -163,8 +174,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     
-    // FORCE SYNC: AltList saves via CFPreferences behind our back. 
-    // We must dump our stale cache so the UI populates the newly selected apps.
+    // FORCE SYNC: Flush caches so returning from sub-menus immediately regenerates active apps
     CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize];
@@ -277,20 +287,38 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (selectAppsIndex != NSNotFound) {
             NSUInteger insertIdx = selectAppsIndex + 1;
             
-            // Bypass NSUserDefaults entirely and pull raw data to ensure AltList selections are caught instantly
+            // Extract whole raw prefs to pull out AltList prefix-styled keys
             CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
-            NSDictionary *restrictedAppsRaw = (__bridge_transfer NSDictionary *)CFPreferencesCopyAppValue(CFSTR("restrictedApps"), CFSTR("com.eolnmsuk.antidarkswordprefs"));
+            NSDictionary *allPrefsRaw = (__bridge_transfer NSDictionary *)CFPreferencesCopyMultiple(NULL, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
             
-            if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-                // Sort keys alphabetically so the list looks neat
-                NSArray *keys = [[restrictedAppsRaw allKeys] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
-                for (NSString *appID in keys) {
-                    if ([restrictedAppsRaw[appID] boolValue]) {
-                        PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
-                        [spec setProperty:appID forKey:@"targetID"];
-                        [spec setProperty:@(1) forKey:@"ruleType"]; // AltList rule
-                        [specs insertObject:spec atIndex:insertIdx++];
+            if ([allPrefsRaw isKindOfClass:[NSDictionary class]]) {
+                NSMutableArray *appIDs = [NSMutableArray array];
+                
+                // Scan for the proper key prefix
+                for (NSString *key in allPrefsRaw) {
+                    if ([key hasPrefix:@"restrictedApps-"] && [allPrefsRaw[key] boolValue]) {
+                        NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
+                        [appIDs addObject:appID];
                     }
+                }
+                
+                // Legacy dictionary support just in case
+                id restrictedAppsDict = allPrefsRaw[@"restrictedApps"];
+                if ([restrictedAppsDict isKindOfClass:[NSDictionary class]]) {
+                    for (NSString *appID in [restrictedAppsDict allKeys]) {
+                        if ([restrictedAppsDict[appID] boolValue] && ![appIDs containsObject:appID]) {
+                            [appIDs addObject:appID];
+                        }
+                    }
+                }
+
+                // Sort keys alphabetically so the list looks neat
+                NSArray *sortedKeys = [appIDs sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+                for (NSString *appID in sortedKeys) {
+                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:appID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                    [spec setProperty:appID forKey:@"targetID"];
+                    [spec setProperty:@(1) forKey:@"ruleType"]; // AltList rule
+                    [specs insertObject:spec atIndex:insertIdx++];
                 }
             }
         }
@@ -423,7 +451,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setObject:value forKey:@"autoProtectLevel"];
     
     if (oldLevel != newLevel) {
-        // Enforce the requested default rules configurations on preset apps whenever level is switched
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
@@ -438,25 +465,22 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @"com.apple.cfnetwork"
         ];
         
-        NSArray *allProtected = [self autoProtectedItemsForLevel:3]; // Get all potential preset items
+        NSArray *allProtected = [self autoProtectedItemsForLevel:3];
         for (NSString *targetID in allProtected) {
             NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
             NSMutableDictionary *rules = [NSMutableDictionary dictionary];
             
-            // Baseline protections
             rules[@"disableMedia"] = @YES;
             rules[@"disableRTC"] = @YES;
             rules[@"disableFileAccess"] = @YES;
             rules[@"disableIMessageDL"] = @YES;
             
-            // Enable JavaScript for Browsers dynamically on Level 1 and 2
             if ([browsers containsObject:targetID] && newLevel < 3) {
                 rules[@"disableJS"] = @NO;
             } else {
                 rules[@"disableJS"] = @YES;
             }
             
-            // Turn Off UA spoofing on specific critical processes
             if ([daemonDenylist containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
                 rules[@"spoofUA"] = @NO;
             } else {
@@ -585,7 +609,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
