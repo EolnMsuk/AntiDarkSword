@@ -20,34 +20,10 @@ jobs:
         with:
           theos-sdks: 'https://github.com/theos/sdks'
 
-      - name: Fetch & Install AltList Framework
+      - name: Load Local AltList Framework
         run: |
-          echo "Fetching latest AltList rootless deb directly from opa334's apt repository..."
-          
-          # Direct URL bypasses the GitHub API releases endpoint entirely
-          ALTLIST_URL="https://raw.githubusercontent.com/opa334/opa334.github.io/master/debs/com.opa334.altlist_1.0.11_iphoneos-arm64.deb"
-          
-          echo "Downloading from: $ALTLIST_URL"
-          curl -sL "$ALTLIST_URL" -o altlist.deb
-          
-          # Verify download was successful and not an empty/404 file
-          if [ ! -s altlist.deb ] || grep -q "404: Not Found" altlist.deb; then
-            echo "Error: Failed to retrieve the AltList .deb file."
-            exit 1
-          fi
-          
-          echo "Extracting deb..."
-          dpkg-deb -x altlist.deb altlist_extracted
-          
-          echo "Installing AltList.framework to Theos..."
-          FRAMEWORK_PATH=$(find altlist_extracted -type d -name "AltList.framework")
-          
-          if [ -z "$FRAMEWORK_PATH" ]; then
-            echo "Error: Could not find AltList.framework inside the extracted deb."
-            exit 1
-          fi
-          
-          cp -r "$FRAMEWORK_PATH" $THEOS/lib/
+          echo "Copying AltList.framework from local repository to Theos..."
+          cp -r vendor/AltList.framework $THEOS/lib/
 
       - name: Compile the Tweak
         run: make package FINALPACKAGE=1
