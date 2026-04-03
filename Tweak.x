@@ -187,37 +187,52 @@ static void loadPrefs() {
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     
-    disableJS = YES;
+    // Fallback default rules
     disableMedia = YES;
     disableRTC = YES;
-    disableFileAccess = YES;
     disableIMessageDL = YES;
     BOOL spoofUARule = YES; 
+    disableJS = YES;
+    disableFileAccess = YES;
 
-    NSArray *daemonDenylist = @[
+    NSArray *daemons = @[
         @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd",
-        @"com.apple.networkd", @"com.apple.apsd",
-        @"com.apple.identityservicesd", @"com.apple.nsurlsessiond",
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.nsurlsessiond",
         @"com.apple.cfnetwork"
     ];
-    if (matchedID && [daemonDenylist containsObject:matchedID]) {
-        spoofUARule = NO;
-    } else if (processName && ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"])) {
-        spoofUARule = NO;
-    }
     
-    if (currentProcessRestricted && matchedID) {
-        NSArray *browsers = @[
-            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
-        ];
-        if ([browsers containsObject:matchedID] && autoProtectLevel < 3) {
+    NSArray *browsers = @[
+        @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+    ];
+    
+    NSArray *utilsAndAI = @[
+        @"com.github.stormbreaker.prod", @"com.google.gemini",
+        @"com.openai.chat", @"com.deepseek.chat",
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+        @"com.apple.Maps", @"com.apple.weather", @"com.apple.mobilenotes",
+        @"com.apple.mobilecal", @"com.apple.stocks", @"com.apple.iBooks"
+    ];
+
+    if (matchedID) {
+        if ([daemons containsObject:matchedID]) {
+            spoofUARule = NO;
+        } else if ([utilsAndAI containsObject:matchedID]) {
             disableJS = NO;
+            disableFileAccess = NO;
+        } else if ([browsers containsObject:matchedID] && autoProtectLevel < 3) {
+            disableJS = NO;
+        }
+    } else if (processName) {
+        if ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"]) {
+            spoofUARule = NO;
         }
     }
 
+    // Override defaults with specifically configured rules if they exist
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
