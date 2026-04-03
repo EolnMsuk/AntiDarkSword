@@ -93,6 +93,10 @@ If Global Protection is ON, this string will be applied to restricted apps and w
             <string>Custom</string>
             <key>placeholder</key>
             <string>Type manual UA here...</string>
+            <key>returnKeyType</key>
+            <integer>9</integer>
+            <key>noAutoCorrect</key>
+            <true/>
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
