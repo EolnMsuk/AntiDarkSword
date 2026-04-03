@@ -294,7 +294,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([featureKey isEqualToString:@"disableJS"]) {
             if ([utilsAndAI containsObject:self.targetID]) {
-                return @NO;
+                NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+                if (level == 0) level = 1;
+                if (level < 3) return @NO;
+                return @YES;
             }
             if ([browsers containsObject:self.targetID]) {
                 NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
@@ -306,7 +309,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([featureKey isEqualToString:@"disableFileAccess"]) {
             if ([utilsAndAI containsObject:self.targetID]) {
-                return @NO;
+                NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+                if (level == 0) level = 1;
+                if (level < 3) return @NO;
+                return @YES;
             }
             return @YES;
         }
@@ -337,7 +343,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @implementation AntiDarkSwordPrefsRootListController
 
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
-    if (![targetID containsString:@"."]) return targetID; // Leave literal string processes alone
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; // Leave literal string processes alone
     
     // Explicitly exclude system services that lack a clean localized name
     NSArray *daemons = @[
@@ -374,7 +380,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIImage *icon = nil;
     
     // Try to fetch real application icon
-    if ([targetID containsString:@"."]) {
+    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
         NSArray *daemons = @[
             @"com.apple.imagent", @"com.apple.mediaserverd",
             @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
@@ -465,8 +471,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             rules[@"disableFileAccess"] = @YES;
             rules[@"spoofUA"] = @YES;
         } else if ([utilsAndAI containsObject:targetID]) {
-            rules[@"disableJS"] = @NO;
-            rules[@"disableFileAccess"] = @NO;
+            rules[@"disableJS"] = (level < 3) ? @NO : @YES;
+            rules[@"disableFileAccess"] = (level < 3) ? @NO : @YES;
             rules[@"spoofUA"] = @YES;
         } else if ([daemons containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
             rules[@"disableJS"] = @YES;
