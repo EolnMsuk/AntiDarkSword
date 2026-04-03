@@ -57,34 +57,29 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
+        // Completely hide the native AltList switch
+        if ([cell respondsToSelector:@selector(control)]) {
+            id control = [cell control];
+            if ([control isKindOfClass:[UIView class]]) {
+                ((UIView *)control).hidden = YES;
+            }
+        }
+        
+        // Replace the right side with a standard navigation chevron
+        cell.accessoryView = nil;
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault; // Ensure row highlights when tapped
+        
         if ([presetApps containsObject:bundleID]) {
             // Lock and grey out UI for preset apps
             cell.userInteractionEnabled = NO;
             cell.textLabel.alpha = 0.5;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
-            
-            NSArray *disabledPresetRules = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-            BOOL isDisabled = [disabledPresetRules containsObject:bundleID];
-            
-            if ([cell respondsToSelector:@selector(control)]) {
-                id control = [cell control];
-                if ([control isKindOfClass:[UISwitch class]]) {
-                    [((UISwitch *)control) setOn:!isDisabled animated:NO];
-                    ((UISwitch *)control).enabled = NO;
-                }
-            }
         } else {
             // Leave manual apps accessible 
             cell.userInteractionEnabled = YES;
             cell.textLabel.alpha = 1.0;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
-            
-            if ([cell respondsToSelector:@selector(control)]) {
-                id control = [cell control];
-                if ([control isKindOfClass:[UISwitch class]]) {
-                    ((UISwitch *)control).enabled = YES;
-                }
-            }
         }
     }
     
