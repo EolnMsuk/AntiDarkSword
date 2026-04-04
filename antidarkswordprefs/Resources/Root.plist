@@ -236,9 +236,9 @@
             <key>defaults</key>
             <string>com.eolnmsuk.antidarkswordprefs</string>
             <key>key</key>
-            <string>globalDisableJS</string>
+            <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JavaScript</string>
+            <string>Disable JIT (JavaScript)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
