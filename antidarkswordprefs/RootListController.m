@@ -186,12 +186,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     ];
     if ([daemons containsObject:targetID]) return YES;
     
-    // Process string without periods (e.g. "backboardd")
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
-    
     if ([targetID containsString:@"daemon"]) return YES;
-    
-    // Specifically catch hidden Apple daemon bundles like com.apple.quicklook.QuickLookDaemon
     if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) {
         return YES;
     }
@@ -202,7 +198,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID {
     BOOL isDaemon = [self isDaemonTarget:targetID];
     
-    // Only communication apps that utilize IMCore/ChatKit properly support IMFileTransfer hooks
     BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
                         [targetID isEqualToString:@"com.apple.ActivityMessagesApp"] || 
                         [targetID isEqualToString:@"com.apple.iMessageAppsViewService"];
@@ -212,14 +207,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 
     if ([featureKey isEqualToString:@"disableJIT"] || 
+        [featureKey isEqualToString:@"disableJS"] || 
         [featureKey isEqualToString:@"disableRTC"] || 
         [featureKey isEqualToString:@"disableMedia"] || 
         [featureKey isEqualToString:@"disableFileAccess"]) {
-        return !isDaemon; // Daemons do not load WebKit UI, these switches are permanently inapplicable
+        return !isDaemon; // Daemons do not load WebKit UI
     }
 
     if ([featureKey isEqualToString:@"spoofUA"]) {
-        return YES; // UA Spoofing applies to both WebKit and Native Foundation HTTP Headers
+        return YES; 
     }
 
     return YES;
@@ -251,6 +247,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
             @{@"key": @"disableJIT", @"label": @"Disable JIT (JavaScript)"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript (iOS 15.X)"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
@@ -264,7 +261,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:featKey forKey:@"featureKey"];
             
-            // Logically grey out and lock switches that physically cannot do anything for the selected app
             if (isApplicable) {
                 [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
             } else {
@@ -283,17 +279,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize]; 
     
-    if (self.ruleType == 0) { // Preset
+    if (self.ruleType == 0) { 
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
         return @(![disabled containsObject:self.targetID]);
-    } else if (self.ruleType == 1) { // AltList
+    } else if (self.ruleType == 1) { 
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
         if ([defaults objectForKey:prefKey]) {
             return @([defaults boolForKey:prefKey]);
         }
         NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
         return apps[self.targetID] ?: @NO;
-    } else { // Custom Daemons
+    } else { 
         NSArray *active = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
         return @([active containsObject:self.targetID]);
     }
@@ -341,7 +337,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    // Hard override to force false/OFF on UI layer if feature physically does not apply
     if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
         return @NO;
     }
@@ -354,8 +349,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (!rules || rules[featureKey] == nil) { 
         NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
         if (level == 0) level = 1;
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 
-        if ([featureKey isEqualToString:@"disableJIT"]) return @YES; 
+        if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16OrGreater ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJS"]) return isIOS16OrGreater ? @NO : @YES; 
         
         if ([featureKey isEqualToString:@"spoofUA"]) {
             if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
@@ -373,6 +370,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([msgAndMail containsObject:self.targetID]) return @YES;
         
+        // Dynamic evaluation for Level 3 browsers
+        if (level >= 3 && ([featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"])) {
+            NSArray *browsers = @[
+                @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+            ];
+            if ([browsers containsObject:self.targetID]) return @YES;
+        }
+        
         return @NO; 
     }
     
@@ -382,7 +389,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    // Double check state logic before writing to disk
     if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
         return; 
     }
@@ -594,6 +600,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
         return;
     }
+    
+    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 
     NSArray *browsers = @[
         @"com.apple.mobilesafari", @"com.apple.SafariViewService",
@@ -622,7 +630,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
         NSMutableDictionary *rules = [NSMutableDictionary dictionary];
         
-        rules[@"disableJIT"] = [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID] ? @YES : @NO; 
+        rules[@"disableJIT"] = (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJS"] = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
+        
         rules[@"disableMedia"] = @NO;
         rules[@"disableRTC"] = @NO;
         rules[@"disableFileAccess"] = @NO;
