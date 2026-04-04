@@ -24,15 +24,15 @@ Because it targets the specific rendering and downloading processes that exploit
   * **Global Mitigations (BETA):** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
   * **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
   * **Tiered Protection:**
-      * **Level 1:** Protects native Apple apps and services (Mail and Messages receive maximum zero-click mitigation).
+      * **Level 1:** Protects native Apple apps and services (Safari, Mail and Messages).
       * **Level 2:** Expands protection to major third-party browsers and social media apps.
       * **Level 3:** Locks down critical system daemons to prevent daemon-level zero-clicks.
   * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific background tasks. Swipe-to-delete makes management easy.
 
 > [\!WARNING]
-> **All Levels disable email and text previews of files.** You have to hold the file down and save it to the Files app to view it.
+> **All Levels by default disable file previews for email and text.** You have to hold the file down and save it to the Files app to view it.
 >
-> **Level 3 restricts critical background daemons.** `imagent` and `mediaserverd` filtering may break media playback in some apps. Lower your level if you experience issues.
+> **Level 3 restricts critical background daemons.** `imagent` and `mediaserverd` filtering. Lower your level if you experience any issues.
 
 ## 🛑 Mitigated Exploits
 
