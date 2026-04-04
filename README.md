@@ -8,12 +8,14 @@ AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken de
 
 ## 🔍 How the Protection Works (Allow-By-Default)
 
-To protect yourself, you must go into the tweak settings and enable one of the **Preset Rules** tiers or explicitly **RESTRICT** the apps you want to lock down.
+To protect yourself, you must go into the tweak settings and enable one of the Preset Rules tiers or explicitly RESTRICT the apps you want to lock down.
 
-**🛡️ Lockdown Mode Update**
-You can now use this tweak instead of Apple's Native Lockdown Mode. AntiDarkSword effectively acts as a "Modular Lockdown Mode." It now hooks into the exact same WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) internal logic gates used by Apple's own security engineers.
+**🛡️ Modular Lockdown Mode & Firmware Awareness**
+You can now use this tweak instead of Apple's Native Lockdown Mode. AntiDarkSword effectively acts as a "Modular Lockdown Mode," featuring intelligent OS detection to adapt to your device's capabilities:
+* **For iOS 16+:** It hooks into the exact same WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) internal logic gates used by Apple's own security engineers to surgically disable the vulnerable JIT compiler.
+* **For iOS 15.x:** Because the native Lockdown Mode APIs do not exist on iOS 15, the tweak automatically detects your firmware and safely falls back to a strict JavaScript kill-switch. This guarantees that devices on older jailbreaks remain fully protected against WebKit zero-days without failing silently in the background.
 
-Because it targets the specific rendering and downloading processes that exploit kits use as entry points, **this tweak protects equally—if not more—against known zero-click payloads, while allowing you to keep essential system features functional.** You retain your wired accessory permissions, shared albums, smart home integrations, and the baseline UI of your safe apps, while neutralizing the exact memory-corruption vulnerabilities attackers rely on.
+Because it targets the specific rendering and downloading processes that exploit kits use as entry points, this tweak protects equally—if not more—against known zero-click payloads, while allowing you to keep essential system features functional. You retain your wired accessory permissions, shared albums, smart home integrations, and the baseline UI of your safe apps, while neutralizing the exact memory-corruption vulnerabilities attackers rely on.
 
 ## ✨ Features
 
