@@ -16,9 +16,9 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 
   * **WebKit Hardening:** Forcibly disables JavaScript execution, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views.
   * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation.
-  * **Granular App Controls (NEW):** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JavaScript for a specific browser? You can now do that.
-  * **Zero-Crash Architecture (NEW):** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
-  * **Global Mitigations BETA (NEW):** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
+  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JavaScript for a specific browser? You can now do that.
+  * **Zero-Crash Architecture:** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
+  * **Global Mitigations BETA:** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
   * **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
   * **Tiered Protection:**
       * **Level 1:** Protects native Apple apps and services.
