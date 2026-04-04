@@ -1,4 +1,4 @@
-<img width="852" height="1800" alt="readme" src="https://github.com/user-attachments/assets/7e9daa1e-9654-431a-a38d-52060296678c" />
+<img width="837" height="1791" alt="readme" src="https://github.com/user-attachments/assets/19eb296c-626d-46c1-a101-dfb3677fb72e" />
 
 # AntiDarkSword ⚔️
 
