@@ -3,6 +3,24 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
 
+// =========================================================
+// PRIVATE WEBKIT INTERFACES (JIT & LOCKDOWN MODE)
+// =========================================================
+@interface WKWebpagePreferences (Private)
+@property (nonatomic, assign) BOOL lockdownModeEnabled;
+@end
+
+@interface _WKProcessPoolConfiguration : NSObject
+@property (nonatomic, assign) BOOL JITEnabled;
+@end
+
+@interface WKProcessPool (Private)
+@property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
+@end
+
+// =========================================================
+// PRIVATE IMESSAGE INTERFACES
+// =========================================================
 @interface IMFileTransfer : NSObject
 - (BOOL)isAutoDownloadable;
 - (BOOL)canAutoDownload;
@@ -334,14 +352,26 @@ static void loadPrefs() {
 }
 %end
 
-
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     if (applyDisableJS) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+        // Modern iOS 16+ Surgical JIT Mitigation (Lockdown Mode)
+        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
+                [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
+            }
+        }
+        
+        // Legacy/Low-Level Surgical JIT Mitigation (Process Pool)
+        if ([configuration respondsToSelector:@selector(processPool)]) {
+            if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
+                id poolConfig = [(id)configuration.processPool _configuration];
+                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
+                    [(id)poolConfig setJITEnabled:NO];
+                }
+            }
+        }
     }
     
     if (applyDisableMedia) {
@@ -383,10 +413,22 @@ static void loadPrefs() {
 - (instancetype)initWithCoder:(NSCoder *)coder {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
+    
     if (applyDisableJS) {
-        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            if ([webView.configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
+                [(id)webView.configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
+            }
+        }
+        
+        if ([webView.configuration respondsToSelector:@selector(processPool)]) {
+            if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
+                id poolConfig = [(id)webView.configuration.processPool _configuration];
+                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
+                    [(id)poolConfig setJITEnabled:NO];
+                }
+            }
+        }
     }
     
     if (applyDisableMedia) {
@@ -422,15 +464,6 @@ static void loadPrefs() {
 }
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
-    if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
-    }
-    
     if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
             self.customUserAgent = customUAString;
@@ -445,49 +478,16 @@ static void loadPrefs() {
             }
         }
     }
-    
     return %orig;
 }
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
-    if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
-    }
-    
     if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
             self.customUserAgent = customUAString;
         }
     }
-    
     return %orig;
-}
-
-- (void)evaluateJavaScript:(NSString *)javaScriptString completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
-        if (completionHandler) {
-            NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
-            completionHandler(nil, err);
-        }
-        return;
-    }
-    %orig;
-}
-
-- (void)evaluateJavaScript:(NSString *)javaScriptString inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
-        if (completionHandler) {
-            NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
-            completionHandler(nil, err);
-        }
-        return;
-    }
-    %orig;
 }
 
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
@@ -496,44 +496,6 @@ static void loadPrefs() {
     } else {
         %orig;
     }
-}
-%end
-
-%hook WKWebpagePreferences
-- (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (applyDisableJS && allowed) {
-        return %orig(NO);
-    }
-    %orig;
-}
-%end
-
-%hook WKPreferences
-- (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (applyDisableJS && enabled) {
-        return %orig(NO);
-    }
-    %orig;
-}
-%end
-
-%hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (applyDisableJS) {
-        return NULL;
-    }
-    return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
-}
-
-// =========================================================
-// LEGACY UIWEBVIEW NEUTRALIZATION
-// =========================================================
-
-%hook UIWebView
-- (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (applyDisableJS) {
-        return @"";
-    }
-    return %orig;
 }
 %end
 
