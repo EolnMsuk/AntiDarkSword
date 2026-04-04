@@ -44,6 +44,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @interface AntiDarkSwordAppController : PSListController
 @property (nonatomic, strong) NSString *targetID;
 @property (nonatomic, assign) NSInteger ruleType;
++ (BOOL)isDaemonTarget:(NSString *)targetID;
++ (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID;
 @end
 
 // ==========================================
@@ -173,6 +175,56 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // App-Specific Feature Drill-Down Implementation
 // ==========================================
 @implementation AntiDarkSwordAppController
+
++ (BOOL)isDaemonTarget:(NSString *)targetID {
+    if (!targetID) return NO;
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
+        @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
+    ];
+    if ([daemons containsObject:targetID]) return YES;
+    
+    // Process string without periods (e.g. "backboardd")
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
+    
+    if ([targetID containsString:@"daemon"]) return YES;
+    
+    // Specifically catch hidden Apple daemon bundles like com.apple.quicklook.QuickLookDaemon
+    if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) {
+        return YES;
+    }
+    
+    return NO;
+}
+
++ (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID {
+    BOOL isDaemon = [self isDaemonTarget:targetID];
+    
+    // Only communication apps that utilize IMCore/ChatKit properly support IMFileTransfer hooks
+    BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
+                        [targetID isEqualToString:@"com.apple.ActivityMessagesApp"] || 
+                        [targetID isEqualToString:@"com.apple.iMessageAppsViewService"];
+
+    if ([featureKey isEqualToString:@"disableIMessageDL"]) {
+        return isMessageApp;
+    }
+
+    if ([featureKey isEqualToString:@"disableJIT"] || 
+        [featureKey isEqualToString:@"disableRTC"] || 
+        [featureKey isEqualToString:@"disableMedia"] || 
+        [featureKey isEqualToString:@"disableFileAccess"]) {
+        return !isDaemon; // Daemons do not load WebKit UI, these switches are permanently inapplicable
+    }
+
+    if ([featureKey isEqualToString:@"spoofUA"]) {
+        return YES; // UA Spoofing applies to both WebKit and Native Foundation HTTP Headers
+    }
+
+    return YES;
+}
+
 - (void)setSpecifier:(PSSpecifier *)specifier {
     [super setSpecifier:specifier];
     self.targetID = [specifier propertyForKey:@"targetID"];
@@ -193,7 +245,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [featGroup setProperty:@"Disabling specific mitigations can improve app compatibility while slightly reducing your security posture." forKey:@"footerText"];
+        [featGroup setProperty:@"Features that do not apply to this target type are permanently disabled." forKey:@"footerText"];
         [specs addObject:featGroup];
         
         NSArray *features = @[
@@ -206,9 +258,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         ];
         
         for (NSDictionary *feat in features) {
+            NSString *featKey = feat[@"key"];
+            BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
+            
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
-            [spec setProperty:feat[@"key"] forKey:@"featureKey"];
-            [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
+            [spec setProperty:featKey forKey:@"featureKey"];
+            
+            // Logically grey out and lock switches that physically cannot do anything for the selected app
+            if (isApplicable) {
+                [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
+            } else {
+                [spec setProperty:@NO forKey:@"enabled"];
+            }
+            
             [specs addObject:spec];
         }
         
@@ -277,25 +339,30 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (id)getFeatureValue:(PSSpecifier *)specifier {
+    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
+    
+    // Hard override to force false/OFF on UI layer if feature physically does not apply
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
+        return @NO;
+    }
+
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize]; 
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
-    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    // Dynamic defaults if no hardcoded rule exists yet
     if (!rules || rules[featureKey] == nil) { 
-        NSArray *daemons = @[
-            @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
-            @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
-            @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
-            @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
-        ];
-        NSArray *browsers = @[
-            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
-        ];
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
+
+        if ([featureKey isEqualToString:@"disableJIT"]) return @YES; 
+        
+        if ([featureKey isEqualToString:@"spoofUA"]) {
+            if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
+            if ([self.targetID hasPrefix:@"com.apple."]) return @NO; 
+            return (level >= 2) ? @YES : @NO; 
+        }
+        
         NSArray *msgAndMail = @[
             @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
@@ -304,32 +371,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord"
         ];
         
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-        if (level == 0) level = 1;
-
-        if ([featureKey isEqualToString:@"disableJIT"]) {
-            return @YES; // JIT disabled across all restricted apps globally
-        }
-
-        if ([featureKey isEqualToString:@"spoofUA"]) {
-            if ([daemons containsObject:self.targetID] || [self.targetID containsString:@"daemon"] || [self.targetID hasSuffix:@"d"]) return @NO;
-            if ([self.targetID hasPrefix:@"com.apple."]) return @NO; 
-            return (level >= 2) ? @YES : @NO; 
-        }
+        if ([msgAndMail containsObject:self.targetID]) return @YES;
         
-        if ([daemons containsObject:self.targetID] || [self.targetID containsString:@"daemon"] || [self.targetID hasSuffix:@"d"]) {
-            return @YES; // Daemons are fully locked down (RTC, Media, Files)
-        }
-        
-        if ([msgAndMail containsObject:self.targetID]) {
-            return @YES; // Mail & Msg are fully locked down to prevent 0-clicks
-        }
-
-        if ([browsers containsObject:self.targetID]) {
-            return @NO; // Browsers ONLY restrict JIT, other features left intact
-        }
-
-        // Default for remaining 3rd party apps
         return @NO; 
     }
     
@@ -337,11 +380,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
+    
+    // Double check state logic before writing to disk
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
+        return; 
+    }
+
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSMutableDictionary *rules = [[defaults dictionaryForKey:dictKey] mutableCopy] ?: [NSMutableDictionary dictionary];
     
-    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     rules[featureKey] = value;
     
     [defaults setObject:rules forKey:dictKey];
@@ -563,13 +612,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord"
     ];
 
-    NSArray *daemons = @[
-        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
-        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
-        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
-        @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
-    ];
-
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     for (NSString *targetID in allProtected) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
@@ -580,8 +622,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
         NSMutableDictionary *rules = [NSMutableDictionary dictionary];
         
-        // Base Mitigation: JIT disabled everywhere
-        rules[@"disableJIT"] = @YES; 
+        rules[@"disableJIT"] = [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID] ? @YES : @NO; 
         rules[@"disableMedia"] = @NO;
         rules[@"disableRTC"] = @NO;
         rules[@"disableFileAccess"] = @NO;
@@ -589,25 +630,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         rules[@"spoofUA"] = @NO;
         
         if ([msgAndMail containsObject:targetID]) {
-            // Apply maximum 0-click prevention to Mail & Messages
-            rules[@"disableMedia"] = @YES;
-            rules[@"disableRTC"] = @YES;
-            rules[@"disableFileAccess"] = @YES;
-            rules[@"disableIMessageDL"] = @YES;
+            rules[@"disableMedia"] = [AntiDarkSwordAppController isApplicableFeature:@"disableMedia" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableRTC"] = [AntiDarkSwordAppController isApplicableFeature:@"disableRTC" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableFileAccess"] = [AntiDarkSwordAppController isApplicableFeature:@"disableFileAccess" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableIMessageDL"] = [AntiDarkSwordAppController isApplicableFeature:@"disableIMessageDL" forTarget:targetID] ? @YES : @NO;
             if (![targetID hasPrefix:@"com.apple."]) {
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
         } else if ([browsers containsObject:targetID]) {
-            // Level 1: ONLY JIT restricted. Level 2/3: Spoofed UA enabled
             rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
-        } else if ([daemons containsObject:targetID] || [targetID containsString:@"daemon"] || [targetID hasSuffix:@"d"]) {
-            // Daemons get strongest known zero-click mitigations
-            rules[@"disableMedia"] = @YES;
-            rules[@"disableRTC"] = @YES;
-            rules[@"disableFileAccess"] = @YES;
-            rules[@"disableIMessageDL"] = @YES;
+        } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
+            // WebKit mitigations forcefully skipped. User Agent defaults to NO.
         } else {
-            // Remaining Level 1 native apps and Level 2 3rd party apps
             if (![targetID hasPrefix:@"com.apple."]) {
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
@@ -850,7 +884,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [self setPreferenceValue:value specifier:specifier];
         }]];
         [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-            [self reloadSpecifiers]; // Revert switch UI bounce back
+            [self reloadSpecifiers]; 
         }]];
         [self presentViewController:alert animated:YES completion:nil];
     } else {
