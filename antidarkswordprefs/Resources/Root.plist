@@ -189,7 +189,8 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names. Swipe left on any custom ID below to delete it.</string>
+            <string>Add bundle IDs or process names.
+Swipe left on any custom ID below to delete it.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -239,6 +240,22 @@
             <string>globalDisableJIT</string>
             <key>label</key>
             <string>Disable JIT (JavaScript)</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableJS</string>
+            <key>label</key>
+            <string>Disable JavaScript (iOS 15.X)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
