@@ -10,18 +10,21 @@ AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken de
 
 To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Preset Rules** tiers.
 
-> **Note:** You can specify *which* protections are active for what apps. Some restrictions will break UI, specifically JavaScript.
+**🛡️ Lockdown Mode Synergy**
+For the ultimate security posture, you can use this tweak in combination with Apple's native Lockdown Mode. AntiDarkSword effectively acts as a "Modular Lockdown Mode." It hooks into the exact same WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) internal logic gates used by Apple's own security engineers.
+
+Because it targets the specific rendering and downloading processes that exploit kits use as entry points, **this tweak protects equally—if not more—against known zero-click payloads, while allowing you to keep essential system features functional.** You retain your wired accessory permissions, shared albums, smart home integrations, and the baseline UI of your safe apps, while neutralizing the exact memory-corruption vulnerabilities attackers rely on.
 
 ## ✨ Features
 
-  * **WebKit Hardening:** Forcibly disables JavaScript execution, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views.
-  * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation.
-  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JavaScript for a specific browser? You can now do that.
+  * **WebKit Hardening:** Forcibly disables the JIT (JavaScript) compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views. By disabling the highly-targeted JIT compiler while allowing baseline interpreted JavaScript, your apps retain their UI functionality while neutralizing memory-corruption zero-days.
+  * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation within IMCore and ChatKit.
+  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JIT enabled for a specific browser? You can do that. *Note: Settings that physically do not apply to a specific app or background daemon are intelligently greyed out to prevent confusion.*
   * **Zero-Crash Architecture:** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
-  * **Global Mitigations BETA:** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
+  * **Global Mitigations (BETA):** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
   * **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
   * **Tiered Protection:**
-      * **Level 1:** Protects native Apple apps and services.
+      * **Level 1:** Protects native Apple apps and services (Mail and Messages receive maximum zero-click mitigation).
       * **Level 2:** Expands protection to major third-party browsers and social media apps.
       * **Level 3:** Locks down critical system daemons to prevent daemon-level zero-clicks.
   * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific background tasks. Swipe-to-delete makes management easy.
@@ -33,7 +36,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
 
 ## 🛑 Mitigated Exploits
 
-By disabling WebKit and JavaScriptCore attack vectors, this tweak prevents several known exploit chains:
+By disabling WebKit JIT and JavaScriptCore attack vectors, this tweak prevents several known exploit chains:
 
   * **DarkSword:** Full-chain, JavaScript-based exploit kit (iOS 18.4 – 18.7).
   * **Coruna:** JavaScript-reliant iOS exploit kit (iOS 13.0 – 17.2.1).
@@ -89,7 +92,7 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 2.  Toggle **ON** the master `Enable Protection` switch.
 3.  **User Agent Spoofing:** Select a preset modern user agent (or enter a custom string) to bypass fingerprinting modules.
 4.  **Choose your protection rules:**
-      * **Preset Rules:** Select Level 1, 2, or 3. The protected apps will dynamically appear below. Tap on any app to view or modify its specific mitigation features (like disabling JS vs Media).
+      * **Preset Rules:** Select Level 1, 2, or 3. The protected apps will dynamically appear below. Tap on any app to view or modify its specific mitigation features.
       * **Manual Rules:** Use the **Select Apps...** menu to target apps not covered by your preset. They will highlight in green, and you can tap them to customize their rules.
       * **Advanced Custom Rules:** Add hidden background daemons manually using comma-separated strings.
 5.  **Global Mitigations (BETA):** Use these switches to indiscriminately apply a mitigation to *every* process on the phone. **Warning:** This will break core app functionality and is intended for extreme scenarios only.
@@ -103,5 +106,7 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 ## 👨‍💻 Developer
 
 Created by: [EolnMsuk](https://github.com/EolnMsuk)
+
+Donate 🤗: [eolnmsuk](https://venmo.com/user/eolnmsuk)
 
 Donate 🤗: [eolnmsuk](https://venmo.com/user/eolnmsuk)
