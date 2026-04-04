@@ -10,7 +10,7 @@ AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken de
 
 To protect yourself, you must go into the tweak settings and explicitly **RESTRICT** the apps you want to lock down. You can do this manually by selecting specific apps, or by enabling the built-in **Preset Rules** tiers.
 
-> **Note:** Restricting an app means it will no longer be able to run interactive web elements. Web pages will still load text and images (HTML/CSS), but apps built with native UI like YouTube and Discord will continue to function normally. You can now also dive into specific apps and customize exactly *which* protections are active for them.
+> **Note:** You can specify protection and customize exactly *which* protections are active for what apps. Some restrictions will break UI, specifically JavaScript.
 
 ## ✨ Features
 
