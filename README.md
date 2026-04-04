@@ -27,7 +27,7 @@ To protect yourself, you must go into the tweak settings and explicitly **RESTRI
   * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific background tasks. Swipe-to-delete makes management easy.
 
 > [\!WARNING]
-> **Level 1 disables email and text previews of files.** You have to hold the file down and save it to the Files app to view it.
+> **All Levels disable email and text previews of files.** You have to hold the file down and save it to the Files app to view it.
 >
 > **Level 3 restricts critical background daemons.** `imagent` and `mediaserverd` filtering may break media playback in some apps. Lower your level if you experience issues.
 
