@@ -639,6 +639,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         } else if ([browsers containsObject:targetID]) {
             rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
+            
+            // Forcefully disable WebGL, WebRTC, and Media Auto-Play on Level 3
+            if (level >= 3) {
+                rules[@"disableRTC"] = @YES;
+                rules[@"disableMedia"] = @YES;
+            }
         } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
             // WebKit mitigations forcefully skipped. User Agent defaults to NO.
         } else {
