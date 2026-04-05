@@ -199,7 +199,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
                         [targetID isEqualToString:@"com.apple.ActivityMessagesApp"] || 
-                        [targetID isEqualToString:@"com.apple.iMessageAppsViewService"];
+                        [targetID isEqualToString:@"com.apple.iMessageAppsViewService"] ||
+                        [targetID containsString:@"imagent"];
 
     if ([featureKey isEqualToString:@"disableIMessageDL"]) {
         return isMessageApp;
@@ -268,7 +269,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable iOS 16 JIT"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT"},
             @{@"key": @"disableJIT15", @"label": @"Disable iOS 15 JIT"},
             @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
@@ -394,7 +395,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if (!rules || rules[featureKey] == nil) { 
         
-        // Ensure manual/non-preset apps default to ALL OFF
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
         if (![allProtected containsObject:self.targetID]) {
@@ -433,6 +433,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
             ];
             if ([browsers containsObject:self.targetID]) return @YES;
+        }
+        
+        // Secure default for daemon IM downloading
+        if ([self.targetID containsString:@"imagent"]) {
+            if ([featureKey isEqualToString:@"disableIMessageDL"]) return @YES;
         }
         
         return @NO; 
@@ -488,49 +493,25 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @implementation AntiDarkSwordPrefsRootListController
 
 - (BOOL)isTargetInstalled:(NSString *)targetID {
-    NSArray *coreServices = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.networkd",
-        @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.SafariViewService",
-        @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
-        @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
-        @"com.apple.QuickLookDaemon", @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork",
-        @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
+        @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
     ];
-    
-    if ([coreServices containsObject:targetID]) {
-        return YES;
-    }
-    
-    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
-        return YES; 
-    }
+    if ([daemons containsObject:targetID]) return YES;
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES; 
 
     @try {
         Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
         if (LSAppWorkspace) {
-            LSApplicationWorkspace *workspace = [LSAppWorkspace defaultWorkspace];
+            id workspace = [LSAppWorkspace defaultWorkspace];
             if (workspace && [workspace respondsToSelector:@selector(applicationIsInstalled:)]) {
-                if ([workspace applicationIsInstalled:targetID]) {
-                    return YES;
-                }
+                return [workspace applicationIsInstalled:targetID];
             }
         }
     } @catch (NSException *e) {}
-
-    @try {
-        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
-        if (LSAppProxy) {
-            LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
-            if (proxy && [proxy respondsToSelector:@selector(bundleURL)]) {
-                NSURL *bundleURL = [proxy bundleURL];
-                if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) {
-                    return YES;
-                }
-            }
-        }
-    } @catch (NSException *e) {}
-
+    
     return NO;
 }
 
@@ -625,35 +606,60 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (UIImage *)iconForTargetID:(NSString *)targetID {
     UIImage *icon = nil;
     
-    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
-        NSArray *daemons = @[
-            @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
-            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
-            @"com.apple.cfnetwork"
-        ];
-        
-        if (![daemons containsObject:targetID]) {
-            @try {
-                if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
-                    icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
-                }
-            } @catch (NSException *e) {}
+    @try {
+        if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+            icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
         }
-    }
+    } @catch (NSException *e) {}
     
+    // Dynamic Native SF Symbol Fallback for uninstalled apps & daemons
     if (!icon) {
+        NSDictionary *sfMap = @{
+            @"com.squareup.cash": @"dollarsign.square.fill",
+            @"com.venmo.Venmo": @"v.circle.fill",
+            @"com.yourcompany.PPClient": @"creditcard.fill",
+            @"com.robinhood.release.Robinhood": @"chart.line.uptrend.xyaxis.circle.fill",
+            @"com.coinbase.consumer": @"bitcoinsign.circle.fill",
+            @"com.sixdays.trust": @"shield.checkmark",
+            @"io.metamask.MetaMask": @"lock.shield.fill",
+            @"app.phantom.phantom": @"ghost.fill",
+            @"com.chase": @"building.columns.fill",
+            @"com.bankofamerica.BofAMobileBanking": @"building.columns.fill",
+            @"com.wellsfargo.net.mobilebanking": @"building.columns.fill",
+            @"com.citi.citimobile": @"building.columns.fill",
+            @"com.capitalone.enterprisemobilebanking": @"building.columns.fill",
+            @"com.americanexpress.amelia": @"creditcard.fill",
+            @"com.fidelity.iphone": @"chart.pie.fill",
+            @"com.schwab.mobile": @"chart.bar.fill",
+            @"com.etrade.mobilepro.iphone": @"chart.line.uptrend.xyaxis",
+            @"com.apple.imagent": @"message.fill",
+            @"imagent": @"message.fill",
+            @"com.apple.mediaserverd": @"play.tv.fill",
+            @"mediaserverd": @"play.tv.fill",
+            @"com.apple.networkd": @"network",
+            @"networkd": @"network",
+            @"com.apple.apsd": @"bell.badge.fill",
+            @"apsd": @"bell.badge.fill",
+            @"com.apple.identityservicesd": @"person.crop.circle.badge.checkmark",
+            @"identityservicesd": @"person.crop.circle.badge.checkmark",
+            @"com.apple.Passbook": @"wallet.pass.fill"
+        };
+        
+        NSString *symbolName = sfMap[targetID] ?: @"gearshape.fill";
+        
         if (@available(iOS 13.0, *)) {
-            icon = [UIImage systemImageNamed:@"gearshape.fill"];
-            icon = [icon imageWithTintColor:[UIColor systemGrayColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
+            UIImage *sym = [UIImage systemImageNamed:symbolName];
+            if (sym) {
+                UIColor *tint = [symbolName isEqualToString:@"gearshape.fill"] ? [UIColor systemGrayColor] : [UIColor systemBlueColor];
+                if ([targetID containsString:@"cash"] || [targetID containsString:@"robinhood"]) tint = [UIColor systemGreenColor];
+                if ([targetID containsString:@"phantom"] || [targetID containsString:@"metamask"]) tint = [UIColor systemPurpleColor];
+                icon = [sym imageWithTintColor:tint renderingMode:UIImageRenderingModeAlwaysOriginal];
+            }
         }
     }
     
     if (icon) {
-        CGSize newSize = CGSizeMake(23, 23);
+        CGSize newSize = CGSizeMake(29, 29);
         UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
         [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
         UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
@@ -724,7 +730,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 rules[@"disableMedia"] = @YES;
             }
         } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
-            // WebKit mitigations forcefully skipped.
+            if ([targetID containsString:@"imagent"]) {
+                rules[@"disableIMessageDL"] = @YES;
+            }
         } else {
             if (![targetID hasPrefix:@"com.apple."]) {
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
