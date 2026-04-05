@@ -20,8 +20,10 @@ jobs:
         with:
           theos-sdks: 'https://github.com/theos/sdks'
 
-      - name: Load Local AltList Framework
+      - name: Fix AltList Path & Load Framework
         run: |
+          echo "Fixing AltList dylib ID for rootless Dopamine..."
+          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           echo "Copying AltList.framework from local repository to Theos..."
           cp -r vendor/AltList.framework $THEOS/lib/
 
