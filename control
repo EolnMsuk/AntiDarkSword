@@ -3,7 +3,7 @@ Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 3.7
 Architecture: iphoneos-arm64
-Description: A security-focused jailbreak tweak designed to act as a system-wide JavaScript kill-switch and exploit mitigation tool.
+Description: A security framework that mitigates zero-click messaging payloads and browser RCEs through aggressive daemon restrictions and granular WebKit isolation.
 Maintainer: eolnmsuk
 Author: eolnmsuk
 Section: Tweaks
