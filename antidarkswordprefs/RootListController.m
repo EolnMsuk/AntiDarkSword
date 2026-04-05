@@ -206,7 +206,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return isMessageApp;
     }
     
-    // Forcefully grey out JIT on iOS 15, as the API does not exist
     BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
     if (!isIOS16OrGreater && [featureKey isEqualToString:@"disableJIT"]) {
         return NO;
@@ -237,6 +236,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults synchronize];
         
         PSSpecifier *enableGroup = [PSSpecifier preferenceSpecifierNamed:@"Rule Status" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:enableGroup];
@@ -260,6 +261,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}
         ];
         
+        // Retrieve current JS status to handle JIT locking logic
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
+        NSDictionary *rules = [defaults dictionaryForKey:dictKey];
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL isJSTurnedOn = NO;
+        if (rules && rules[@"disableJS"] != nil) {
+            isJSTurnedOn = [rules[@"disableJS"] boolValue];
+        } else {
+            isJSTurnedOn = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
+        }
+        
         for (NSDictionary *feat in features) {
             NSString *featKey = feat[@"key"];
             BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
@@ -268,7 +280,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [spec setProperty:featKey forKey:@"featureKey"];
             
             if (isApplicable) {
-                [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
+                // LOCK JIT if iOS 16+ and JS is enabled
+                if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                } else {
+                    [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
+                }
             } else {
                 [spec setProperty:@NO forKey:@"enabled"];
             }
@@ -404,16 +421,24 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     rules[featureKey] = value;
     
-    // Cascading JS to JIT Logic (iOS 16+)
-    if ([featureKey isEqualToString:@"disableJS"] && [value boolValue]) {
+    // Cascading JS to JIT Logic & UI Lock
+    if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-        if (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
+        if ([value boolValue] && isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
             rules[@"disableJIT"] = @YES;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self->_specifiers = nil;
-                [self reloadSpecifiers];
-            });
         }
+        
+        [defaults setObject:rules forKey:dictKey];
+        [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+        [defaults synchronize];
+        
+        // Force reload UI immediately to lock/unlock the JIT switch visually
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_specifiers = nil;
+            [self reloadSpecifiers];
+        });
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        return;
     }
     
     [defaults setObject:rules forKey:dictKey];
@@ -736,6 +761,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
         [defaults synchronize]; 
         
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
+        
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
             selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -757,6 +785,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
         for (PSSpecifier *s in specs) {
+            // Apply Global JIT UI Lock if Global JS is ON (iOS 16+)
+            if ([[s propertyForKey:@"key"] isEqualToString:@"globalDisableJIT"]) {
+                if (isIOS16OrGreater && globalJSEnabled) {
+                    [s setProperty:@NO forKey:@"enabled"];
+                }
+            }
+            
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
             }
@@ -918,7 +953,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [self setPreferenceValue:value specifier:specifier];
             
-            // Cascading Global JS to JIT Logic (iOS 16+)
+            // Cascading Global JS to JIT Logic & UI Lock (iOS 16+)
             if ([key isEqualToString:@"globalDisableJS"]) {
                 BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
                 if (isIOS16OrGreater) {
@@ -928,6 +963,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 }
             }
             
+            // Force reload UI immediately to lock the JIT switch visually
             dispatch_async(dispatch_get_main_queue(), ^{
                 self->_specifiers = nil;
                 [self reloadSpecifiers];
@@ -940,6 +976,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         [self setPreferenceValue:value specifier:specifier];
+        
+        // Unlock JIT switch when Global JS is turned OFF
+        if ([key isEqualToString:@"globalDisableJS"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }
     }
 }
 
