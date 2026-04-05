@@ -41,6 +41,7 @@ static BOOL shouldSpoofUA = NO;
 
 // Global Overrides
 static BOOL globalDisableJIT = NO;
+static BOOL globalDisableJIT15 = NO;
 static BOOL globalDisableJS = NO;
 static BOOL globalDisableMedia = NO;
 static BOOL globalDisableRTC = NO;
@@ -49,6 +50,7 @@ static BOOL globalDisableIMessageDL = NO;
 
 // App-Specific Granular Features
 static BOOL disableJIT = YES;
+static BOOL disableJIT15 = YES;
 static BOOL disableJS = YES;
 static BOOL disableMedia = YES;
 static BOOL disableRTC = YES;
@@ -57,6 +59,7 @@ static BOOL disableIMessageDL = YES;
 
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
+static BOOL applyDisableJIT15 = NO;
 static BOOL applyDisableJS = NO;
 static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
@@ -121,6 +124,7 @@ static void loadPrefs() {
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableJIT = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT"] boolValue] : NO;
+        globalDisableJIT15 = [prefs[@"globalDisableJIT15"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT15"] boolValue] : NO;
         globalDisableJS = [prefs[@"globalDisableJS"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJS"] boolValue] : NO;
         globalDisableMedia = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableMedia"] boolValue] : NO;
         globalDisableRTC = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableRTC"] boolValue] : NO;
@@ -234,6 +238,7 @@ static void loadPrefs() {
     disableIMessageDL = YES;
     BOOL spoofUARule = YES;
     disableJIT = YES;
+    disableJIT15 = YES;
     disableJS = YES;
     disableFileAccess = YES;
 
@@ -242,6 +247,7 @@ static void loadPrefs() {
         NSDictionary *appRules = prefs[dictKey];
         if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
             if ([appRules[@"disableJIT"] respondsToSelector:@selector(boolValue)]) disableJIT = [appRules[@"disableJIT"] boolValue];
+            if ([appRules[@"disableJIT15"] respondsToSelector:@selector(boolValue)]) disableJIT15 = [appRules[@"disableJIT15"] boolValue];
             if ([appRules[@"disableJS"] respondsToSelector:@selector(boolValue)]) disableJS = [appRules[@"disableJS"] boolValue];
             if ([appRules[@"disableMedia"] respondsToSelector:@selector(boolValue)]) disableMedia = [appRules[@"disableMedia"] boolValue];
             if ([appRules[@"disableRTC"] respondsToSelector:@selector(boolValue)]) disableRTC = [appRules[@"disableRTC"] boolValue];
@@ -252,6 +258,7 @@ static void loadPrefs() {
     }
 
     applyDisableJIT = globalTweakEnabled && (globalDisableJIT || (currentProcessRestricted && disableJIT));
+    applyDisableJIT15 = globalTweakEnabled && (globalDisableJIT15 || (currentProcessRestricted && disableJIT15));
     applyDisableJS = globalTweakEnabled && (globalDisableJS || (currentProcessRestricted && disableJS));
     applyDisableMedia = globalTweakEnabled && (globalDisableMedia || (currentProcessRestricted && disableMedia));
     applyDisableRTC = globalTweakEnabled && (globalDisableRTC || (currentProcessRestricted && disableRTC));
@@ -325,21 +332,24 @@ static void loadPrefs() {
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     
-    // iOS 15 Nuclear Fallback
+    // Nuclear Fallback
     if (applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
 
-    // iOS 16 Surgical Fallback
+    // iOS 16 Surgical JIT Mitigation
     if (applyDisableJIT) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
                 [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
             }
         }
-        
+    }
+    
+    // iOS 15 Surgical JIT Mitigation (Reddit Private Method)
+    if (applyDisableJIT15 || applyDisableJIT) {
         if ([configuration respondsToSelector:@selector(processPool)]) {
             if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
                 id poolConfig = [(id)configuration.processPool _configuration];
@@ -390,21 +400,24 @@ static void loadPrefs() {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     
-    // iOS 15 Nuclear Fallback
+    // Nuclear Fallback
     if (applyDisableJS) {
         if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
         if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
 
-    // iOS 16 Surgical Fallback
+    // iOS 16 Surgical JIT Mitigation
     if (applyDisableJIT) {
         if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             if ([webView.configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
                 [(id)webView.configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
             }
         }
-        
+    }
+    
+    // iOS 15 Surgical JIT Mitigation (Reddit Private Method)
+    if (applyDisableJIT15 || applyDisableJIT) {
         if ([webView.configuration respondsToSelector:@selector(processPool)]) {
             if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
                 id poolConfig = [(id)webView.configuration.processPool _configuration];
