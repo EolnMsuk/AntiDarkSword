@@ -189,8 +189,7 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names.
-Swipe left on any custom ID below to delete it.</string>
+            <string>Add bundle IDs or process names. Swipe left on rules below to remove.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -211,8 +210,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>label</key>
             <string>Global Mitigation Rules (BETA)</string>
             <key>footerText</key>
-            <string>Enabling these options enables that mitigation system-wide.
-"Enable Protection" at the top must remain ON for these to apply.</string>
+            <string>Enable specific mitigations system-wide.</string>
         </dict>
         <dict>
             <key>cell</key>
