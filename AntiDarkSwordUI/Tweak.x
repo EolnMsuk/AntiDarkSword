@@ -278,6 +278,8 @@ static void loadPrefs() {
         } else if ([browsers containsObject:matchedID]) {
             spoofUARule = (autoProtectLevel >= 2);
             if (autoProtectLevel >= 3) { disableRTC = YES; disableMedia = YES; }
+        } else if ([matchedID containsString:@"imagent"]) {
+            disableIMessageDL = YES;
         } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
             // Daemons skip webkit mitigations by default
         } else {
