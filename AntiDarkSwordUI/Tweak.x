@@ -19,17 +19,13 @@
 @end
 
 // =========================================================
-// PRIVATE IMESSAGE INTERFACES
+// PRIVATE IMESSAGE INTERFACES (UI LEVEL)
 // =========================================================
-@interface IMFileTransfer : NSObject
-- (BOOL)isAutoDownloadable;
-- (BOOL)canAutoDownload;
-@end
-
 @interface CKAttachmentMessagePartChatItem : NSObject
 - (BOOL)_needsPreviewGeneration;
 @end
 
+// Rootless Path
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
@@ -214,20 +210,15 @@ static void loadPrefs() {
                 @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
                 @"com.etrade.mobilepro.iphone"
             ];
-            NSArray *tier3 = @[
-                @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
-            ];
             
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
                 else if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) targetMatch = bundleID;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) targetMatch = bundleID;
             }
             if (!targetMatch && processName) {
                 if ([tier1 containsObject:processName]) targetMatch = processName;
                 else if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) targetMatch = processName;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) targetMatch = processName;
             }
             
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
@@ -278,10 +269,6 @@ static void loadPrefs() {
         } else if ([browsers containsObject:matchedID]) {
             spoofUARule = (autoProtectLevel >= 2);
             if (autoProtectLevel >= 3) { disableRTC = YES; disableMedia = YES; }
-        } else if ([matchedID containsString:@"imagent"]) {
-            disableIMessageDL = YES;
-        } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
-            // Daemons skip webkit mitigations by default
         } else {
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         }
@@ -378,14 +365,12 @@ static void loadPrefs() {
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     
-    // Nuclear Fallback
     if (applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
 
-    // iOS 16 Surgical JIT Mitigation
     if (applyDisableJIT) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
@@ -394,7 +379,6 @@ static void loadPrefs() {
         }
     }
     
-    // iOS 15 Surgical JIT Mitigation
     if (applyDisableJIT15 || applyDisableJIT) {
         if ([configuration respondsToSelector:@selector(processPool)]) {
             if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
@@ -446,14 +430,12 @@ static void loadPrefs() {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     
-    // Nuclear Fallback
     if (applyDisableJS) {
         if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
         if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
 
-    // iOS 16 Surgical JIT Mitigation
     if (applyDisableJIT) {
         if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             if ([webView.configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
@@ -462,7 +444,6 @@ static void loadPrefs() {
         }
     }
     
-    // iOS 15 Surgical JIT Mitigation
     if (applyDisableJIT15 || applyDisableJIT) {
         if ([webView.configuration respondsToSelector:@selector(processPool)]) {
             if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
@@ -621,23 +602,8 @@ static void loadPrefs() {
 %end
 
 // =========================================================
-// NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
+// NATIVE IMESSAGE MITIGATIONS (UI PREVIEW LEVEL)
 // =========================================================
-
-%hook IMFileTransfer
-- (BOOL)isAutoDownloadable {
-    if (applyDisableIMessageDL) {
-        return NO;
-    }
-    return %orig;
-}
-- (BOOL)canAutoDownload {
-    if (applyDisableIMessageDL) {
-        return NO;
-    }
-    return %orig;
-}
-%end
 
 %hook CKAttachmentMessagePartChatItem
 - (BOOL)_needsPreviewGeneration {
