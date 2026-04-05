@@ -205,6 +205,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if ([featureKey isEqualToString:@"disableIMessageDL"]) {
         return isMessageApp;
     }
+    
+    // Forcefully grey out JIT on iOS 15, as the API does not exist
+    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+    if (!isIOS16OrGreater && [featureKey isEqualToString:@"disableJIT"]) {
+        return NO;
+    }
 
     if ([featureKey isEqualToString:@"disableJIT"] || 
         [featureKey isEqualToString:@"disableJS"] || 
@@ -246,8 +252,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable JIT (JavaScript)"},
-            @{@"key": @"disableJS", @"label": @"Disable JavaScript (iOS 15.X)"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
@@ -370,7 +376,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([msgAndMail containsObject:self.targetID]) return @YES;
         
-        // Dynamic evaluation for Level 3 browsers
         if (level >= 3 && ([featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"])) {
             NSArray *browsers = @[
                 @"com.apple.mobilesafari", @"com.apple.SafariViewService",
@@ -398,6 +403,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSMutableDictionary *rules = [[defaults dictionaryForKey:dictKey] mutableCopy] ?: [NSMutableDictionary dictionary];
     
     rules[featureKey] = value;
+    
+    // Cascading JS to JIT Logic (iOS 16+)
+    if ([featureKey isEqualToString:@"disableJS"] && [value boolValue]) {
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        if (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
+            rules[@"disableJIT"] = @YES;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }
+    }
     
     [defaults setObject:rules forKey:dictKey];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
@@ -650,13 +667,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         } else if ([browsers containsObject:targetID]) {
             rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             
-            // Forcefully disable WebGL, WebRTC, and Media Auto-Play on Level 3
             if (level >= 3) {
                 rules[@"disableRTC"] = @YES;
                 rules[@"disableMedia"] = @YES;
             }
         } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
-            // WebKit mitigations forcefully skipped. User Agent defaults to NO.
+            // WebKit mitigations forcefully skipped.
         } else {
             if (![targetID hasPrefix:@"com.apple."]) {
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
@@ -892,13 +908,32 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (void)setGlobalMitigation:(id)value specifier:(PSSpecifier *)specifier {
     BOOL enabled = [value boolValue];
+    NSString *key = [specifier propertyForKey:@"key"];
+    
     if (enabled) {
         NSString *featureName = [specifier name];
         NSString *msg = [NSString stringWithFormat:@"Enabling '%@' globally applies this mitigation to ALL processes indiscriminately. This may break core functionality across the system and is intended for testing/emergency lockdown only.", featureName];
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Warning" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        
         [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [self setPreferenceValue:value specifier:specifier];
+            
+            // Cascading Global JS to JIT Logic (iOS 16+)
+            if ([key isEqualToString:@"globalDisableJS"]) {
+                BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+                if (isIOS16OrGreater) {
+                    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+                    [defaults setBool:YES forKey:@"globalDisableJIT"];
+                    [defaults synchronize];
+                }
+            }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
         }]];
+        
         [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
             [self reloadSpecifiers]; 
         }]];
