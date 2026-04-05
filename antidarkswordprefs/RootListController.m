@@ -25,7 +25,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 + (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
 @end
 
-// Tell the compiler this method exists to prevent ARC errors without redefining PSTableCell
 @interface UITableViewCell (PreferencesUI)
 - (id)control;
 @end
@@ -169,7 +168,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self pushController:detailController];
     }
 }
-
 @end
 
 // ==========================================
@@ -270,7 +268,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable JS JIT"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT"},
             @{@"key": @"disableJIT15", @"label": @"Disable iOS 15 JIT"},
             @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
@@ -298,12 +296,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [spec setProperty:featKey forKey:@"featureKey"];
             
             if (isApplicable) {
-                // If it's globally overridden, lock the switch entirely. 
                 if (isGlobalOverride) {
                     [spec setProperty:@NO forKey:@"enabled"];
-                } 
-                // Cascade lock JIT if OS matches and individual JS is turned ON
-                else if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
+                } else if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
                 } else if (!isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
@@ -388,7 +383,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return @NO;
     }
 
-    // Force return YES to visually represent the active Global Mitigation
     if ([self isGlobalOverrideActiveForFeature:featureKey]) {
         return @YES;
     }
@@ -399,6 +393,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     
     if (!rules || rules[featureKey] == nil) { 
+        
+        // Ensure manual/non-preset apps default to ALL OFF
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
+        if (![allProtected containsObject:self.targetID]) {
+            return @NO;
+        }
+
         NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
         if (level == 0) level = 1;
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
@@ -418,7 +420,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
             @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
-            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord"
+            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", 
+            @"com.apple.Passbook"
         ];
         
         if ([msgAndMail containsObject:self.targetID]) return @YES;
@@ -531,32 +534,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return NO;
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
-
-    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
-    NSString *targetID = [spec propertyForKey:@"targetID"];
-    NSNumber *ruleType = [spec propertyForKey:@"ruleType"];
-
-    if (targetID && ruleType && [ruleType integerValue] == 0) { 
-        BOOL isInstalled = [self isTargetInstalled:targetID];
-
-        if (!isInstalled) {
-            cell.textLabel.alpha = 0.5;
-            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
-            if (cell.imageView) cell.imageView.alpha = 0.5;
-            cell.userInteractionEnabled = NO; 
-        } else {
-            cell.textLabel.alpha = 1.0;
-            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
-            if (cell.imageView) cell.imageView.alpha = 1.0;
-            cell.userInteractionEnabled = YES;
-        }
-    }
-
-    return cell;
-}
-
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
     NSDictionary *knownNames = @{
         @"com.google.Gmail": @"Gmail",
@@ -595,7 +572,25 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.github.stormbreaker.prod": @"GitHub",
         @"org.coolstar.SileoStore": @"Sileo",
         @"xyz.willy.Zebra": @"Zebra",
-        @"com.tigisoftware.Filza": @"Filza"
+        @"com.tigisoftware.Filza": @"Filza",
+        @"com.apple.Passbook": @"Apple Wallet",
+        @"com.squareup.cash": @"Cash App",
+        @"com.venmo.Venmo": @"Venmo",
+        @"com.yourcompany.PPClient": @"PayPal",
+        @"com.robinhood.release.Robinhood": @"Robinhood",
+        @"com.coinbase.consumer": @"Coinbase",
+        @"com.sixdays.trust": @"Trust Wallet",
+        @"io.metamask.MetaMask": @"MetaMask",
+        @"app.phantom.phantom": @"Phantom",
+        @"com.chase": @"Chase",
+        @"com.bankofamerica.BofAMobileBanking": @"Bank of America",
+        @"com.wellsfargo.net.mobilebanking": @"Wells Fargo",
+        @"com.citi.citimobile": @"Citi",
+        @"com.capitalone.enterprisemobilebanking": @"Capital One",
+        @"com.americanexpress.amelia": @"Amex",
+        @"com.fidelity.iphone": @"Fidelity",
+        @"com.schwab.mobile": @"Charles Schwab",
+        @"com.etrade.mobilepro.iphone": @"E*TRADE"
     };
 
     if (knownNames[targetID]) return knownNames[targetID];
@@ -686,12 +681,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSArray *msgAndMail = @[
         @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
         @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
         @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
         @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", 
         @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
-        @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord"
+        @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
     ];
 
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
@@ -751,7 +745,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
         @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
         @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-        @"com.apple.Maps", @"com.apple.weather",
+        @"com.apple.Maps", @"com.apple.weather", @"com.apple.Passbook",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
@@ -769,7 +763,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
         @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
         @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+        @"com.squareup.cash", @"com.venmo.Venmo", @"com.yourcompany.PPClient", 
+        @"com.robinhood.release.Robinhood", @"com.coinbase.consumer", @"com.sixdays.trust", 
+        @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
+        @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
+        @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
+        @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
+        @"com.etrade.mobilepro.iphone"
     ];
     
     NSArray *tier3 = @[
@@ -841,7 +842,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
             
             if ([desiredOrder containsObject:key]) {
-                // OS Locks for Global Settings
                 if ([key isEqualToString:@"globalDisableJIT"]) {
                     if (!isIOS16OrGreater || (isIOS16OrGreater && globalJSEnabled)) {
                         [s setProperty:@NO forKey:@"enabled"];
@@ -879,8 +879,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
-                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, and other built-in iOS apps.";
-                else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, and package managers.";
+                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
+                else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
                 else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Enforces restrictions on critical background system daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
@@ -1065,7 +1065,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 [self reloadSpecifiers];
             });
         } else {
-            // Unlocking any globally overridden individual settings immediately
             dispatch_async(dispatch_get_main_queue(), ^{
                 self->_specifiers = nil;
                 [self reloadSpecifiers];
