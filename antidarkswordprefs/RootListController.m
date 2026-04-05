@@ -634,18 +634,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (UIImage *)iconForTargetID:(NSString *)targetID {
     UIImage *icon = nil;
     
-    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
-        NSArray *daemons = @[
-            @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
-            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
-            @"com.apple.cfnetwork"
-        ];
-        
-        if (![daemons containsObject:targetID]) {
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+    
+    if (![daemons containsObject:targetID]) {
+        // Only attempt to fetch the icon if the app is actually installed.
+        // This prevents iOS from handing back the default "white square with lines" placeholder image.
+        BOOL installed = [self isTargetInstalled:targetID];
+        if (installed) {
             @try {
                 if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
                     icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
@@ -910,10 +913,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             for (NSString *item in autoItems) {
                 NSString *displayName = [self displayNameForTargetID:item];
                 BOOL isInstalled = [self isTargetInstalled:item];
-                
-                if (!isInstalled) {
-                    displayName = [displayName stringByAppendingString:@" (Not Installed)"];
-                }
 
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:item forKey:@"targetID"];
