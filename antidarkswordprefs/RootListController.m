@@ -909,9 +909,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
                 NSString *displayName = [self displayNameForTargetID:item];
+                BOOL isInstalled = [self isTargetInstalled:item];
+                
+                if (!isInstalled) {
+                    displayName = [displayName stringByAppendingString:@" (Not Installed)"];
+                }
+
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:item forKey:@"targetID"];
                 [spec setProperty:@(0) forKey:@"ruleType"];
+                
+                if (!isInstalled) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                }
                 
                 UIImage *icon = [self iconForTargetID:item];
                 if (icon) {
