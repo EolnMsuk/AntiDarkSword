@@ -211,7 +211,8 @@ Swipe left on any custom ID below to delete it.</string>
             <key>label</key>
             <string>Global Mitigation Rules (BETA)</string>
             <key>footerText</key>
-            <string>Enabling these options enables that mitigation system-wide. "Enable Protection" at the top must remain ON for these to apply.</string>
+            <string>Enabling these options enables that mitigation system-wide.
+"Enable Protection" at the top must remain ON for these to apply.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -239,7 +240,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JIT</string>
+            <string>Disable JIT (JustInTime)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -255,7 +256,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable JavaScript</string>
+            <string>Disable JavaScript (All)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
