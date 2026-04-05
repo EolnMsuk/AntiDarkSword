@@ -36,7 +36,6 @@ static void loadPrefs() {
 
     NSInteger autoProtectLevel = 1;
     NSArray *activeCustomDaemonIDs = @[];
-    NSMutableArray *restrictedAppsArray = [NSMutableArray array];
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
