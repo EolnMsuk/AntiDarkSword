@@ -238,7 +238,7 @@
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JS JIT</string>
+            <string>Disable iOS 16 JIT</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
