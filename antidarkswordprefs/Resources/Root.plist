@@ -239,7 +239,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JIT (JavaScript)</string>
+            <string>Disable JIT</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -255,7 +255,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable JavaScript (iOS 15.X)</string>
+            <string>Disable JavaScript</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
