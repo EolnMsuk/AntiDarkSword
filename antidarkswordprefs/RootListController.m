@@ -12,7 +12,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // ==========================================
 @interface LSApplicationProxy : NSObject
 + (id)applicationProxyForIdentifier:(NSString *)identifier;
-- (NSString *)localizedName;
+- (NSString localizedName);
 - (NSURL *)bundleURL;
 @end
 
@@ -46,6 +46,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 @property (nonatomic, assign) NSInteger ruleType;
 + (BOOL)isDaemonTarget:(NSString *)targetID;
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID;
+- (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey;
 @end
 
 // ==========================================
@@ -208,7 +209,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
     
-    // Strict OS Locks for JIT variants
     if ([featureKey isEqualToString:@"disableJIT"]) {
         return isIOS16OrGreater && !isDaemon;
     }
@@ -220,7 +220,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [featureKey isEqualToString:@"disableRTC"] || 
         [featureKey isEqualToString:@"disableMedia"] || 
         [featureKey isEqualToString:@"disableFileAccess"]) {
-        return !isDaemon; // Daemons do not load WebKit UI
+        return !isDaemon; 
     }
 
     if ([featureKey isEqualToString:@"spoofUA"]) {
@@ -235,6 +235,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.targetID = [specifier propertyForKey:@"targetID"];
     self.ruleType = [[specifier propertyForKey:@"ruleType"] integerValue];
     self.title = [specifier name] ?: self.targetID;
+}
+
+- (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    if ([featureKey isEqualToString:@"spoofUA"]) return [defaults boolForKey:@"globalUASpoofingEnabled"];
+    if ([featureKey isEqualToString:@"disableJIT"]) return [defaults boolForKey:@"globalDisableJIT"];
+    if ([featureKey isEqualToString:@"disableJIT15"]) return [defaults boolForKey:@"globalDisableJIT15"];
+    if ([featureKey isEqualToString:@"disableJS"]) return [defaults boolForKey:@"globalDisableJS"];
+    if ([featureKey isEqualToString:@"disableRTC"]) return [defaults boolForKey:@"globalDisableRTC"];
+    if ([featureKey isEqualToString:@"disableMedia"]) return [defaults boolForKey:@"globalDisableMedia"];
+    if ([featureKey isEqualToString:@"disableIMessageDL"]) return [defaults boolForKey:@"globalDisableIMessageDL"];
+    if ([featureKey isEqualToString:@"disableFileAccess"]) return [defaults boolForKey:@"globalDisableFileAccess"];
+    return NO;
 }
 
 - (NSArray *)specifiers {
@@ -252,7 +265,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [featGroup setProperty:@"Features that do not apply to this target type are permanently disabled." forKey:@"footerText"];
+        [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
         [specs addObject:featGroup];
         
         NSArray *features = @[
@@ -266,7 +279,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}
         ];
         
-        // Retrieve current JS status to handle OS-dependent JIT locking
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
         NSDictionary *rules = [defaults dictionaryForKey:dictKey];
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
@@ -280,13 +292,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         for (NSDictionary *feat in features) {
             NSString *featKey = feat[@"key"];
             BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
+            BOOL isGlobalOverride = [self isGlobalOverrideActiveForFeature:featKey];
             
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:featKey forKey:@"featureKey"];
             
             if (isApplicable) {
-                // LOCK JIT variant if its respective OS is active AND JS is enabled
-                if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
+                // If it's globally overridden, lock the switch entirely. 
+                if (isGlobalOverride) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                } 
+                // Cascade lock JIT if OS matches and individual JS is turned ON
+                else if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
                 } else if (!isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
@@ -371,6 +388,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return @NO;
     }
 
+    // Force return YES to visually represent the active Global Mitigation
+    if ([self isGlobalOverrideActiveForFeature:featureKey]) {
+        return @YES;
+    }
+
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
     [defaults synchronize]; 
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
@@ -429,7 +451,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     rules[featureKey] = value;
     
-    // Cascading JS to OS-dependent JIT Logic & UI Lock
     if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
         if ([value boolValue]) {
@@ -1013,7 +1034,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [self setPreferenceValue:value specifier:specifier];
             
-            // Cascading OS-dependent JS to JIT Logic
             if ([key isEqualToString:@"globalDisableJS"]) {
                 BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
                 NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
@@ -1040,6 +1060,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self setPreferenceValue:value specifier:specifier];
         
         if ([key isEqualToString:@"globalDisableJS"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        } else {
+            // Unlocking any globally overridden individual settings immediately
             dispatch_async(dispatch_get_main_queue(), ^{
                 self->_specifiers = nil;
                 [self reloadSpecifiers];
