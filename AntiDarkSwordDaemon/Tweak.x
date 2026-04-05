@@ -1,5 +1,18 @@
+// AntiDarkSwordDaemon/Tweak.x
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
+
+// =========================================================
+// PRIVATE IMESSAGE INTERFACES
+// =========================================================
+@interface IMFileTransfer : NSObject
+- (BOOL)isAutoDownloadable;
+- (BOOL)canAutoDownload;
+@end
+
+@interface CKAttachmentMessagePartChatItem : NSObject
+- (BOOL)_needsPreviewGeneration;
+@end
 
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 #define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
@@ -9,6 +22,11 @@ static BOOL globalTweakEnabled = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
+
+// App-Specific Granular Features for Daemons
+static BOOL globalDisableIMessageDL = NO;
+static BOOL disableIMessageDL = NO;
+static BOOL applyDisableIMessageDL = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
@@ -68,6 +86,8 @@ static void loadPrefs() {
 
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
+        globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
+
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
@@ -144,11 +164,21 @@ static void loadPrefs() {
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+                @"com.squareup.cash", @"com.venmo.Venmo", @"com.yourcompany.PPClient", 
+                @"com.robinhood.release.Robinhood", @"com.coinbase.consumer", @"com.sixdays.trust", 
+                @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
+                @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
+                @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
+                @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
+                @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
+                @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
+                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
             ];
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
+            
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -170,6 +200,7 @@ static void loadPrefs() {
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     BOOL spoofUARule = YES;
+    disableIMessageDL = NO;
 
     NSArray *daemons = @[
         @"com.apple.appstored", @"com.apple.itunesstored",
@@ -179,9 +210,13 @@ static void loadPrefs() {
         @"com.apple.cfnetwork"
     ];
     
+    // Baseline setting overrides for Daemon defaults
     if (matchedID) {
         if ([daemons containsObject:matchedID]) {
             spoofUARule = NO;
+        }
+        if ([matchedID isEqualToString:@"com.apple.imagent"] || [matchedID isEqualToString:@"imagent"]) {
+            disableIMessageDL = YES; 
         }
     } else if (processName) {
         if ([processName containsString:@"daemon"] || [processName hasSuffix:@"d"]) {
@@ -194,8 +229,11 @@ static void loadPrefs() {
         NSDictionary *appRules = prefs[dictKey];
         if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
             if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)]) spoofUARule = [appRules[@"spoofUA"] boolValue];
+            if ([appRules[@"disableIMessageDL"] respondsToSelector:@selector(boolValue)]) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
         }
     }
+
+    applyDisableIMessageDL = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
 
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
@@ -246,6 +284,34 @@ static void loadPrefs() {
         if ([defaultName isEqualToString:@"UserAgent"] || [defaultName isEqualToString:@"User-Agent"]) {
             return customUAString;
         }
+    }
+    return %orig;
+}
+%end
+
+// =========================================================
+// NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
+// =========================================================
+
+%hook IMFileTransfer
+- (BOOL)isAutoDownloadable {
+    if (applyDisableIMessageDL) {
+        return NO;
+    }
+    return %orig;
+}
+- (BOOL)canAutoDownload {
+    if (applyDisableIMessageDL) {
+        return NO;
+    }
+    return %orig;
+}
+%end
+
+%hook CKAttachmentMessagePartChatItem
+- (BOOL)_needsPreviewGeneration {
+    if (applyDisableIMessageDL) {
+        return NO;
     }
     return %orig;
 }
