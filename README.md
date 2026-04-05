@@ -107,5 +107,3 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 Created by: [EolnMsuk](https://github.com/EolnMsuk)
 
 Donate 🤗: [eolnmsuk](https://venmo.com/user/eolnmsuk)
-
-Donate 🤗: [eolnmsuk](https://venmo.com/user/eolnmsuk)
