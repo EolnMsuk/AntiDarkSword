@@ -240,7 +240,23 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JIT (js)</string>
+            <string>Disable JIT</string>
+            <key>set</key>
+            <string>setGlobalMitigation:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>globalDisableJIT15</string>
+            <key>label</key>
+            <string>Disable iOS 15 JIT</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -256,7 +272,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable JavaScript ⚠︎</string>
+            <string>Disable JavaScript</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -272,7 +288,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableRTC</string>
             <key>label</key>
-            <string>Disable WebGL + WebRTC</string>
+            <string>Disable WebGL &amp; WebRTC</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -304,7 +320,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableIMessageDL</string>
             <key>label</key>
-            <string>Disable Auto-Downloads</string>
+            <string>Disable Msg Auto-Download</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -359,13 +375,13 @@ Swipe left on any custom ID below to delete it.</string>
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Reset All Settings To Defaults</string>
+            <string>Reset All Settings To Default</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Reset to Defaults</string>
+            <string>Reset to Default</string>
             <key>action</key>
             <string>resetToDefaults</string>
             <key>isDestructive</key>
