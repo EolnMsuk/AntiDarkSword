@@ -1,0 +1,45 @@
+name: Compile & Release Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Theos Environment
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-sdks: 'https://github.com/theos/sdks'
+
+      - name: Load Local AltList Framework
+        run: |
+          echo "Copying AltList.framework from local repository to Theos..."
+          cp -r vendor/AltList.framework $THEOS/lib/
+
+      - name: Compile the Tweak
+        run: make package FINALPACKAGE=1
+
+      - name: Upload .deb as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntiDarkSword-Rootless
+          path: ${{ github.workspace }}/packages/*.deb
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "AntiDarkSword Build #${{ github.run_number }}"
+          body: "Automated build of AntiDarkSword compiled directly from the latest push to the main branch."
+          files: ${{ github.workspace }}/packages/*.deb
+          draft: false
+          prerelease: false
