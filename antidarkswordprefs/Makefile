@@ -11,7 +11,3 @@ AntiDarkSwordPrefs_CFLAGS = -fobjc-arc -F../vendor
 AntiDarkSwordPrefs_LDFLAGS = -F../vendor
 
 include $(THEOS_MAKE_PATH)/bundle.mk
-
-# Surgically rewrite the outdated XinaA15 path from the vendor SDK to support Dopamine
-after-stage::
-	find $(THEOS_STAGING_DIR) -name "AntiDarkSwordPrefs" -type f -exec install_name_tool -change @loader_path/.jbroot/Library/Frameworks/AltList.framework/AltList /var/jb/Library/Frameworks/AltList.framework/AltList {} +
