@@ -31,7 +31,6 @@
 @end
 
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
-#define ROOTFUL_PREFS_PATH @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
@@ -49,13 +48,13 @@ static BOOL globalDisableFileAccess = NO;
 static BOOL globalDisableIMessageDL = NO;
 
 // App-Specific Granular Features
-static BOOL disableJIT = YES;
-static BOOL disableJIT15 = YES;
-static BOOL disableJS = YES;
-static BOOL disableMedia = YES;
-static BOOL disableRTC = YES;
-static BOOL disableFileAccess = YES;
-static BOOL disableIMessageDL = YES;
+static BOOL disableJIT = NO;
+static BOOL disableJIT15 = NO;
+static BOOL disableJS = NO;
+static BOOL disableMedia = NO;
+static BOOL disableRTC = NO;
+static BOOL disableFileAccess = NO;
+static BOOL disableIMessageDL = NO;
 
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
@@ -70,8 +69,6 @@ static void loadPrefs() {
     NSDictionary *prefs = nil;
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:ROOTFUL_PREFS_PATH];
     }
     
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
@@ -166,6 +163,7 @@ static void loadPrefs() {
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
+    BOOL isPresetMatch = NO;
     NSString *matchedID = nil;
     
     if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
@@ -190,7 +188,7 @@ static void loadPrefs() {
                 @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
                 @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
                 @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-                @"com.apple.Maps", @"com.apple.weather",
+                @"com.apple.Maps", @"com.apple.weather", @"com.apple.Passbook",
                 @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
                 @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
                 @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
@@ -207,11 +205,19 @@ static void loadPrefs() {
                 @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
+                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+                @"com.squareup.cash", @"com.venmo.Venmo", @"com.yourcompany.PPClient", 
+                @"com.robinhood.release.Robinhood", @"com.coinbase.consumer", @"com.sixdays.trust", 
+                @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
+                @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
+                @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
+                @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
+                @"com.etrade.mobilepro.iphone"
             ];
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
             ];
+            
             NSString *targetMatch = nil;
             if (bundleID) {
                 if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
@@ -227,21 +233,59 @@ static void loadPrefs() {
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
+                isPresetMatch = YES;
             }
         }
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     
-    disableMedia = YES;
-    disableRTC = YES;
-    disableIMessageDL = YES;
-    BOOL spoofUARule = YES;
-    disableJIT = YES;
-    disableJIT15 = YES;
-    disableJS = YES;
-    disableFileAccess = YES;
+    // 1. Establish absolute baseline defaults for unconfigured apps
+    disableMedia = NO;
+    disableRTC = NO;
+    disableIMessageDL = NO;
+    BOOL spoofUARule = NO;
+    disableJIT = NO;
+    disableJIT15 = NO;
+    disableJS = NO;
+    disableFileAccess = NO;
 
+    // 2. If it's a PRESET app, apply secure defaults if no dictionary exists yet
+    if (currentProcessRestricted && isPresetMatch) {
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        disableJIT = isIOS16OrGreater;
+        disableJIT15 = !isIOS16OrGreater;
+        disableJS = !isIOS16OrGreater;
+
+        NSArray *msgAndMail = @[
+            @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
+            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
+            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
+            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", 
+            @"com.apple.Passbook"
+        ];
+        
+        NSArray *browsers = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        ];
+
+        if ([msgAndMail containsObject:matchedID]) {
+            disableMedia = YES; disableRTC = YES; disableFileAccess = YES; disableIMessageDL = YES;
+            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
+        } else if ([browsers containsObject:matchedID]) {
+            spoofUARule = (autoProtectLevel >= 2);
+            if (autoProtectLevel >= 3) { disableRTC = YES; disableMedia = YES; }
+        } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
+            // Daemons skip webkit mitigations by default
+        } else {
+            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
+        }
+    }
+
+    // 3. Override with saved user dictionary if it exists
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
@@ -348,7 +392,7 @@ static void loadPrefs() {
         }
     }
     
-    // iOS 15 Surgical JIT Mitigation (Reddit Private Method)
+    // iOS 15 Surgical JIT Mitigation
     if (applyDisableJIT15 || applyDisableJIT) {
         if ([configuration respondsToSelector:@selector(processPool)]) {
             if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
@@ -416,7 +460,7 @@ static void loadPrefs() {
         }
     }
     
-    // iOS 15 Surgical JIT Mitigation (Reddit Private Method)
+    // iOS 15 Surgical JIT Mitigation
     if (applyDisableJIT15 || applyDisableJIT) {
         if ([webView.configuration respondsToSelector:@selector(processPool)]) {
             if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
