@@ -10,7 +10,6 @@ AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken de
 
 To protect yourself, you must go into the tweak settings and enable one of the Preset Rules tiers or explicitly RESTRICT the apps you want to lock down.
 
-**🛡️ Modular Lockdown Mode**
 
 AntiDarkSword effectively acts as a "Modular Lockdown Mode," featuring intelligent OS detection to adapt to your device's exact capabilities, bypassing the need for Apple's Native Lockdown Mode:
 * **For iOS 16+:** It hooks into the exact same WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) internal logic gates used by Apple's own security engineers to surgically disable the vulnerable JIT compiler.
