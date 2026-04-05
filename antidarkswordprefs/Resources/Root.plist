@@ -224,7 +224,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalUASpoofingEnabled</string>
             <key>label</key>
-            <string>Spoof User Agent 🕵</string>
+            <string>Spoof User Agent</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -240,7 +240,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JIT ⛉</string>
+            <string>Disable JIT (js)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -256,7 +256,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable JavaScript ⚠︎</string>
+            <string>Disable JavaScript (⚠︎)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -272,7 +272,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableRTC</string>
             <key>label</key>
-            <string>Disable WebGL/WebRTC 🖧</string>
+            <string>Disable WebGL + WebRTC</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -288,7 +288,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableMedia</string>
             <key>label</key>
-            <string>Disable Auto-Play 🎬</string>
+            <string>Disable Media Auto-Play</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -304,7 +304,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableIMessageDL</string>
             <key>label</key>
-            <string>Disable Auto-Downloads 🡻</string>
+            <string>Disable Auto-Downloads</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -320,7 +320,7 @@ Swipe left on any custom ID below to delete it.</string>
             <key>key</key>
             <string>globalDisableFileAccess</string>
             <key>label</key>
-            <string>Disable File Access 🗂️</string>
+            <string>Disable Local File Access</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
