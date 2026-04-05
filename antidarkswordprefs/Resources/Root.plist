@@ -238,7 +238,7 @@
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JIT</string>
+            <string>Disable JS JIT</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
