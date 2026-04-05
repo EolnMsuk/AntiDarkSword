@@ -1024,7 +1024,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Enforces restrictions on critical background system daemons.\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown.\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
         }
