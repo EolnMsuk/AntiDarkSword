@@ -254,7 +254,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
             @{@"key": @"disableJIT", @"label": @"Disable JIT (js)"},
-            @{@"key": @"disableJS", @"label": @"Disable JavaScript (⚠︎)"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL + WebRTC"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableIMessageDL", @"label": @"Disable Auto-Downloads"},
