@@ -1,7 +1,7 @@
 Package: com.eolnmsuk.antidarksword
 Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
-Version: 3.4
+Version: 3.6
 Architecture: iphoneos-arm64
 Description: A security-focused jailbreak tweak designed to act as a system-wide JavaScript kill-switch and exploit mitigation tool.
 Maintainer: eolnmsuk
