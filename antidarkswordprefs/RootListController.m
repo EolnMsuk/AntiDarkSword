@@ -1,248 +1,421 @@
-// AntiDarkSwordUI/Tweak.x
-#import <Foundation/Foundation.h>
-#import <WebKit/WebKit.h>
-#import <JavaScriptCore/JavaScriptCore.h>
-#import <CoreFoundation/CoreFoundation.h>
+// antidarkswordprefs/RootListController.m
+#import <Preferences/PSListController.h>
+#import <Preferences/PSSpecifier.h>
+#import <UIKit/UIKit.h>
+#import <spawn.h>
+#import <sys/types.h>
+#import <objc/runtime.h>
 
-// =========================================================
-// PRIVATE WEBKIT INTERFACES (JIT & LOCKDOWN MODE)
-// =========================================================
-@interface WKWebpagePreferences (Private)
-@property (nonatomic, assign) BOOL lockdownModeEnabled;
+static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+
+// ==========================================
+// Internal iOS APIs for App Names & Icons
+// ==========================================
+@interface LSApplicationProxy : NSObject
++ (id)applicationProxyForIdentifier:(NSString *)identifier;
+- (NSString *)localizedName;
+- (NSURL *)bundleURL;
 @end
 
-@interface _WKProcessPoolConfiguration : NSObject
-@property (nonatomic, assign) BOOL JITEnabled;
+@interface LSApplicationWorkspace : NSObject
++ (id)defaultWorkspace;
+- (BOOL)applicationIsInstalled:(NSString *)appIdentifier;
 @end
 
-@interface WKProcessPool (Private)
-@property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
+@interface UIImage (Private)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
 @end
 
-#define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+@interface UITableViewCell (PreferencesUI)
+- (id)control;
+@end
 
-static _Atomic BOOL currentProcessRestricted = NO;
-static BOOL globalTweakEnabled = NO;
-static BOOL globalUASpoofingEnabled = NO;
-static NSString *customUAString = @"";
-static BOOL shouldSpoofUA = NO;
+@interface AntiDarkSwordPrefsRootListController : PSListController
+- (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
+- (NSString *)displayNameForTargetID:(NSString *)targetID;
+- (UIImage *)iconForTargetID:(NSString *)targetID;
+- (BOOL)isTargetInstalled:(NSString *)targetID;
+@end
 
-// Global Overrides
-static BOOL globalDisableJIT = NO;
-static BOOL globalDisableJIT15 = NO;
-static BOOL globalDisableJS = NO;
-static BOOL globalDisableMedia = NO;
-static BOOL globalDisableRTC = NO;
-static BOOL globalDisableFileAccess = NO;
+// ==========================================
+// App-Specific Feature Drill-Down Controller
+// ==========================================
+@interface AntiDarkSwordAppController : PSListController
+@property (nonatomic, strong) NSString *targetID;
+@property (nonatomic, assign) NSInteger ruleType;
++ (BOOL)isDaemonTarget:(NSString *)targetID;
++ (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID;
+- (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey;
+@end
 
-// App-Specific Granular Features
-static BOOL disableJIT = NO;
-static BOOL disableJIT15 = NO;
-static BOOL disableJS = NO;
-static BOOL disableMedia = NO;
-static BOOL disableRTC = NO;
-static BOOL disableFileAccess = NO;
+// ==========================================
+// Custom AltList Controller
+// ==========================================
+@interface ATLApplicationListMultiSelectionController : PSListController
+@end
 
-// Final Evaluated States
-static BOOL applyDisableJIT = NO;
-static BOOL applyDisableJIT15 = NO;
-static BOOL applyDisableJS = NO;
-static BOOL applyDisableMedia = NO;
-static BOOL applyDisableRTC = NO;
-static BOOL applyDisableFileAccess = NO;
+@interface AntiDarkSwordAltListController : ATLApplicationListMultiSelectionController
+@end
 
-static void loadPrefs() {
-    NSDictionary *prefs = nil;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+@implementation AntiDarkSwordAltListController
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadSpecifiers];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    
+    NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
+    if (!bundleID) {
+        NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
+        if ([alKey hasPrefix:@"restrictedApps-"]) {
+            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
+        }
     }
     
-    if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) {
-                prefs = (__bridge_transfer NSDictionary *)dict;
-            }
-            CFRelease(keyList);
-        }
-    }
-
-    NSInteger autoProtectLevel = 1;
-    NSArray *activeCustomDaemonIDs = @[];
-    NSArray *disabledPresetRules = @[];
-    NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-
-    if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
-        id restrictedAppsRaw = prefs[@"restrictedApps"];
-        if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-            for (id key in [restrictedAppsRaw allKeys]) {
-                if ([key isKindOfClass:[NSString class]] && [restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)]) {
-                    if ([restrictedAppsRaw[key] boolValue]) {
-                        [restrictedAppsArray addObject:key];
-                    }
-                }
-            }
-        } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
-            for (id item in restrictedAppsRaw) {
-                if ([item isKindOfClass:[NSString class]]) {
-                    [restrictedAppsArray addObjectsFromArray:restrictedAppsRaw];
-                }
-            }
-        }
-
-        for (id key in [prefs allKeys]) {
-            if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
-                if ([prefs[key] respondsToSelector:@selector(boolValue)]) {
-                    NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
-                    if ([prefs[key] boolValue]) {
-                        if (![restrictedAppsArray containsObject:appID]) {
-                            [restrictedAppsArray addObject:appID];
-                        }
-                    }
-                }
-            }
-        }
-
-        globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
-        globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
-        globalDisableJIT = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT"] boolValue] : NO;
-        globalDisableJIT15 = [prefs[@"globalDisableJIT15"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT15"] boolValue] : NO;
-        globalDisableJS = [prefs[@"globalDisableJS"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJS"] boolValue] : NO;
-        globalDisableMedia = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableMedia"] boolValue] : NO;
-        globalDisableRTC = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableRTC"] boolValue] : NO;
-        globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
+    if (bundleID) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
         
-        autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
-        id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
-        if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) {
-            activeCustomDaemonIDs = customDaemonIDsRaw;
-        }
-
-        id disabledPresetRaw = prefs[@"disabledPresetRules"];
-        if ([disabledPresetRaw isKindOfClass:[NSArray class]]) {
-            disabledPresetRules = disabledPresetRaw;
+        if ([cell respondsToSelector:@selector(control)]) {
+            id control = [cell control];
+            if ([control isKindOfClass:[UIView class]]) {
+                ((UIView *)control).hidden = YES;
+            }
         }
         
-        id presetUARaw = prefs[@"selectedUAPreset"];
-        NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
-        if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
-            presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-        }
+        cell.accessoryView = nil;
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         
-        id manualUARaw = prefs[@"customUAString"];
-        NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
-        if ([presetUA isEqualToString:@"CUSTOM"]) {
-            NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (!trimmedUA || trimmedUA.length == 0) {
-                customUAString = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-            } else {
-                customUAString = trimmedUA;
-            }
+        BOOL isManualRuleActive = NO;
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+        if ([defaults objectForKey:prefKey]) {
+            isManualRuleActive = [defaults boolForKey:prefKey];
         } else {
-            customUAString = presetUA;
+            NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
+            isManualRuleActive = [apps[bundleID] boolValue];
+        }
+
+        if ([presetApps containsObject:bundleID]) {
+            cell.userInteractionEnabled = NO;
+            cell.textLabel.alpha = 0.5;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
+            cell.backgroundColor = [UIColor clearColor];
+        } else {
+            cell.userInteractionEnabled = YES;
+            cell.textLabel.alpha = 1.0;
+            if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
+            
+            if (isManualRuleActive) {
+                if (@available(iOS 13.0, *)) {
+                    cell.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+                } else {
+                    cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
+                }
+            } else {
+                cell.backgroundColor = [UIColor clearColor]; 
+            }
         }
     }
     
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    NSString *processName = [[NSProcessInfo processInfo] processName];
-    BOOL isTargetRestricted = NO;
-    BOOL isPresetMatch = NO;
-    NSString *matchedID = nil;
-    
-    if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
-        isTargetRestricted = YES;
-        matchedID = bundleID;
-    } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
-        isTargetRestricted = YES;
-        matchedID = processName;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
+    if (!bundleID) {
+        NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
+        if ([alKey hasPrefix:@"restrictedApps-"]) {
+            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
+        }
     }
 
-    if (!isTargetRestricted) {
-        if (bundleID && [restrictedAppsArray containsObject:bundleID]) {
-            isTargetRestricted = YES;
-            matchedID = bundleID;
-        } else if (processName && [restrictedAppsArray containsObject:processName]) {
-            isTargetRestricted = YES;
-            matchedID = processName;
+    if (bundleID) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
+        
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
+        
+        if ([presetApps containsObject:bundleID]) {
+            return; 
+        }
+
+        AntiDarkSwordAppController *detailController = [[AntiDarkSwordAppController alloc] init];
+        detailController.targetID = bundleID;
+        detailController.ruleType = 1; 
+        detailController.rootController = self.rootController ?: self;
+        detailController.parentController = self;
+        
+        PSSpecifier *dummySpec = [PSSpecifier preferenceSpecifierNamed:[spec name] ?: bundleID target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+        [dummySpec setProperty:bundleID forKey:@"targetID"];
+        [dummySpec setProperty:@(1) forKey:@"ruleType"];
+        [detailController setSpecifier:dummySpec];
+
+        [self pushController:detailController];
+    }
+}
+@end
+
+// ==========================================
+// App-Specific Feature Drill-Down Implementation
+// ==========================================
+@implementation AntiDarkSwordAppController
+
++ (BOOL)isDaemonTarget:(NSString *)targetID {
+    if (!targetID) return NO;
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
+        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
+        @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
+    ];
+    if ([daemons containsObject:targetID]) return YES;
+    
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
+    if ([targetID containsString:@"daemon"]) return YES;
+    if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) {
+        return YES;
+    }
+    
+    return NO;
+}
+
++ (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID {
+    BOOL isDaemon = [self isDaemonTarget:targetID];
+    
+    BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
+                        [targetID isEqualToString:@"com.apple.ActivityMessagesApp"] || 
+                        [targetID isEqualToString:@"com.apple.iMessageAppsViewService"];
+
+    if ([featureKey isEqualToString:@"disableIMessageDL"]) {
+        return isMessageApp;
+    }
+    
+    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+    
+    if ([featureKey isEqualToString:@"disableJIT"]) {
+        return isIOS16OrGreater && !isDaemon;
+    }
+    if ([featureKey isEqualToString:@"disableJIT15"]) {
+        return !isIOS16OrGreater && !isDaemon;
+    }
+
+    if ([featureKey isEqualToString:@"disableJS"] || 
+        [featureKey isEqualToString:@"disableRTC"] || 
+        [featureKey isEqualToString:@"disableMedia"] || 
+        [featureKey isEqualToString:@"disableFileAccess"]) {
+        return !isDaemon; 
+    }
+
+    if ([featureKey isEqualToString:@"spoofUA"]) {
+        return YES; 
+    }
+
+    return YES;
+}
+
+- (void)setSpecifier:(PSSpecifier *)specifier {
+    [super setSpecifier:specifier];
+    self.targetID = [specifier propertyForKey:@"targetID"];
+    self.ruleType = [[specifier propertyForKey:@"ruleType"] integerValue];
+    self.title = [specifier name] ?: self.targetID;
+}
+
+- (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    if ([featureKey isEqualToString:@"spoofUA"]) return [defaults boolForKey:@"globalUASpoofingEnabled"];
+    if ([featureKey isEqualToString:@"disableJIT"]) return [defaults boolForKey:@"globalDisableJIT"];
+    if ([featureKey isEqualToString:@"disableJIT15"]) return [defaults boolForKey:@"globalDisableJIT15"];
+    if ([featureKey isEqualToString:@"disableJS"]) return [defaults boolForKey:@"globalDisableJS"];
+    if ([featureKey isEqualToString:@"disableRTC"]) return [defaults boolForKey:@"globalDisableRTC"];
+    if ([featureKey isEqualToString:@"disableMedia"]) return [defaults boolForKey:@"globalDisableMedia"];
+    if ([featureKey isEqualToString:@"disableIMessageDL"]) return [defaults boolForKey:@"globalDisableIMessageDL"];
+    if ([featureKey isEqualToString:@"disableFileAccess"]) return [defaults boolForKey:@"globalDisableFileAccess"];
+    return NO;
+}
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        NSMutableArray *specs = [NSMutableArray array];
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults synchronize];
+        
+        PSSpecifier *enableGroup = [PSSpecifier preferenceSpecifierNamed:@"Rule Status" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [specs addObject:enableGroup];
+        
+        PSSpecifier *enableSpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Rule" target:self set:@selector(setMasterEnable:specifier:) get:@selector(getMasterEnable:) detail:nil cell:PSSwitchCell edit:nil];
+        [specs addObject:enableSpec];
+        
+        BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
+        
+        PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
+        [specs addObject:featGroup];
+        
+        NSArray *features = @[
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT"},
+            @{@"key": @"disableJIT15", @"label": @"Disable iOS 15 JIT"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
+            @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
+            @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
+            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
+            @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}
+        ];
+        
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
+        NSDictionary *rules = [defaults dictionaryForKey:dictKey];
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL isJSTurnedOn = NO;
+        if (rules && rules[@"disableJS"] != nil) {
+            isJSTurnedOn = [rules[@"disableJS"] boolValue];
+        } else {
+            isJSTurnedOn = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
         }
         
-        if (!isTargetRestricted && globalTweakEnabled) {
-            NSArray *tier1 = @[
-                @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-                @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
-                @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-                @"com.apple.Maps", @"com.apple.weather", @"com.apple.Passbook",
-                @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-                @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-                @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-            ];
-            NSArray *tier2 = @[
-                @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
-                @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
-                @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
-                @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
-                @"com.hammerandchisel.discord",
-                @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-                @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
-                @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-                @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
-                @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
-                @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
-                @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
-                @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
-                @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
-                @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
-                @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
-                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
-            ];
-            NSArray *tier3 = @[
-                @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
-            ];
+        for (NSDictionary *feat in features) {
+            NSString *featKey = feat[@"key"];
+            BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
+            BOOL isGlobalOverride = [self isGlobalOverrideActiveForFeature:featKey];
             
-            NSString *targetMatch = nil;
-            if (bundleID) {
-                if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
-                else if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) targetMatch = bundleID;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) targetMatch = bundleID;
-            }
-            if (!targetMatch && processName) {
-                if ([tier1 containsObject:processName]) targetMatch = processName;
-                else if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) targetMatch = processName;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) targetMatch = processName;
+            PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
+            [spec setProperty:featKey forKey:@"featureKey"];
+            
+            if (isApplicable) {
+                if (isGlobalOverride) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                } else if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                } else if (!isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                } else {
+                    [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
+                }
+            } else {
+                [spec setProperty:@NO forKey:@"enabled"];
             }
             
-            if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
-                isTargetRestricted = YES;
-                matchedID = targetMatch;
-                isPresetMatch = YES;
-            }
+            [specs addObject:spec];
         }
+        
+        _specifiers = [specs copy];
+    }
+    return _specifiers;
+}
+
+- (id)getMasterEnable:(PSSpecifier *)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults synchronize]; 
+    
+    if (self.ruleType == 0) { 
+        NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+        return @(![disabled containsObject:self.targetID]);
+    } else if (self.ruleType == 1) { 
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
+        if ([defaults objectForKey:prefKey]) {
+            return @([defaults boolForKey:prefKey]);
+        }
+        NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
+        return apps[self.targetID] ?: @NO;
+    } else { 
+        NSArray *active = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
+        return @([active containsObject:self.targetID]);
+    }
+}
+
+- (void)setMasterEnable:(id)value specifier:(PSSpecifier *)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL enabled = [value boolValue];
+    
+    if (self.ruleType == 0) { 
+        NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+        if (enabled) [disabled removeObject:self.targetID];
+        else if (![disabled containsObject:self.targetID]) [disabled addObject:self.targetID];
+        [defaults setObject:disabled forKey:@"disabledPresetRules"];
+    } else if (self.ruleType == 1) { 
+        NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
+        [defaults setBool:enabled forKey:prefKey];
+        
+        NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
+        if (apps && apps[self.targetID]) {
+            [apps removeObjectForKey:self.targetID];
+            [defaults setObject:apps forKey:@"restrictedApps"];
+        }
+    } else { 
+        NSMutableArray *active = [[defaults arrayForKey:@"activeCustomDaemonIDs"] mutableCopy] ?: [[defaults arrayForKey:@"customDaemonIDs"] mutableCopy] ?: [NSMutableArray array];
+        if (enabled) {
+            if (![active containsObject:self.targetID]) [active addObject:self.targetID];
+        } else {
+            [active removeObject:self.targetID];
+        }
+        [defaults setObject:active forKey:@"activeCustomDaemonIDs"];
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     
-    currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults synchronize];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
     
-    // 1. Establish absolute baseline defaults for unconfigured apps
-    disableMedia = NO;
-    disableRTC = NO;
-    BOOL spoofUARule = NO;
-    disableJIT = NO;
-    disableJIT15 = NO;
-    disableJS = NO;
-    disableFileAccess = NO;
-    
-    // 2. If it's a PRESET app, apply secure defaults if no dictionary exists yet
-    if (currentProcessRestricted && isPresetMatch) {
-        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-        disableJIT = isIOS16OrGreater;
-        disableJIT15 = !isIOS16OrGreater;
-        disableJS = !isIOS16OrGreater;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
+}
 
+- (id)getFeatureValue:(PSSpecifier *)specifier {
+    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
+    
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
+        return @NO;
+    }
+
+    if ([self isGlobalOverrideActiveForFeature:featureKey]) {
+        return @YES;
+    }
+
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults synchronize]; 
+    NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
+    NSDictionary *rules = [defaults dictionaryForKey:dictKey];
+    
+    if (!rules || rules[featureKey] == nil) { 
+        
+        // Ensure manual/non-preset apps default to ALL OFF
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
+        if (![allProtected containsObject:self.targetID]) {
+            return @NO;
+        }
+
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+        if (level == 0) level = 1;
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+
+        if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16OrGreater ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16OrGreater ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJS"]) return isIOS16OrGreater ? @NO : @YES; 
+        
+        if ([featureKey isEqualToString:@"spoofUA"]) {
+            if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
+            if ([self.targetID hasPrefix:@"com.apple."]) return @NO; 
+            return (level >= 2) ? @YES : @NO; 
+        }
+        
         NSArray *msgAndMail = @[
             @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
@@ -252,359 +425,845 @@ static void loadPrefs() {
             @"com.apple.Passbook"
         ];
         
-        NSArray *browsers = @[
-            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        if ([msgAndMail containsObject:self.targetID]) return @YES;
+        
+        if (level >= 3 && ([featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"])) {
+            NSArray *browsers = @[
+                @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+                @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+            ];
+            if ([browsers containsObject:self.targetID]) return @YES;
+        }
+        
+        return @NO; 
+    }
+    
+    return rules[featureKey];
+}
+
+- (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *featureKey = [specifier propertyForKey:@"featureKey"];
+    
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
+        return; 
+    }
+
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
+    NSMutableDictionary *rules = [[defaults dictionaryForKey:dictKey] mutableCopy] ?: [NSMutableDictionary dictionary];
+    
+    rules[featureKey] = value;
+    
+    if ([featureKey isEqualToString:@"disableJS"]) {
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        if ([value boolValue]) {
+            if (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
+                rules[@"disableJIT"] = @YES;
+            } else if (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
+                rules[@"disableJIT15"] = @YES;
+            }
+        }
+        
+        [defaults setObject:rules forKey:dictKey];
+        [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+        [defaults synchronize];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_specifiers = nil;
+            [self reloadSpecifiers];
+        });
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        return;
+    }
+    
+    [defaults setObject:rules forKey:dictKey];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults synchronize];
+    
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+}
+@end
+// ==========================================
+
+@implementation AntiDarkSwordPrefsRootListController
+
+- (BOOL)isTargetInstalled:(NSString *)targetID {
+    NSArray *coreServices = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.networkd",
+        @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.SafariViewService",
+        @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
+        @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
+        @"com.apple.QuickLookDaemon", @"com.apple.appstored", @"com.apple.itunesstored",
+        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork",
+        @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+    ];
+    
+    if ([coreServices containsObject:targetID]) {
+        return YES;
+    }
+    
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
+        return YES; 
+    }
+
+    @try {
+        Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
+        if (LSAppWorkspace) {
+            LSApplicationWorkspace *workspace = [LSAppWorkspace defaultWorkspace];
+            if (workspace && [workspace respondsToSelector:@selector(applicationIsInstalled:)]) {
+                if ([workspace applicationIsInstalled:targetID]) {
+                    return YES;
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+
+    @try {
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
+        if (LSAppProxy) {
+            LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
+            if (proxy && [proxy respondsToSelector:@selector(bundleURL)]) {
+                NSURL *bundleURL = [proxy bundleURL];
+                if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) {
+                    return YES;
+                }
+            }
+        }
+    } @catch (NSException *e) {}
+
+    return NO;
+}
+
+- (NSString *)displayNameForTargetID:(NSString *)targetID {
+    NSDictionary *knownNames = @{
+        @"com.google.Gmail": @"Gmail",
+        @"com.microsoft.Office.Outlook": @"Outlook",
+        @"com.tinyspeck.chatlyio": @"Slack",
+        @"com.microsoft.skype.teams": @"Microsoft Teams",
+        @"com.google.chrome.ios": @"Chrome",
+        @"com.brave.ios.browser": @"Brave",
+        @"com.tumblr.tumblr": @"Tumblr",
+        @"com.yahoo.Aerogram": @"Yahoo Mail",
+        @"ch.protonmail.protonmail": @"Proton Mail",
+        @"org.whispersystems.signal": @"Signal",
+        @"ph.telegra.Telegraph": @"Telegram",
+        @"com.facebook.Messenger": @"Messenger",
+        @"com.toyopagroup.picaboo": @"Snapchat",
+        @"com.tencent.xin": @"WeChat",
+        @"com.viber": @"Viber",
+        @"jp.naver.line": @"LINE",
+        @"net.whatsapp.WhatsApp": @"WhatsApp",
+        @"com.hammerandchisel.discord": @"Discord",
+        @"com.google.GoogleMobile": @"Google",
+        @"org.mozilla.ios.Firefox": @"Firefox",
+        @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
+        @"pinterest": @"Pinterest",
+        @"com.facebook.Facebook": @"Facebook",
+        @"com.atebits.Tweetie2": @"X (Twitter)",
+        @"com.burbn.instagram": @"Instagram",
+        @"com.zhiliaoapp.musically": @"TikTok",
+        @"com.linkedin.LinkedIn": @"LinkedIn",
+        @"com.reddit.Reddit": @"Reddit",
+        @"com.google.ios.youtube": @"YouTube",
+        @"tv.twitch": @"Twitch",
+        @"com.google.gemini": @"Google Gemini",
+        @"com.openai.chat": @"ChatGPT",
+        @"com.deepseek.chat": @"DeepSeek",
+        @"com.github.stormbreaker.prod": @"GitHub",
+        @"org.coolstar.SileoStore": @"Sileo",
+        @"xyz.willy.Zebra": @"Zebra",
+        @"com.tigisoftware.Filza": @"Filza",
+        @"com.apple.Passbook": @"Apple Wallet",
+        @"com.squareup.cash": @"Cash App",
+        @"net.kortina.labs.Venmo": @"Venmo",
+        @"com.yourcompany.PPClient": @"PayPal",
+        @"com.robinhood.release.Robinhood": @"Robinhood",
+        @"com.vilcsak.bitcoin2": @"Coinbase",
+        @"com.sixdays.trust": @"Trust Wallet",
+        @"io.metamask.MetaMask": @"MetaMask",
+        @"app.phantom.phantom": @"Phantom",
+        @"com.chase": @"Chase",
+        @"com.bankofamerica.BofAMobileBanking": @"Bank of America",
+        @"com.wellsfargo.net.mobilebanking": @"Wells Fargo",
+        @"com.citi.citimobile": @"Citi",
+        @"com.capitalone.enterprisemobilebanking": @"Capital One",
+        @"com.americanexpress.amelia": @"Amex",
+        @"com.fidelity.iphone": @"Fidelity",
+        @"com.schwab.mobile": @"Charles Schwab",
+        @"com.etrade.mobilepro.iphone": @"E*TRADE",
+        @"com.discoverfinancial.mobile": @"Discover",
+        @"com.usbank.mobilebanking": @"U.S. Bank",
+        @"com.monzo.ios": @"Monzo",
+        @"com.revolut.iphone": @"Revolut",
+        @"com.binance.dev": @"Binance",
+        @"com.kraken.invest": @"Kraken",
+        @"com.barclays.ios.bmb": @"Barclays",
+        @"com.ally.auto": @"Ally",
+        @"com.navyfederal.navyfederal.mydata": @"Navy Federal"
+    };
+
+    if (knownNames[targetID]) return knownNames[targetID];
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; 
+    
+    NSArray *daemons = @[
+        @"com.apple.imagent", @"com.apple.mediaserverd",
+        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+        @"com.apple.cfnetwork"
+    ];
+    
+    if ([daemons containsObject:targetID]) return targetID;
+
+    @try {
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
+        if (LSAppProxy) {
+            id proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
+            if (proxy && [proxy respondsToSelector:@selector(localizedName)]) {
+                NSString *name = [proxy localizedName];
+                if (name && name.length > 0) return name;
+            }
+        }
+    } @catch (NSException *e) {}
+    
+    return targetID;
+}
+
+- (UIImage *)iconForTargetID:(NSString *)targetID {
+    UIImage *icon = nil;
+    
+    if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
+        NSArray *daemons = @[
+            @"com.apple.imagent", @"com.apple.mediaserverd",
+            @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+            @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
+            @"com.apple.cfnetwork",
+            @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
         ];
         
-        if ([msgAndMail containsObject:matchedID]) {
-            disableMedia = YES;
-            disableRTC = YES; 
-            disableFileAccess = YES; 
-            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
-        } else if ([browsers containsObject:matchedID]) {
-            spoofUARule = (autoProtectLevel >= 2);
-            if (autoProtectLevel >= 3) { 
-                disableRTC = YES; 
-                disableMedia = YES;
+        if (![daemons containsObject:targetID]) {
+            @try {
+                if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+                    icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
+                }
+            } @catch (NSException *e) {}
+        }
+    }
+    
+    if (!icon) {
+        if (@available(iOS 13.0, *)) {
+            icon = [UIImage systemImageNamed:@"gearshape.fill"];
+            icon = [icon imageWithTintColor:[UIColor systemGrayColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
+        }
+    }
+    
+    if (icon) {
+        CGSize newSize = CGSizeMake(23, 23);
+        UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
+        [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+        UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        return resizedIcon;
+    }
+    
+    return nil;
+}
+
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
+        return;
+    }
+    
+    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+
+    NSArray *browsers = @[
+        @"com.apple.mobilesafari", @"com.apple.SafariViewService",
+        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+    ];
+    
+    NSArray *msgAndMail = @[
+        @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
+        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
+        @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
+        @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", 
+        @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
+        @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
+    ];
+
+    NSArray *allProtected = [self autoProtectedItemsForLevel:3];
+    for (NSString *targetID in allProtected) {
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
+        
+        if (!force && [defaults objectForKey:dictKey]) {
+            continue;
+        }
+
+        NSMutableDictionary *rules = [NSMutableDictionary dictionary];
+        
+        rules[@"disableJIT"] = (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJIT15"] = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJS"] = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
+        
+        rules[@"disableMedia"] = @NO;
+        rules[@"disableRTC"] = @NO;
+        rules[@"disableFileAccess"] = @NO;
+        rules[@"disableIMessageDL"] = @NO;
+        rules[@"spoofUA"] = @NO;
+        
+        if ([msgAndMail containsObject:targetID]) {
+            rules[@"disableMedia"] = [AntiDarkSwordAppController isApplicableFeature:@"disableMedia" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableRTC"] = [AntiDarkSwordAppController isApplicableFeature:@"disableRTC" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableFileAccess"] = [AntiDarkSwordAppController isApplicableFeature:@"disableFileAccess" forTarget:targetID] ? @YES : @NO;
+            rules[@"disableIMessageDL"] = [AntiDarkSwordAppController isApplicableFeature:@"disableIMessageDL" forTarget:targetID] ? @YES : @NO;
+            if (![targetID hasPrefix:@"com.apple."]) {
+                rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
-        } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
-            // Daemons skip webkit mitigations by default
+        } else if ([browsers containsObject:targetID]) {
+            rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
+            
+            if (level >= 3) {
+                rules[@"disableRTC"] = @YES;
+                rules[@"disableMedia"] = @YES;
+            }
+        } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
+            // WebKit mitigations forcefully skipped.
         } else {
-            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
-        }
-    }
-
-    // 3. Override with saved user dictionary if it exists
-    if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
-        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
-        NSDictionary *appRules = prefs[dictKey];
-        if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
-            if ([appRules[@"disableJIT"] respondsToSelector:@selector(boolValue)]) disableJIT = [appRules[@"disableJIT"] boolValue];
-            if ([appRules[@"disableJIT15"] respondsToSelector:@selector(boolValue)]) disableJIT15 = [appRules[@"disableJIT15"] boolValue];
-            if ([appRules[@"disableJS"] respondsToSelector:@selector(boolValue)]) disableJS = [appRules[@"disableJS"] boolValue];
-            if ([appRules[@"disableMedia"] respondsToSelector:@selector(boolValue)]) disableMedia = [appRules[@"disableMedia"] boolValue];
-            if ([appRules[@"disableRTC"] respondsToSelector:@selector(boolValue)]) disableRTC = [appRules[@"disableRTC"] boolValue];
-            if ([appRules[@"disableFileAccess"] respondsToSelector:@selector(boolValue)]) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
-            if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)]) spoofUARule = [appRules[@"spoofUA"] boolValue];
-        }
-    }
-
-    applyDisableJIT = globalTweakEnabled && (globalDisableJIT || (currentProcessRestricted && disableJIT));
-    applyDisableJIT15 = globalTweakEnabled && (globalDisableJIT15 || (currentProcessRestricted && disableJIT15));
-    applyDisableJS = globalTweakEnabled && (globalDisableJS || (currentProcessRestricted && disableJS));
-    applyDisableMedia = globalTweakEnabled && (globalDisableMedia || (currentProcessRestricted && disableMedia));
-    applyDisableRTC = globalTweakEnabled && (globalDisableRTC || (currentProcessRestricted && disableRTC));
-    applyDisableFileAccess = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
-    
-    shouldSpoofUA = NO;
-    if (globalTweakEnabled) {
-        if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
-            shouldSpoofUA = YES;
-        } else if (currentProcessRestricted && spoofUARule && customUAString && customUAString.length > 0) {
-            shouldSpoofUA = YES;
-        }
-    }
-}
-
-%ctor {
-    loadPrefs();
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-}
-
-// =========================================================
-// WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
-// =========================================================
-
-%hook WKWebViewConfiguration
-
-- (void)setUserContentController:(WKUserContentController *)userContentController {
-    %orig;
-    if (shouldSpoofUA) {
-        NSString *platform = @"iPhone";
-        if ([customUAString containsString:@"iPad"]) platform = @"iPad";
-        else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
-        else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
-        else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
-
-        NSString *vendor = @"Apple Computer, Inc.";
-        if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
-            vendor = @"Google Inc.";
-        }
-
-        NSString *appVersion = customUAString;
-        if ([customUAString hasPrefix:@"Mozilla/"]) {
-            appVersion = [customUAString substringFromIndex:8];
-        }
-
-        NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        
-        NSString *jsSource = [NSString stringWithFormat:@"\
-            Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
-        ", safeUA, safeAppVersion, platform, vendor];
-        
-        WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
-                                                                     injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
-                                                                  forMainFrameOnly:NO];
-        [userContentController addUserScript:antiFingerprintScript];
-    }
-}
-
-- (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
-    if (shouldSpoofUA) {
-        return %orig(@"");
-    }
-    %orig;
-}
-%end
-
-%hook WKWebView
-
-- (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    
-    // Nuclear Fallback
-    if (applyDisableJS) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-    }
-
-    // iOS 16 Surgical JIT Mitigation
-    if (applyDisableJIT) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
-                [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
+            if (![targetID hasPrefix:@"com.apple."]) {
+                rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
         }
+        
+        [defaults setObject:rules forKey:dictKey];
     }
     
-    // iOS 15 Surgical JIT Mitigation
-    if (applyDisableJIT15 || applyDisableJIT) {
-        if ([configuration respondsToSelector:@selector(processPool)]) {
-            if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
-                id poolConfig = [(id)configuration.processPool _configuration];
-                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
-                    [(id)poolConfig setJITEnabled:NO];
+    [defaults setBool:YES forKey:@"hasInitializedDefaultRules"];
+    [defaults synchronize];
+}
+
+- (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
+    NSMutableArray *items = [NSMutableArray array];
+    
+    NSArray *tier1 = @[
+        @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
+        @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
+        @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+        @"com.apple.Maps", @"com.apple.weather", @"com.apple.Passbook",
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+    ];
+    
+    NSArray *tier2 = @[
+        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
+        @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
+        @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
+        @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
+        @"com.hammerandchisel.discord",
+        @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
+        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+        @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
+        @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
+        @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
+        @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+        @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
+        @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
+        @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
+        @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
+        @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
+        @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
+        @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
+        @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
+        @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
+    ];
+    
+    NSArray *tier3 = @[
+        @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+    ];
+    
+    [items addObjectsFromArray:tier1];
+    if (level >= 2) [items addObjectsFromArray:tier2];
+    if (level >= 3) [items addObjectsFromArray:tier3];
+    
+    return items;
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadSpecifiers];
+}
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        [defaults synchronize]; 
+        
+        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
+        
+        NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
+        if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
+            selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+            [defaults setObject:selectedUA forKey:@"selectedUAPreset"];
+            [defaults synchronize];
+        }
+
+        if (![selectedUA isEqualToString:@"CUSTOM"]) {
+            for (int i = 0; i < specs.count; i++) {
+                PSSpecifier *s = specs[i];
+                if ([[s propertyForKey:@"id"] isEqualToString:@"CustomUATextField"]) {
+                    [specs removeObjectAtIndex:i];
+                    break;
                 }
             }
         }
-    }
-    
-    if (applyDisableMedia) {
-        if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) configuration.allowsInlineMediaPlayback = NO;
-        if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-        if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) configuration.allowsPictureInPictureMediaPlayback = NO;
-    }
-    
-    if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-        @try {
-            if (applyDisableFileAccess) {
-                [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-            }
-            if (applyDisableRTC) {
-                [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-            }
-        } @catch (NSException *e) {}
-    }
-    
-    if (shouldSpoofUA) {
-        if (!configuration.userContentController) {
-            configuration.userContentController = [[WKUserContentController alloc] init];
-        }
-    }
-    
-    WKWebView *webView = %orig(frame, configuration);
-    if (shouldSpoofUA) {
-        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
-            webView.customUserAgent = customUAString;
-        }
-    }
-    
-    return webView;
-}
+        
+        NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
+        NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
+        
+        NSArray *desiredOrder = @[
+            @"globalUASpoofingEnabled",
+            @"globalDisableJIT",
+            @"globalDisableJIT15",
+            @"globalDisableJS",
+            @"globalDisableRTC",
+            @"globalDisableMedia",
+            @"globalDisableIMessageDL",
+            @"globalDisableFileAccess"
+        ];
+        
+        NSMutableDictionary *globalSpecsDict = [NSMutableDictionary dictionary];
+        NSMutableArray *nonGlobalSpecs = [NSMutableArray array];
+        NSUInteger mitigationsGroupIndex = NSNotFound;
 
-- (instancetype)initWithCoder:(NSCoder *)coder {
-    WKWebView *webView = %orig(coder);
-    if (!webView) return nil;
-    
-    // Nuclear Fallback
-    if (applyDisableJS) {
-        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-    }
-
-    // iOS 16 Surgical JIT Mitigation
-    if (applyDisableJIT) {
-        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            if ([webView.configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
-                [(id)webView.configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
+        for (int i = 0; i < specs.count; i++) {
+            PSSpecifier *s = specs[i];
+            NSString *key = [s propertyForKey:@"key"];
+            
+            if ([[s propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"]) {
+                mitigationsGroupIndex = i;
+            }
+            
+            if ([desiredOrder containsObject:key]) {
+                if ([key isEqualToString:@"globalDisableJIT"]) {
+                    if (!isIOS16OrGreater || (isIOS16OrGreater && globalJSEnabled)) {
+                        [s setProperty:@NO forKey:@"enabled"];
+                    }
+                }
+                if ([key isEqualToString:@"globalDisableJIT15"]) {
+                    if (isIOS16OrGreater || (!isIOS16OrGreater && globalJSEnabled)) {
+                        [s setProperty:@NO forKey:@"enabled"];
+                    }
+                }
+                
+                globalSpecsDict[key] = s;
+            } else {
+                [nonGlobalSpecs addObject:s];
             }
         }
-    }
-    
-    // iOS 15 Surgical JIT Mitigation
-    if (applyDisableJIT15 || applyDisableJIT) {
-        if ([webView.configuration respondsToSelector:@selector(processPool)]) {
-            if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
-                id poolConfig = [(id)webView.configuration.processPool _configuration];
-                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
-                    [(id)poolConfig setJITEnabled:NO];
+        
+        if (mitigationsGroupIndex != NSNotFound && globalSpecsDict.count > 0) {
+            specs = [nonGlobalSpecs mutableCopy];
+            NSUInteger insertPoint = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+                return [[obj propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"];
+            }] + 1;
+            
+            for (NSString *key in desiredOrder) {
+                if (globalSpecsDict[key]) {
+                    [specs insertObject:globalSpecsDict[key] atIndex:insertPoint++];
                 }
             }
         }
-    }
-    
-    if (applyDisableMedia) {
-        if ([webView.configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) webView.configuration.allowsInlineMediaPlayback = NO;
-        if ([webView.configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-        if ([webView.configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) webView.configuration.allowsPictureInPictureMediaPlayback = NO;
-    }
-    
-    if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-        @try {
-            if (applyDisableFileAccess) {
-                [webView.configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                [webView.configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-            }
-            if (applyDisableRTC) {
-                [webView.configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                [webView.configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                [webView.configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-            }
-        } @catch (NSException *e) {}
-    }
-    
-    if (shouldSpoofUA) {
-        if (!webView.configuration.userContentController) {
-            webView.configuration.userContentController = [[WKUserContentController alloc] init];
-        }
-        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
-            webView.customUserAgent = customUAString;
-        }
-    }
-    
-    return webView;
-}
 
-- (WKNavigation *)loadRequest:(NSURLRequest *)request {
-    if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        for (PSSpecifier *s in specs) {
+            if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
+                s.detailControllerClass = [AntiDarkSwordAltListController class];
+            }
+            
+            if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
+                NSString *footerText = @"";
+                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
+                else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Enforces restrictions on critical background system daemons (imagent, mediaserverd, networkd, apsd, identityservicesd).\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
+                [s setProperty:footerText forKey:@"footerText"];
+            }
         }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
-    }
 
-    if (shouldSpoofUA) {
-        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
-            self.customUserAgent = customUAString;
+        NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+            return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
+        }];
+        
+        if (insertIndexAuto != NSNotFound) {
+            insertIndexAuto++;
+            PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+            [specs insertObject:groupSpec atIndex:insertIndexAuto++];
+            
+            NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
+            for (NSString *item in autoItems) {
+                NSString *displayName = [self displayNameForTargetID:item];
+                BOOL isInstalled = [self isTargetInstalled:item];
+
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                [spec setProperty:item forKey:@"targetID"];
+                [spec setProperty:@(0) forKey:@"ruleType"];
+                
+                if (!isInstalled) {
+                    [spec setProperty:@NO forKey:@"enabled"];
+                }
+                
+                UIImage *icon = [self iconForTargetID:item];
+                if (icon) {
+                    [spec setProperty:icon forKey:@"iconImage"];
+                }
+                
+                [specs insertObject:spec atIndex:insertIndexAuto++];
+            }
         }
         
-        if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
-            NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
-            if (existingUA && ![existingUA isEqualToString:customUAString]) {
-                NSMutableURLRequest *mutableReq = [request mutableCopy];
-                [mutableReq setValue:customUAString forHTTPHeaderField:@"User-Agent"];
-                return %orig(mutableReq);
+        NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+            return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
+        }];
+        
+        if (insertIndexCustom != NSNotFound) {
+            insertIndexCustom++;
+            for (NSString *daemonID in customIDs) {
+                NSString *displayName = [self displayNameForTargetID:daemonID];
+                PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
+                [spec setProperty:daemonID forKey:@"targetID"];
+                [spec setProperty:daemonID forKey:@"daemonID"];
+                [spec setProperty:@(2) forKey:@"ruleType"]; 
+                [spec setProperty:@YES forKey:@"isCustomDaemon"];
+                
+                UIImage *icon = [self iconForTargetID:daemonID];
+                if (icon) {
+                    [spec setProperty:icon forKey:@"iconImage"];
+                }
+                
+                [specs insertObject:spec atIndex:insertIndexCustom++];
             }
         }
+        
+        _specifiers = [specs copy];
     }
-    return %orig;
+    return _specifiers;
 }
 
-- (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
-    if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
-    }
-
-    if (shouldSpoofUA) {
-        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
-            self.customUserAgent = customUAString;
-        }
-    }
-    return %orig;
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger currentLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
+    [self populateDefaultRulesForLevel:currentLevel force:NO];
+    
+    UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)];
+    self.navigationItem.rightBarButtonItem = saveButton;
+    
+    BOOL isEnabled = [defaults boolForKey:@"enabled"];
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    
+    saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
-- (void)evaluateJavaScript:(NSString *)javaScriptString completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
-        if (completionHandler) {
-            NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
-            completionHandler(nil, err);
-        }
-        return;
-    }
-    %orig;
+- (void)dealloc {
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL);
 }
 
-- (void)evaluateJavaScript:(NSString *)javaScriptString inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
-        if (completionHandler) {
-            NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1 userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
-            completionHandler(nil, err);
-        }
-        return;
+static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    AntiDarkSwordPrefsRootListController *controller = (__bridge AntiDarkSwordPrefsRootListController *)observer;
+    if (controller) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        BOOL isEnabled = [defaults boolForKey:@"enabled"];
+        BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+        BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
+        });
     }
-    %orig;
 }
 
-- (void)setCustomUserAgent:(NSString *)customUserAgent {
-    if (shouldSpoofUA) {
-        %orig(customUAString);
+- (void)flagSaveRequirement {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults synchronize];
+    
+    BOOL isEnabled = [defaults boolForKey:@"enabled"];
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
+}
+
+- (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    NSString *key = [specifier propertyForKey:@"key"];
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+
+    if ([key isEqualToString:@"customUAString"]) {
+        NSString *input = (NSString *)value;
+        NSString *trimmed = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        
+        if (trimmed.length == 0) {
+            NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+            value = ios18UA;
+            
+            [defaults setObject:ios18UA forKey:@"selectedUAPreset"];
+            [defaults synchronize];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }
+    }
+
+    [super setPreferenceValue:value specifier:specifier];
+    [self flagSaveRequirement];
+    
+    if ([key isEqualToString:@"selectedUAPreset"]) {
+        if (![defaults boolForKey:@"enabled"]) {
+            [defaults setBool:YES forKey:@"enabled"];
+            [defaults synchronize];
+        }
+        _specifiers = nil;
+        [self reloadSpecifiers];
+    }
+}
+
+- (void)setGlobalMitigation:(id)value specifier:(PSSpecifier *)specifier {
+    BOOL enabled = [value boolValue];
+    NSString *key = [specifier propertyForKey:@"key"];
+    
+    if (enabled) {
+        NSString *featureName = [specifier name];
+        NSString *msg = [NSString stringWithFormat:@"Enabling '%@' globally applies this mitigation to ALL processes indiscriminately. This may break core functionality across the system and is intended for testing/emergency lockdown only.", featureName];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Warning" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            [self setPreferenceValue:value specifier:specifier];
+            
+            if ([key isEqualToString:@"globalDisableJS"]) {
+                BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+                NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+                
+                if (isIOS16OrGreater) {
+                    [defaults setBool:YES forKey:@"globalDisableJIT"];
+                } else {
+                    [defaults setBool:YES forKey:@"globalDisableJIT15"];
+                }
+                [defaults synchronize];
+            }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }]];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+            [self reloadSpecifiers]; 
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
     } else {
-        %orig;
+        [self setPreferenceValue:value specifier:specifier];
+        
+        if ([key isEqualToString:@"globalDisableJS"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self->_specifiers = nil;
+                [self reloadSpecifiers];
+            });
+        }
     }
 }
-%end
 
-%hook WKWebpagePreferences
-- (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (applyDisableJS && allowed) {
-        return %orig(NO);
+- (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL enabled = [value boolValue];
+    [defaults setObject:value forKey:@"autoProtectEnabled"];
+    
+    if (enabled) {
+        if (![defaults boolForKey:@"enabled"]) {
+            [defaults setBool:YES forKey:@"enabled"];
+        }
     }
-    %orig;
-}
-%end
-
-%hook WKPreferences
-- (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (applyDisableJS && enabled) {
-        return %orig(NO);
+    
+    if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
-    %orig;
-}
-%end
-
-%hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (applyDisableJS) {
-        return NULL;
-    }
-    return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
+    [defaults synchronize];
+    [self flagSaveRequirement];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    _specifiers = nil;
+    [self reloadSpecifiers];
 }
 
-// =========================================================
-// LEGACY UIWEBVIEW NEUTRALIZATION
-// =========================================================
-
-%hook UIWebView
-- (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (applyDisableJS) {
-        return @"";
+- (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"];
+    NSInteger newLevel = [value integerValue];
+    
+    [defaults setObject:value forKey:@"autoProtectLevel"];
+    
+    if (oldLevel != newLevel) {
+        [self populateDefaultRulesForLevel:newLevel force:YES];
     }
-    return %orig;
+    
+    if (oldLevel >= 3 || newLevel >= 3) {
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+    }
+    [defaults synchronize];
+    [self flagSaveRequirement];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    
+    _specifiers = nil;
+    [self reloadSpecifiers];
 }
-%end
+
+- (void)addCustomID {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Custom ID" message:@"Enter bundle IDs or process names (comma-separated)" preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"com.apple.imagent, mediaserverd";
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Add" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *inputText = alert.textFields.firstObject.text;
+        if (inputText.length > 0) {
+            NSArray *inputIDs = [inputText componentsSeparatedByString:@","];
+            
+            NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+            NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+            NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
+            BOOL changesMade = NO;
+            
+            for (NSString *rawID in inputIDs) {
+                NSString *cleanID = [rawID stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (cleanID.length > 0 && ![customIDs containsObject:cleanID]) {
+                    [customIDs addObject:cleanID];
+                    if (![activeCustom containsObject:cleanID]) [activeCustom addObject:cleanID];
+                    changesMade = YES;
+                }
+            }
+            
+            if (changesMade) {
+                [defaults setObject:customIDs forKey:@"customDaemonIDs"];
+                [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+                [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+                [defaults synchronize];
+                [self flagSaveRequirement];
+                
+                _specifiers = nil;
+                [self reloadSpecifiers];
+                CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+            }
+        }
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    return [[spec propertyForKey:@"isCustomDaemon"] boolValue];
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+        NSString *daemonID = [spec propertyForKey:@"daemonID"];
+        
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
+        NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
+        
+        [customIDs removeObject:daemonID];
+        [activeCustom removeObject:daemonID];
+        
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", daemonID];
+        [defaults removeObjectForKey:dictKey];
+        
+        [defaults setObject:customIDs forKey:@"customDaemonIDs"];
+        [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"];
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+        [defaults synchronize];
+        [self flagSaveRequirement];
+        
+        [self removeSpecifier:spec animated:YES];
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    }
+}
+
+- (void)resetToDefaults {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        
+        NSDictionary *dict = [defaults dictionaryRepresentation];
+        for (NSString *key in dict) {
+            [defaults removeObjectForKey:key];
+        }
+        
+        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
+        [defaults synchronize];
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        
+        pid_t pid;
+        const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)savePrompt {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    
+    NSString *title = @"Save";
+    NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
+    NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
+        [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
+        [defaults synchronize];
+        
+        pid_t pid;
+        if (needsReboot) {
+            const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+        } else {
+            const char* args[] = {"killall", "backboardd", NULL};
+            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+        }
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)openGitHub {
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"] options:@{} completionHandler:nil];
+}
+
+- (void)openVenmo {
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://venmo.com/user/eolnmsuk"] options:@{} completionHandler:nil];
+}
+
+@end
