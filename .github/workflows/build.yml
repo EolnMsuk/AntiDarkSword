@@ -22,8 +22,8 @@ jobs:
 
       - name: Fix AltList Path & Load Framework
         run: |
-          echo "Fixing AltList dylib ID for rootful..."
-          install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
+          echo "Fixing AltList dylib ID for rootless Dopamine..."
+          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           echo "Copying AltList.framework from local repository to Theos..."
           cp -r vendor/AltList.framework $THEOS/lib/
 
