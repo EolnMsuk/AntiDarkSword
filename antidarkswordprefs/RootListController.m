@@ -12,7 +12,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // ==========================================
 @interface LSApplicationProxy : NSObject
 + (id)applicationProxyForIdentifier:(NSString *)identifier;
-- (NSString localizedName);
+- (NSString *)localizedName;
 - (NSURL *)bundleURL;
 @end
 
