@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>AntiDarkSwordPrefs</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.eolnmsuk.antidarkswordprefs</string>
+    <key>CFBundleName</key>
+    <string>AntiDarkSwordPrefs</string>
+    <key>CFBundleShortVersionString</key>
+    <string>3.4</string>
+    <key>CFBundleVersion</key>
+    <string>3.4</string>
+    <key>NSPrincipalClass</key>
+    <string>AntiDarkSwordPrefsRootListController</string>
+</dict>
+</plist>
