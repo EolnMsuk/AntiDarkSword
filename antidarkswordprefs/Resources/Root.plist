@@ -35,7 +35,7 @@
             <key>label</key>
             <string>User Agent Configuration</string>
             <key>footerText</key>
-            <string>Spoofing User Agent bypasses standard fingerprinting modules used by Coruna and DarkSword.</string>
+            <string>Spoofing User Agent (iOS version) bypasses known payloads for Coruna and DarkSword.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -189,7 +189,7 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names. Swipe left on rules below to remove.</string>
+            <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -238,7 +238,7 @@
             <key>key</key>
             <string>globalDisableJIT</string>
             <key>label</key>
-            <string>Disable JS JIT</string>
+            <string>Disable iOS 16 JIT</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
@@ -270,7 +270,7 @@
             <key>key</key>
             <string>globalDisableJS</string>
             <key>label</key>
-            <string>Disable JavaScript</string>
+            <string>Disable JavaScript ⚠︎</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
