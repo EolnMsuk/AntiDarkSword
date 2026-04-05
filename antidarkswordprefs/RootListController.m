@@ -253,8 +253,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable JIT"},
-            @{@"key": @"disableJS", @"label": @"Disable JavaScript"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT (JustInTime)"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript (All)"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
             @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
@@ -784,14 +784,57 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        for (PSSpecifier *s in specs) {
-            // Apply Global JIT UI Lock if Global JS is ON (iOS 16+)
-            if ([[s propertyForKey:@"key"] isEqualToString:@"globalDisableJIT"]) {
-                if (isIOS16OrGreater && globalJSEnabled) {
-                    [s setProperty:@NO forKey:@"enabled"];
-                }
+        // Re-order the global toggles to match user specifications exactly
+        NSArray *desiredOrder = @[
+            @"globalUASpoofingEnabled",
+            @"globalDisableJIT",
+            @"globalDisableJS",
+            @"globalDisableRTC",
+            @"globalDisableMedia",
+            @"globalDisableIMessageDL",
+            @"globalDisableFileAccess"
+        ];
+        
+        NSMutableDictionary *globalSpecsDict = [NSMutableDictionary dictionary];
+        NSMutableArray *nonGlobalSpecs = [NSMutableArray array];
+        NSUInteger mitigationsGroupIndex = NSNotFound;
+
+        for (int i = 0; i < specs.count; i++) {
+            PSSpecifier *s = specs[i];
+            NSString *key = [s propertyForKey:@"key"];
+            
+            if ([[s propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"]) {
+                mitigationsGroupIndex = i;
             }
             
+            if ([desiredOrder containsObject:key]) {
+                // Apply Global JIT UI Lock if Global JS is ON (iOS 16+)
+                if ([key isEqualToString:@"globalDisableJIT"]) {
+                    if (isIOS16OrGreater && globalJSEnabled) {
+                        [s setProperty:@NO forKey:@"enabled"];
+                    }
+                }
+                globalSpecsDict[key] = s;
+            } else {
+                [nonGlobalSpecs addObject:s];
+            }
+        }
+        
+        // Re-insert sorted global specs
+        if (mitigationsGroupIndex != NSNotFound && globalSpecsDict.count > 0) {
+            specs = [nonGlobalSpecs mutableCopy];
+            NSUInteger insertPoint = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+                return [[obj propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"];
+            }] + 1;
+            
+            for (NSString *key in desiredOrder) {
+                if (globalSpecsDict[key]) {
+                    [specs insertObject:globalSpecsDict[key] atIndex:insertPoint++];
+                }
+            }
+        }
+
+        for (PSSpecifier *s in specs) {
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
             }
