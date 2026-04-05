@@ -7,6 +7,7 @@
         <key>Bundles</key>
         <array>
             <string>com.apple.Foundation</string>
+            <string>com.apple.imagent</string>
         </array>
         <key>Executables</key>
         <array>
