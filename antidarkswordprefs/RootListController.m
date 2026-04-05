@@ -1,4 +1,3 @@
-// antidarkswordprefs/RootListController.m
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
@@ -47,6 +46,61 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 + (BOOL)isDaemonTarget:(NSString *)targetID;
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID;
 - (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey;
+@end
+
+// ==========================================
+// System Daemon Consolidated List
+// ==========================================
+@interface AntiDarkSwordDaemonListController : PSListController
+@end
+
+@implementation AntiDarkSwordDaemonListController
+
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        NSMutableArray *specs = [NSMutableArray array];
+        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+
+        PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
+        [specs addObject:group];
+
+        NSArray *daemons = @[@"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+        for (NSString *daemon in daemons) {
+            PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+            [spec setProperty:daemon forKey:@"targetID"];
+            [specs addObject:spec];
+        }
+        _specifiers = [specs copy];
+    }
+    return _specifiers;
+}
+
+- (id)getDaemonEnabled:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+    return @(![disabled containsObject:[spec propertyForKey:@"targetID"]]);
+}
+
+- (void)setDaemonEnabled:(id)value specifier:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+    NSString *targetID = [spec propertyForKey:@"targetID"];
+
+    if ([value boolValue]) {
+        [disabled removeObject:targetID];
+        if ([targetID isEqualToString:@"imagent"]) [disabled removeObject:@"com.apple.imagent"];
+    } else {
+        if (![disabled containsObject:targetID]) [disabled addObject:targetID];
+        if ([targetID isEqualToString:@"imagent"] && ![disabled containsObject:@"com.apple.imagent"]) [disabled addObject:@"com.apple.imagent"];
+    }
+
+    [defaults setObject:disabled forKey:@"disabledPresetRules"];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+    [defaults synchronize];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+}
 @end
 
 // ==========================================
@@ -123,7 +177,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                     cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
                 }
             } else {
-                cell.backgroundColor = [UIColor clearColor]; 
+                if (@available(iOS 13.0, *)) {
+                    cell.backgroundColor = [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+                } else {
+                    cell.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
+                }
             }
         }
     }
@@ -395,7 +453,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if (!rules || rules[featureKey] == nil) { 
         
-        // Ensure manual/non-preset apps default to ALL OFF
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
         if (![allProtected containsObject:self.targetID]) {
@@ -700,7 +757,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     ];
 
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
-    for (NSString *targetID in allProtected) {
+    NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
+    [expandedTargets removeObject:@"DAEMONS_GROUP"];
+    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"]];
+
+    for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
         
         if (!force && [defaults objectForKey:dictKey]) {
@@ -762,7 +823,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
     ];
     
-    NSArray *tier2 = @[
+    NSArray *tier2ThirdParty = @[
         @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
         @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
         @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
@@ -774,7 +835,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
         @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
         @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
         @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
         @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
         @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
@@ -786,13 +846,26 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
     ];
     
-    NSArray *tier3 = @[
-        @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+    NSArray *sortedTier2 = [tier2ThirdParty sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
+        NSString *nameA = [self displayNameForTargetID:a];
+        NSString *nameB = [self displayNameForTargetID:b];
+        return [nameA caseInsensitiveCompare:nameB];
+    }];
+
+    NSArray *tier2JB = @[
+        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
     ];
     
     [items addObjectsFromArray:tier1];
-    if (level >= 2) [items addObjectsFromArray:tier2];
-    if (level >= 3) [items addObjectsFromArray:tier3];
+    
+    if (level >= 2) {
+        [items addObjectsFromArray:sortedTier2];
+        [items addObjectsFromArray:tier2JB];
+    }
+    
+    if (level >= 3) {
+        [items addObject:@"DAEMONS_GROUP"];
+    }
     
     return items;
 }
@@ -800,6 +873,63 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self reloadSpecifiers];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+
+    id ruleTypeObj = [spec propertyForKey:@"ruleType"];
+    if (ruleTypeObj != nil) {
+        NSString *targetID = [spec propertyForKey:@"targetID"];
+        NSInteger ruleType = [ruleTypeObj integerValue];
+        BOOL isEnabled = YES;
+
+        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+
+        if (ruleType == 0) {
+            if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
+                NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+                NSArray *daemons = @[@"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+                BOOL anyActive = NO;
+                for (NSString *d in daemons) {
+                    if (![disabled containsObject:d]) {
+                        anyActive = YES;
+                        break;
+                    }
+                }
+                isEnabled = anyActive;
+            } else {
+                NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+                isEnabled = ![disabled containsObject:targetID];
+            }
+        } else if (ruleType == 2) {
+            NSArray *active = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
+            isEnabled = [active containsObject:targetID];
+        }
+
+        if (isEnabled) {
+            if (@available(iOS 13.0, *)) {
+                cell.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+            } else {
+                cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
+            }
+        } else {
+            if (@available(iOS 13.0, *)) {
+                cell.backgroundColor = [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+            } else {
+                cell.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
+            }
+        }
+    } else {
+        if (@available(iOS 13.0, *)) {
+            cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        } else {
+            cell.backgroundColor = [UIColor whiteColor];
+        }
+    }
+
+    return cell;
 }
 
 - (NSArray *)specifiers {
@@ -910,16 +1040,40 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
-                NSString *displayName = [self displayNameForTargetID:item];
-                BOOL isInstalled = [self isTargetInstalled:item];
+                
+                if ([item isEqualToString:@"DAEMONS_GROUP"]) {
+                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:@"Restrict System Daemons" target:self set:nil get:nil detail:[AntiDarkSwordDaemonListController class] cell:PSLinkCell edit:nil];
+                    [spec setProperty:@"DAEMONS_GROUP" forKey:@"targetID"];
+                    [spec setProperty:@(0) forKey:@"ruleType"];
+                    
+                    UIImage *icon = nil;
+                    if (@available(iOS 13.0, *)) {
+                        icon = [UIImage systemImageNamed:@"bolt.shield.fill"];
+                        icon = [icon imageWithTintColor:[UIColor systemGrayColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
+                    }
+                    if (icon) {
+                        CGSize newSize = CGSizeMake(23, 23);
+                        UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
+                        [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+                        UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
+                        UIGraphicsEndImageContext();
+                        [spec setProperty:resizedIcon forKey:@"iconImage"];
+                    }
+                    
+                    [specs insertObject:spec atIndex:insertIndexAuto++];
+                    continue;
+                }
 
+                BOOL isInstalled = [self isTargetInstalled:item];
+                
+                if (!isInstalled) {
+                    continue; // HIDES CELL COMPLETELY IF UNINSTALLED
+                }
+
+                NSString *displayName = [self displayNameForTargetID:item];
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
                 [spec setProperty:item forKey:@"targetID"];
                 [spec setProperty:@(0) forKey:@"ruleType"];
-                
-                if (!isInstalled) {
-                    [spec setProperty:@NO forKey:@"enabled"];
-                }
                 
                 UIImage *icon = [self iconForTargetID:item];
                 if (icon) {
