@@ -856,15 +856,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
     ];
     
+    if (level >= 3) {
+        [items addObject:@"DAEMONS_GROUP"];
+    }
+
+    // Then add Tier 1 (Safari, Messages, etc.) underneath it
     [items addObjectsFromArray:tier1];
     
+    // Then add Tier 2 and Jailbreak apps
     if (level >= 2) {
         [items addObjectsFromArray:sortedTier2];
         [items addObjectsFromArray:tier2JB];
-    }
-    
-    if (level >= 3) {
-        [items addObject:@"DAEMONS_GROUP"];
     }
     
     return items;
