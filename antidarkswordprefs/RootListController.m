@@ -252,13 +252,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [specs addObject:featGroup];
         
         NSArray *features = @[
-            @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable JIT (JustInTime)"},
-            @{@"key": @"disableJS", @"label": @"Disable JavaScript (All)"},
-            @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
-            @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
-            @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"},
-            @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}
+            @{@"key": @"spoofUA", @"label": @"Spoof User Agent 🕵"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT ⛉"},
+            @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"},
+            @{@"key": @"disableRTC", @"label": @"Disable WebGL/WebRTC 🖧"},
+            @{@"key": @"disableMedia", @"label": @"Disable Auto-Play 🎬"},
+            @{@"key": @"disableIMessageDL", @"label": @"Disable Auto-Download 🡻"},
+            @{@"key": @"disableFileAccess", @"label": @"Disable File Access 🗂️"}
         ];
         
         // Retrieve current JS status to handle JIT locking logic
