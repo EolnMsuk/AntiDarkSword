@@ -590,7 +590,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.americanexpress.amelia": @"Amex",
         @"com.fidelity.iphone": @"Fidelity",
         @"com.schwab.mobile": @"Charles Schwab",
-        @"com.etrade.mobilepro.iphone": @"E*TRADE"
+        @"com.etrade.mobilepro.iphone": @"E*TRADE",
+        @"com.discoverfinancial.mobile": @"Discover",
+        @"com.usbank.mobilebanking": @"U.S. Bank",
+        @"com.monzo.ios": @"Monzo",
+        @"com.revolut.iphone": @"Revolut",
+        @"com.binance.dev": @"Binance",
+        @"com.kraken.invest": @"Kraken",
+        @"com.barclays.ios.bmb": @"Barclays",
+        @"com.ally.auto": @"Ally",
+        @"com.navyfederal.navyfederal.mydata": @"Navy Federal"
     };
 
     if (knownNames[targetID]) return knownNames[targetID];
@@ -770,7 +779,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
         @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
         @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
-        @"com.etrade.mobilepro.iphone"
+        @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
+        @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
+        @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
     ];
     
     NSArray *tier3 = @[
