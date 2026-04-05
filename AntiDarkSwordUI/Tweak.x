@@ -1,3 +1,4 @@
+// AntiDarkSwordUI/Tweak.x
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
@@ -18,18 +19,6 @@
 @property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
 @end
 
-// =========================================================
-// PRIVATE IMESSAGE INTERFACES
-// =========================================================
-@interface IMFileTransfer : NSObject
-- (BOOL)isAutoDownloadable;
-- (BOOL)canAutoDownload;
-@end
-
-@interface CKAttachmentMessagePartChatItem : NSObject
-- (BOOL)_needsPreviewGeneration;
-@end
-
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
@@ -45,7 +34,6 @@ static BOOL globalDisableJS = NO;
 static BOOL globalDisableMedia = NO;
 static BOOL globalDisableRTC = NO;
 static BOOL globalDisableFileAccess = NO;
-static BOOL globalDisableIMessageDL = NO;
 
 // App-Specific Granular Features
 static BOOL disableJIT = NO;
@@ -54,7 +42,6 @@ static BOOL disableJS = NO;
 static BOOL disableMedia = NO;
 static BOOL disableRTC = NO;
 static BOOL disableFileAccess = NO;
-static BOOL disableIMessageDL = NO;
 
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
@@ -63,7 +50,6 @@ static BOOL applyDisableJS = NO;
 static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
 static BOOL applyDisableFileAccess = NO;
-static BOOL applyDisableIMessageDL = NO;
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
@@ -126,8 +112,7 @@ static void loadPrefs() {
         globalDisableMedia = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableMedia"] boolValue] : NO;
         globalDisableRTC = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableRTC"] boolValue] : NO;
         globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
-        globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
-
+        
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
@@ -206,13 +191,15 @@ static void loadPrefs() {
                 @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
                 @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
                 @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-                @"com.squareup.cash", @"com.venmo.Venmo", @"com.yourcompany.PPClient", 
-                @"com.robinhood.release.Robinhood", @"com.coinbase.consumer", @"com.sixdays.trust", 
+                @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
+                @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
                 @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
                 @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
                 @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
                 @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
-                @"com.etrade.mobilepro.iphone"
+                @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
+                @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
+                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
             ];
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
@@ -243,13 +230,12 @@ static void loadPrefs() {
     // 1. Establish absolute baseline defaults for unconfigured apps
     disableMedia = NO;
     disableRTC = NO;
-    disableIMessageDL = NO;
     BOOL spoofUARule = NO;
     disableJIT = NO;
     disableJIT15 = NO;
     disableJS = NO;
     disableFileAccess = NO;
-
+    
     // 2. If it's a PRESET app, apply secure defaults if no dictionary exists yet
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
@@ -271,13 +257,18 @@ static void loadPrefs() {
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
             @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-
+        
         if ([msgAndMail containsObject:matchedID]) {
-            disableMedia = YES; disableRTC = YES; disableFileAccess = YES; disableIMessageDL = YES;
+            disableMedia = YES;
+            disableRTC = YES; 
+            disableFileAccess = YES; 
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
             spoofUARule = (autoProtectLevel >= 2);
-            if (autoProtectLevel >= 3) { disableRTC = YES; disableMedia = YES; }
+            if (autoProtectLevel >= 3) { 
+                disableRTC = YES; 
+                disableMedia = YES;
+            }
         } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
             // Daemons skip webkit mitigations by default
         } else {
@@ -296,7 +287,6 @@ static void loadPrefs() {
             if ([appRules[@"disableMedia"] respondsToSelector:@selector(boolValue)]) disableMedia = [appRules[@"disableMedia"] boolValue];
             if ([appRules[@"disableRTC"] respondsToSelector:@selector(boolValue)]) disableRTC = [appRules[@"disableRTC"] boolValue];
             if ([appRules[@"disableFileAccess"] respondsToSelector:@selector(boolValue)]) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
-            if ([appRules[@"disableIMessageDL"] respondsToSelector:@selector(boolValue)]) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
             if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)]) spoofUARule = [appRules[@"spoofUA"] boolValue];
         }
     }
@@ -307,7 +297,6 @@ static void loadPrefs() {
     applyDisableMedia = globalTweakEnabled && (globalDisableMedia || (currentProcessRestricted && disableMedia));
     applyDisableRTC = globalTweakEnabled && (globalDisableRTC || (currentProcessRestricted && disableRTC));
     applyDisableFileAccess = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
-    applyDisableIMessageDL = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
     
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
@@ -351,12 +340,14 @@ static void loadPrefs() {
 
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
+        
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -613,34 +604,6 @@ static void loadPrefs() {
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
     if (applyDisableJS) {
         return @"";
-    }
-    return %orig;
-}
-%end
-
-// =========================================================
-// NATIVE IMESSAGE MITIGATIONS (BLASTPASS / FORCEDENTRY)
-// =========================================================
-
-%hook IMFileTransfer
-- (BOOL)isAutoDownloadable {
-    if (applyDisableIMessageDL) {
-        return NO;
-    }
-    return %orig;
-}
-- (BOOL)canAutoDownload {
-    if (applyDisableIMessageDL) {
-        return NO;
-    }
-    return %orig;
-}
-%end
-
-%hook CKAttachmentMessagePartChatItem
-- (BOOL)_needsPreviewGeneration {
-    if (applyDisableIMessageDL) {
-        return NO;
     }
     return %orig;
 }
