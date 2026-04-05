@@ -18,10 +18,10 @@ Because it targets the specific rendering and downloading processes that exploit
 
   * **WebKit Hardening:** Forcibly disables the JIT compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views. By disabling the highly-targeted JIT compiler while allowing baseline interpreted JavaScript, your apps retain their UI functionality while neutralizing memory-corruption zero-days.
   * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation within IMCore and ChatKit.
-  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JIT enabled for a specific browser? You can do that. 
-  * **Zero-Crash Architecture:** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
   * **Global Mitigations (BETA):** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
   * **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
+  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JIT enabled for a specific browser? You can do that. 
+  * **Zero-Crash Architecture:** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
   * **Tiered Protection:**
       * **Level 1:** Protects native Apple apps and services (Safari, Mail and Messages).
       * **Level 2:** Expands protection to major third-party browsers and social media apps.
