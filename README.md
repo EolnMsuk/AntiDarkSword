@@ -11,17 +11,17 @@ AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken de
 To protect yourself, you must go into the tweak settings and enable one of the Preset Rules tiers or explicitly RESTRICT the apps you want to lock down.
 
 **🛡️ Modular Lockdown Mode & Firmware Awareness**
-You can now use this tweak instead of Apple's Native Lockdown Mode. AntiDarkSword effectively acts as a "Modular Lockdown Mode," featuring intelligent OS detection to adapt to your device's capabilities:
+AntiDarkSword effectively acts as a "Modular Lockdown Mode," featuring intelligent OS detection to adapt to your device's exact capabilities, bypassing the need for Apple's Native Lockdown Mode:
 * **For iOS 16+:** It hooks into the exact same WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) internal logic gates used by Apple's own security engineers to surgically disable the vulnerable JIT compiler.
-* **For iOS 15.x:** Because the native Lockdown Mode APIs do not exist on iOS 15, the tweak automatically detects your firmware and safely falls back to a strict JavaScript kill-switch. This guarantees that devices on older jailbreaks remain fully protected against WebKit zero-days without failing silently in the background.
+* **For iOS 15.x:** It utilizes undocumented WebKit `_WKProcessPoolConfiguration` APIs (`JITEnabled`) to surgically disable the JIT compiler natively, bridging the security gap for older devices that lack a system-wide Lockdown Mode. A strict, nuclear JavaScript kill-switch is also available as an ultimate fallback.
 
 Because it targets the specific rendering and downloading processes that exploit kits use as entry points, this tweak protects equally—if not more—against known zero-click payloads, while allowing you to keep essential system features functional. You retain your wired accessory permissions, shared albums, smart home integrations, and the baseline UI of your safe apps, while neutralizing the exact memory-corruption vulnerabilities attackers rely on.
 
 ## ✨ Features
 
-  * **WebKit Hardening:** Forcibly disables the JIT (JavaScript) compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views. By disabling the highly-targeted JIT compiler while allowing baseline interpreted JavaScript, your apps retain their UI functionality while neutralizing memory-corruption zero-days.
+  * **WebKit Hardening:** Forcibly disables the JIT compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access within targeted web views. By disabling the highly-targeted JIT compiler while allowing baseline interpreted JavaScript, your apps retain their UI functionality while neutralizing memory-corruption zero-days.
   * **iMessage Mitigation:** Defends against BlastPass/FORCEDENTRY-style attacks by disabling automatic attachment downloading and preview generation within IMCore and ChatKit.
-  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JIT enabled for a specific browser? You can do that. *Note: Settings that physically do not apply to a specific app or background daemon are intelligently greyed out to prevent confusion.*
+  * **Granular App Controls:** Tap on any restricted app in your settings to customize its specific mitigations. Want to disable WebRTC but keep JIT enabled for a specific browser? You can do that. 
   * **Zero-Crash Architecture:** Completely separates heavy web mitigations from background system tasks. This physical isolation guarantees that locking down background daemons will never cause memory limit crashes or respring loops.
   * **Global Mitigations (BETA):** Extreme system-wide kill-switches that apply mitigations to *every* process indiscriminately. Intended for emergency lockdowns only.
   * **User Agent Spoofing:** Globally spoof the `WKWebView` Custom User Agent for restricted apps to bypass strict fingerprinting modules. Includes modern presets (iOS 18.1, Android Chrome, Windows Edge, macOS, etc.) or the ability to inject a custom string.
@@ -55,7 +55,7 @@ By disabling WebKit JIT and JavaScriptCore attack vectors, this tweak prevents s
 ## 📱 Compatibility
 
   * **iOS Versions:** iOS 15.0 – 17.0
-  * **Architecture:** arm64 / arm64e (A11 through A16/M-series)
+  * **Architecture:** arm64 / arm64e (A11 through A16/M-series fat binary)
   * **Jailbreaks:** \* **Rootless:** Dopamine (iOS 15.0 – 17.0), Palera1n (iOS 15.0 – 16.7.x)
       * **Roothide:** Dopamine Roothide 2 (via Roothide Patcher)
       * **Rootful:** Palera1n / Checkm8 users should use: [AntiDarkSword-rootful](https://github.com/EolnMsuk/AntiDarkSword-rootful)
