@@ -1,4 +1,4 @@
-<img width="1496" height="1127" alt="readme" src="https://github.com/user-attachments/assets/3e064f8b-427e-44b2-ae42-3fbc17a65365" />
+<img width="1280" height="978" alt="readme2" src="https://github.com/user-attachments/assets/f7b08d6b-31be-4900-8017-4b163adef607" />
 
 # AntiDarkSword ⚔️ (Rootless Roothide)
 
