@@ -31,10 +31,8 @@ static void loadPrefs() {
     NSDictionary *prefs = nil;
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    } else if ([[NSFileManager defaultManager] fileExistsAtPath:ROOTFUL_PREFS_PATH]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:ROOTFUL_PREFS_PATH];
     }
-    
+
     // Fallback via IPC CFPreferences
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
