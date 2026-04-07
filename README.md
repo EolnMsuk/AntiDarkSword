@@ -61,9 +61,9 @@ By disabling WebKit JIT and JavaScriptCore attack vectors, this tweak prevents s
 
 Before installing this tweak, you **must** install the following from your package manager (Sileo/Zebra):
 
-  * `mobilesubstrate`
+  * `ElleKit or mobilesubstrate`
   * `preferenceloader`
-  * `com.opa334.altlist` (AltList)
+  * `altlist`
 
 ## 🛠️ Installation Instructions
 
