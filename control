@@ -3,7 +3,7 @@ Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 3.8.2
 Architecture: iphoneos-arm64
-Description: A security framework that mitigates zero-click messaging payloads and browser RCEs through aggressive daemon restrictions and granular WebKit isolation.
+Description: A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation.
 Maintainer: eolnmsuk
 Author: eolnmsuk
 Section: Tweaks
