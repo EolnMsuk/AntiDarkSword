@@ -100,7 +100,7 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 > [\!WARNING]
 > **Remove any apps you want secured from Roothide's Blacklist / allow tweak through Choicy.** This allows the tweak to inject and filter that app.
 
-Level 1
+`Level 1
 ├── 🌐 Safari & Safari View Services
 │   ├── OS Baseline (JIT/JS Lockdown)
 │   └── Spoof User Agent: ON
@@ -118,9 +118,9 @@ Level 1
     ├── Disable Media Auto-Play: ON (Mail)
     ├── Disable WebGL & WebRTC: ON (Mail)
     ├── Disable Local File Access: ON (Mail)
-    └── Spoof User Agent: OFF (To prevent breaking Apple OAuth logins)
+    └── Spoof User Agent: OFF (To prevent breaking Apple OAuth logins)`
 
-Level 2
+`Level 2
 ├── 📱 All Level 1 Native Apple Apps & Rules
 │
 ├── 🌐 3rd-Party Browsers (Chrome, Firefox, Brave, DuckDuckGo)
@@ -136,9 +136,9 @@ Level 2
 │
 └── 🏦 Social, Finance, & JB Apps (TikTok, Facebook, PayPal, CashApp, Sileo, Zebra, Filza)
     ├── OS Baseline (JIT/JS Lockdown)
-    └── Spoof User Agent: ON
+    └── Spoof User Agent: ON`
 
-Level 3
+`Level 3
 ├── 📱 All Level 1 & Level 2 Apps & Rules
 │
 ├── 🌐 Browsers (Safari, Chrome, Firefox, Brave, DuckDuckGo)
@@ -149,7 +149,7 @@ Level 3
 │
 └── ⚙️ System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd)
     ├── WebKit Mitigations: BYPASSED (Daemons don't use standard WebKit rules)
-    └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level, which breaks standard OS background functionality but guarantees safety)
+    └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level, which breaks standard OS background functionality but guarantees safety)`
 
 -----
 
