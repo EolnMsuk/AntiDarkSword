@@ -23,6 +23,8 @@
             <string>enabled</string>
             <key>label</key>
             <string>Enable Protection</string>
+            <key>set</key>
+            <string>setEnableProtection:specifier:</string>
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
