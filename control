@@ -7,4 +7,5 @@ Description: A security framework that mitigates zero-click messaging payloads a
 Maintainer: eolnmsuk
 Author: eolnmsuk
 Section: Tweaks
-Icon: file:///Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/icon.png
+SileoIcon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/icon.png
+Depiction: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/depiction.json
