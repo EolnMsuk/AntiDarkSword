@@ -120,8 +120,8 @@ Level 1
     ├── Disable WebGL & WebRTC: ON (Mail)
     ├── Disable Local File Access: ON (Mail)
     └── Spoof User Agent: OFF (To prevent breaking Apple OAuth logins)
-```
-```
+
+
 Level 2
 ├── 📱 All Level 1 Native Apple Apps & Rules
 │
@@ -139,8 +139,8 @@ Level 2
 └── 🏦 Social, Finance, & JB Apps (TikTok, Facebook, PayPal, CashApp, Sileo, Zebra, Filza)
     ├── OS Baseline (JIT/JS Lockdown)
     └── Spoof User Agent: ON
-```
-```
+
+
 Level 3
 ├── 📱 All Level 1 & Level 2 Apps & Rules
 │
