@@ -469,6 +469,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([featureKey isEqualToString:@"spoofUA"]) {
             if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
+            
+            // Allow Safari to be spoofed on all levels (Level 1+)
+            if ([self.targetID isEqualToString:@"com.apple.mobilesafari"] || [self.targetID isEqualToString:@"com.apple.SafariViewService"]) {
+                return @YES;
+            }
+            
             if ([self.targetID hasPrefix:@"com.apple."]) return @NO; 
             return (level >= 2) ? @YES : @NO; 
         }
@@ -789,12 +795,18 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
         } else if ([browsers containsObject:targetID]) {
-            rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
+            // Apply Spoof UA to Safari on Level 1, but keep 3rd party browsers at Level 2
+            if ([targetID isEqualToString:@"com.apple.mobilesafari"] || [targetID isEqualToString:@"com.apple.SafariViewService"]) {
+                rules[@"spoofUA"] = @YES;
+            } else {
+                rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
+            }
             
             if (level >= 3) {
                 rules[@"disableRTC"] = @YES;
                 rules[@"disableMedia"] = @YES;
             }
+        }
         } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
             // WebKit mitigations forcefully skipped.
         } else {
