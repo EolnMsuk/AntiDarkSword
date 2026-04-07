@@ -1,16 +1,3 @@
-Here is your completely updated and finalized **`RootListController.m`**. 
-
-This version includes absolutely everything we've worked on:
-* The clickable GitHub header banner
-* The dynamic icon & version footer
-* The `setEnableProtection:` switch crash fix
-* The Safari User Agent Level 1 default rule (with the fixed brace)
-* The fixed `savePrompt` compiler error
-* **The fully trimmed down Daemon lists** (removed `networkd`, `appstored`, etc. to keep injection highly optimized).
-
-### `RootListController.m`
-
-```objc
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
@@ -1536,4 +1523,3 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 @end
-```
