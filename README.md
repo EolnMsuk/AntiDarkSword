@@ -1,6 +1,6 @@
 <img width="1280" height="978" alt="readme2" src="https://github.com/user-attachments/assets/f7b08d6b-31be-4900-8017-4b163adef607" />
 
-# AntiDarkSword ⚔️ (Rootless Roothide)
+# AntiDarkSword ⚔️ (Rootless / Roothide)
 
 AntiDarkSword is an advanced iOS security tweak designed to harden jailbroken devices against WebKit (Safari etc) and iMessage-based exploits. Built on a modernized, zero-crash architecture, it significantly reduces your device's attack surface by neutralizing common vectors used in one-click and zero-click attacks without compromising system stability.
 
