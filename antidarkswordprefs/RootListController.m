@@ -1153,8 +1153,22 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         imageView.clipsToBounds = YES;
         
+        // --- NEW: Make the banner clickable ---
+        imageView.userInteractionEnabled = YES; // Images have interaction disabled by default
+        UITapGestureRecognizer *bannerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openBannerLink)];
+        [imageView addGestureRecognizer:bannerTap];
+        // --------------------------------------
+        
         [headerView addSubview:imageView];
         self.table.tableHeaderView = headerView;
+    }
+}
+
+// Action triggered by tapping the banner
+- (void)openBannerLink {
+    NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
+    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
+        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
     }
 }
 
