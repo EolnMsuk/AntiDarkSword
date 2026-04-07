@@ -150,7 +150,7 @@ Level 3
 │
 └── ⚙️ System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd)
     ├── WebKit Mitigations: BYPASSED (Daemons don't use standard WebKit rules)
-    └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level, which breaks standard OS background functionality but guarantees safety)
+    └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level)
 ```
 
 -----
