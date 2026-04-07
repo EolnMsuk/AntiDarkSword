@@ -806,7 +806,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 rules[@"disableRTC"] = @YES;
                 rules[@"disableMedia"] = @YES;
             }
-        }
         } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
             // WebKit mitigations forcefully skipped.
         } else {
