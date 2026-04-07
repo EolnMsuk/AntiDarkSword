@@ -1,3 +1,16 @@
+Here is your completely updated and finalized **`RootListController.m`**. 
+
+This version includes absolutely everything we've worked on:
+* The clickable GitHub header banner
+* The dynamic icon & version footer
+* The `setEnableProtection:` switch crash fix
+* The Safari User Agent Level 1 default rule (with the fixed brace)
+* The fixed `savePrompt` compiler error
+* **The fully trimmed down Daemon lists** (removed `networkd`, `appstored`, etc. to keep injection highly optimized).
+
+### `RootListController.m`
+
+```objc
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
@@ -65,7 +78,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        NSArray *daemons = @[@"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+        NSArray *daemons = @[@"imagent", @"mediaserverd", @"apsd", @"identityservicesd"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
@@ -238,9 +251,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (!targetID) return NO;
     NSArray *daemons = @[
         @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
-        @"com.apple.networkd", @"networkd", @"com.apple.apsd", @"apsd",
-        @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.appstored", 
-        @"com.apple.itunesstored", @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
+        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd"
     ];
     if ([daemons containsObject:targetID]) return YES;
     
@@ -553,13 +564,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (BOOL)isTargetInstalled:(NSString *)targetID {
     NSArray *coreServices = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.networkd",
+        @"com.apple.imagent", @"com.apple.mediaserverd",
         @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.SafariViewService",
         @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
         @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
-        @"com.apple.QuickLookDaemon", @"com.apple.appstored", @"com.apple.itunesstored",
-        @"com.apple.nsurlsessiond", @"com.apple.cfnetwork",
-        @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+        @"com.apple.QuickLookDaemon",
+        @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"
     ];
     
     if ([coreServices containsObject:targetID]) {
@@ -671,12 +681,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     NSArray *daemons = @[
         @"com.apple.imagent", @"com.apple.mediaserverd",
-        @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.apsd", @"com.apple.identityservicesd",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
-        @"com.apple.cfnetwork"
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
     ];
     
     if ([daemons containsObject:targetID]) return targetID;
@@ -701,13 +709,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
         NSArray *daemons = @[
             @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.networkd", @"com.apple.apsd", @"com.apple.identityservicesd",
+            @"com.apple.apsd", @"com.apple.identityservicesd",
             @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.nsurlsessiond",
-            @"com.apple.cfnetwork",
-            @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
+            @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"
         ];
         
         if (![daemons containsObject:targetID]) {
@@ -765,7 +771,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
-    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"]];
+    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"]];
 
     for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
@@ -903,7 +909,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-                NSArray *daemons = @[@"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+                NSArray *daemons = @[@"imagent", @"mediaserverd", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
                 for (NSString *d in daemons) {
                     if (![disabled containsObject:d]) {
@@ -1530,3 +1536,4 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 @end
+```
