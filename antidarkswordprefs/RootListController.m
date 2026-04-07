@@ -1131,6 +1131,63 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     saveButton.enabled = needsRespring || (isEnabled && needsReboot);
     
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    
+    [self setupHeaderView];
+    [self setupFooterView];
+}
+
+- (void)setupHeaderView {
+    NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+    NSString *imagePath = [bundle pathForResource:@"banner" ofType:@"png"];
+    UIImage *bannerImage = [UIImage imageWithContentsOfFile:imagePath];
+    
+    if (bannerImage) {
+        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+        CGFloat aspect = bannerImage.size.height / bannerImage.size.width;
+        CGFloat height = screenWidth * aspect;
+        
+        UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, height)];
+        UIImageView *imageView = [[UIImageView alloc] initWithFrame:headerView.bounds];
+        imageView.image = bannerImage;
+        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        imageView.clipsToBounds = YES;
+        
+        [headerView addSubview:imageView];
+        self.table.tableHeaderView = headerView;
+    }
+}
+
+- (void)setupFooterView {
+    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+    UIView *footerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 100)];
+    footerView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    
+    NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+    NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
+    UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
+    
+    UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
+    iconView.frame = CGRectMake((screenWidth - 30) / 2, 20, 30, 30);
+    iconView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
+    iconView.layer.cornerRadius = 6.0;
+    iconView.clipsToBounds = YES;
+    [footerView addSubview:iconView];
+    
+    NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
+    UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60, screenWidth, 20)];
+    versionLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@", version];
+    versionLabel.textAlignment = NSTextAlignmentCenter;
+    versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    if (@available(iOS 13.0, *)) {
+        versionLabel.textColor = [UIColor secondaryLabelColor];
+    } else {
+        versionLabel.textColor = [UIColor grayColor];
+    }
+    versionLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [footerView addSubview:versionLabel];
+    
+    self.table.tableFooterView = footerView;
 }
 
 - (void)dealloc {
@@ -1397,7 +1454,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
