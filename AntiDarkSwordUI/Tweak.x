@@ -42,7 +42,6 @@ static BOOL disableJS = NO;
 static BOOL disableMedia = NO;
 static BOOL disableRTC = NO;
 static BOOL disableFileAccess = NO;
-
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
 static BOOL applyDisableJIT15 = NO;
@@ -264,9 +263,15 @@ static void loadPrefs() {
             disableFileAccess = YES; 
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
-            spoofUARule = (autoProtectLevel >= 2);
+            // Enforce Safari UA spoofing at Level 1 if no custom dictionary exists yet
+            if ([matchedID isEqualToString:@"com.apple.mobilesafari"] || [matchedID isEqualToString:@"com.apple.SafariViewService"]) {
+                spoofUARule = YES;
+            } else {
+                spoofUARule = (autoProtectLevel >= 2);
+            }
+            
             if (autoProtectLevel >= 3) { 
-                disableRTC = YES; 
+                disableRTC = YES;
                 disableMedia = YES;
             }
         } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
@@ -340,14 +345,12 @@ static void loadPrefs() {
 
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
