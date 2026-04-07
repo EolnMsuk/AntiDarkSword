@@ -1244,6 +1244,29 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
 }
 
+// =========================================================================
+// MISSING SETTER METHOD ADDED RIGHT HERE FOR THE ENABLE PROTECTION SWITCH
+// =========================================================================
+- (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
+    // 1. Save the value using the default mechanism
+    [self setPreferenceValue:value specifier:specifier];
+    
+    // 2. Determine if a userspace reboot is required
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+    NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
+    
+    // If daemons are actively being restricted, toggling the tweak completely on/off requires a userspace reboot to hook/unhook them
+    if (level >= 3 || customDaemons.count > 0) {
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+        [defaults synchronize];
+    }
+    
+    // 3. Automatically present the prompt (If they hit Cancel, the change remains staged and they can use the "Save" Nav button later)
+    [self savePrompt];
+}
+// =========================================================================
+
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
