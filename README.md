@@ -100,6 +100,57 @@ If you are using Dopamine Roothide 2 to bypass jailbreak detection, you must pat
 > [\!WARNING]
 > **Remove any apps you want secured from Roothide's Blacklist / allow tweak through Choicy.** This allows the tweak to inject and filter that app.
 
+Level 1
+├── 🌐 Safari & Safari View Services
+│   ├── OS Baseline (JIT/JS Lockdown)
+│   └── Spoof User Agent: ON
+│
+├── 💬 Apple Messages (MobileSMS, ActivityMessages, iMessageAppsViewService)
+│   ├── OS Baseline (JIT/JS Lockdown)
+│   ├── Disable Media Auto-Play: ON
+│   ├── Disable WebGL & WebRTC: ON
+│   ├── Disable Local File Access: ON
+│   ├── Disable Msg Auto-Download: ON
+│   └── Spoof User Agent: OFF (To prevent breaking internal Apple rendering)
+│
+└── ✉️ Apple Mail & Other Native Apps
+    ├── OS Baseline (JIT/JS Lockdown)
+    ├── Disable Media Auto-Play: ON (Mail)
+    ├── Disable WebGL & WebRTC: ON (Mail)
+    ├── Disable Local File Access: ON (Mail)
+    └── Spoof User Agent: OFF (To prevent breaking Apple OAuth logins)
+
+Level 2
+├── 📱 All Level 1 Native Apple Apps & Rules
+│
+├── 🌐 3rd-Party Browsers (Chrome, Firefox, Brave, DuckDuckGo)
+│   ├── OS Baseline (JIT/JS Lockdown)
+│   └── Spoof User Agent: ON
+│
+├── 💬 3rd-Party Messaging & Email (WhatsApp, Discord, Signal, Telegram, Gmail, Outlook)
+│   ├── OS Baseline (JIT/JS Lockdown)
+│   ├── Disable Media Auto-Play: ON
+│   ├── Disable WebGL & WebRTC: ON
+│   ├── Disable Local File Access: ON
+│   └── Spoof User Agent: ON
+│
+└── 🏦 Social, Finance, & JB Apps (TikTok, Facebook, PayPal, CashApp, Sileo, Zebra, Filza)
+    ├── OS Baseline (JIT/JS Lockdown)
+    └── Spoof User Agent: ON
+
+Level 3
+├── 📱 All Level 1 & Level 2 Apps & Rules
+│
+├── 🌐 Browsers (Safari, Chrome, Firefox, Brave, DuckDuckGo)
+│   ├── OS Baseline (JIT/JS Lockdown)
+│   ├── Spoof User Agent: ON
+│   ├── Disable WebGL & WebRTC: ON (NEW in Level 3)
+│   └── Disable Media Auto-Play: ON (NEW in Level 3)
+│
+└── ⚙️ System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd)
+    ├── WebKit Mitigations: BYPASSED (Daemons don't use standard WebKit rules)
+    └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level, which breaks standard OS background functionality but guarantees safety)
+
 -----
 
 ## 👨‍💻 Developer
