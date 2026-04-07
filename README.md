@@ -29,8 +29,6 @@ Because it targets the specific rendering and downloading processes that exploit
   * **Custom Targeting:** Manually specify bundle IDs or process names to restrict specific background tasks. Swipe-to-delete makes management easy.
 
 > [\!WARNING]
-> **All Levels by default disable file previews for email and text.** You have to hold the file down and save it to the Files app to view it.
->
 > **Level 3 restricts critical background daemons.** `imagent` and `mediaserverd` filtering. Lower your level if you experience any issues.
 
 ## 🛑 Mitigated Exploits
