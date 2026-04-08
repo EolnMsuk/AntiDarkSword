@@ -102,7 +102,7 @@ static inline UIColor *ads_color_red(void) {
         NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
         UILabel *versionLabel = [[UILabel alloc] init];
         versionLabel.text = [NSString stringWithFormat:@"v%@", version];
-        versionLabel.textAlignment = NSTextAlignmentCenter;
+        versionLabel.textAlignment = NSTextAlignmentLeft;
         versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
         if (@available(iOS 13.0, *)) {
             versionLabel.textColor = [UIColor secondaryLabelColor];
@@ -112,14 +112,15 @@ static inline UIColor *ads_color_red(void) {
         versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:versionLabel];
         
-        // 3. AutoLayout Constraints for Perfect Centering
+        // 3. AutoLayout Constraints for Left-Alignment
         [NSLayoutConstraint activateConstraints:@[
-            [iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            // Align Icon to the left margin guide
+            [iconView.leadingAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leadingAnchor],
             [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
             [iconView.widthAnchor constraintEqualToConstant:45],
             [iconView.heightAnchor constraintEqualToConstant:45],
             
-            [versionLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [versionLabel.leadingAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leadingAnchor],
             [versionLabel.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:10]
         ]];
         
