@@ -157,4 +157,4 @@ Level 3
 
 Created by: [EolnMsuk](https://github.com/EolnMsuk)
 
-Donate 🤗: [eolnmsuk](https://venmo.com/user/eolnmsuk)
+Donate 🤗: [Venmo](https://venmo.com/user/eolnmsuk)
