@@ -5,7 +5,45 @@
 #import <sys/types.h>
 #import <objc/runtime.h>
 
-static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
+// If you created ADSLogging.h, import it here:
+// #import "../ADSLogging.h"
+
+// ==========================================
+// Preprocessor Macros & Inline Helpers
+// ==========================================
+#define ADS_PREFS_SUITE @"com.eolnmsuk.antidarkswordprefs"
+#define ADS_NOTIF_SAVED CFSTR("com.eolnmsuk.antidarkswordprefs/saved")
+
+// Helper: Instantiates the shared preferences suite
+static inline NSUserDefaults *ads_defaults(void) {
+    return [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+}
+
+// Helper: Posts the Darwin notification to sync preferences across processes
+static inline void ads_post_notification(void) {
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), ADS_NOTIF_SAVED, NULL, NULL, YES);
+}
+
+// Helper: Checks if the device is running iOS 16.0 or higher
+static inline BOOL ads_is_ios16(void) {
+    return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+}
+
+// Helper: Standardized Active/Enabled Background Color
+static inline UIColor *ads_color_green(void) {
+    if (@available(iOS 13.0, *)) {
+        return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+    }
+    return [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
+}
+
+// Helper: Standardized Inactive/Disabled Background Color
+static inline UIColor *ads_color_red(void) {
+    if (@available(iOS 13.0, *)) {
+        return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+    }
+    return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
+}
 
 // ==========================================
 // Internal iOS APIs for App Names & Icons
@@ -61,10 +99,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSMutableArray *specs = [NSMutableArray array];
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
 
+        // Header for Daemon toggles
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
+        // Generate toggles for essential daemons
         NSArray *daemons = @[@"imagent", @"mediaserverd", @"apsd", @"identityservicesd"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -77,13 +117,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (id)getDaemonEnabled:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
     return @(![disabled containsObject:[spec propertyForKey:@"targetID"]]);
 }
 
 - (void)setDaemonEnabled:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
     NSString *targetID = [spec propertyForKey:@"targetID"];
 
@@ -99,7 +139,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     [defaults synchronize];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    ads_post_notification();
 }
 @end
 
@@ -121,9 +161,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
-    
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
     
+    // Extract bundle ID safely
     NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
     if (!bundleID) {
         NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
@@ -133,13 +173,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
     
     if (bundleID) {
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-        if (level == 0) level = 1;
+        NSUserDefaults *defaults = ads_defaults();
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
         
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
+        // Hide default AltList controls to implement a custom UI
         if ([cell respondsToSelector:@selector(control)]) {
             id control = [cell control];
             if ([control isKindOfClass:[UIView class]]) {
@@ -151,6 +191,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         
+        // Determine manual rule state
         BOOL isManualRuleActive = NO;
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
         if ([defaults objectForKey:prefKey]) {
@@ -160,29 +201,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             isManualRuleActive = [apps[bundleID] boolValue];
         }
 
+        // Apply UI styling based on protection status
         if ([presetApps containsObject:bundleID]) {
+            // Disabled state for apps already protected by a preset
             cell.userInteractionEnabled = NO;
             cell.textLabel.alpha = 0.5;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
             cell.backgroundColor = [UIColor clearColor];
         } else {
+            // Interactive state for customizable apps
             cell.userInteractionEnabled = YES;
             cell.textLabel.alpha = 1.0;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
-            
-            if (isManualRuleActive) {
-                if (@available(iOS 13.0, *)) {
-                    cell.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
-                } else {
-                    cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
-                }
-            } else {
-                if (@available(iOS 13.0, *)) {
-                    cell.backgroundColor = [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
-                } else {
-                    cell.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
-                }
-            }
+            cell.backgroundColor = isManualRuleActive ? ads_color_green() : ads_color_red();
         }
     }
     
@@ -202,17 +233,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 
     if (bundleID) {
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-        if (level == 0) level = 1;
+        NSUserDefaults *defaults = ads_defaults();
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
         
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
-        if ([presetApps containsObject:bundleID]) {
-            return; 
-        }
+        // Block navigation if the app is locked by a preset level
+        if ([presetApps containsObject:bundleID]) return; 
 
+        // Push detailed configuration controller for the selected app
         AntiDarkSwordAppController *detailController = [[AntiDarkSwordAppController alloc] init];
         detailController.targetID = bundleID;
         detailController.ruleType = 1; 
@@ -234,6 +264,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // ==========================================
 @implementation AntiDarkSwordAppController
 
+// Evaluates if the target bundle ID belongs to a known system daemon or extension
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
     NSArray *daemons = @[
@@ -242,34 +273,26 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     ];
     if ([daemons containsObject:targetID]) return YES;
     
+    // Fallback heuristic checks for daemon identification
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
     if ([targetID containsString:@"daemon"]) return YES;
-    if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) {
-        return YES;
-    }
+    if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) return YES;
     
     return NO;
 }
 
+// Determines if a specific mitigation feature makes logical sense for the target type
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID {
     BOOL isDaemon = [self isDaemonTarget:targetID];
-    
     BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
                         [targetID isEqualToString:@"com.apple.ActivityMessagesApp"] || 
                         [targetID isEqualToString:@"com.apple.iMessageAppsViewService"];
 
-    if ([featureKey isEqualToString:@"disableIMessageDL"]) {
-        return isMessageApp;
-    }
+    if ([featureKey isEqualToString:@"disableIMessageDL"]) return isMessageApp;
     
-    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-    
-    if ([featureKey isEqualToString:@"disableJIT"]) {
-        return isIOS16OrGreater && !isDaemon;
-    }
-    if ([featureKey isEqualToString:@"disableJIT15"]) {
-        return !isIOS16OrGreater && !isDaemon;
-    }
+    BOOL isIOS16 = ads_is_ios16();
+    if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 && !isDaemon;
+    if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && !isDaemon;
 
     if ([featureKey isEqualToString:@"disableJS"] || 
         [featureKey isEqualToString:@"disableRTC"] || 
@@ -278,9 +301,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return !isDaemon; 
     }
 
-    if ([featureKey isEqualToString:@"spoofUA"]) {
-        return YES; 
-    }
+    if ([featureKey isEqualToString:@"spoofUA"]) return YES; 
 
     return YES;
 }
@@ -292,8 +313,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.title = [specifier name] ?: self.targetID;
 }
 
+// Checks if a global blanket rule overrides app-specific settings
 - (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     if ([featureKey isEqualToString:@"spoofUA"]) return [defaults boolForKey:@"globalUASpoofingEnabled"];
     if ([featureKey isEqualToString:@"disableJIT"]) return [defaults boolForKey:@"globalDisableJIT"];
     if ([featureKey isEqualToString:@"disableJIT15"]) return [defaults boolForKey:@"globalDisableJIT15"];
@@ -308,9 +330,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSUserDefaults *defaults = ads_defaults();
         [defaults synchronize];
         
+        // Rule Status Section
         PSSpecifier *enableGroup = [PSSpecifier preferenceSpecifierNamed:@"Rule Status" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:enableGroup];
         
@@ -319,6 +342,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
+        // Mitigations Section
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
         [specs addObject:featGroup];
@@ -336,14 +360,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
         NSDictionary *rules = [defaults dictionaryForKey:dictKey];
-        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL isIOS16 = ads_is_ios16();
         BOOL isJSTurnedOn = NO;
+        
         if (rules && rules[@"disableJS"] != nil) {
             isJSTurnedOn = [rules[@"disableJS"] boolValue];
         } else {
-            isJSTurnedOn = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
+            isJSTurnedOn = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
         }
         
+        // Construct visual toggles for each mitigation feature
         for (NSDictionary *feat in features) {
             NSString *featKey = feat[@"key"];
             BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
@@ -352,12 +378,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:featKey forKey:@"featureKey"];
             
+            // Logic to disable/lock UI switches based on OS version and dependencies
             if (isApplicable) {
                 if (isGlobalOverride) {
                     [spec setProperty:@NO forKey:@"enabled"];
-                } else if (isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
+                } else if (isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
-                } else if (!isIOS16OrGreater && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
+                } else if (!isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
                 } else {
                     [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
@@ -375,7 +402,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (id)getMasterEnable:(PSSpecifier *)specifier {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     [defaults synchronize]; 
     
     if (self.ruleType == 0) { 
@@ -383,9 +410,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return @(![disabled containsObject:self.targetID]);
     } else if (self.ruleType == 1) { 
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", self.targetID];
-        if ([defaults objectForKey:prefKey]) {
-            return @([defaults boolForKey:prefKey]);
-        }
+        if ([defaults objectForKey:prefKey]) return @([defaults boolForKey:prefKey]);
         NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
         return apps[self.targetID] ?: @NO;
     } else { 
@@ -395,7 +420,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)setMasterEnable:(id)value specifier:(PSSpecifier *)specifier {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     BOOL enabled = [value boolValue];
     
     if (self.ruleType == 0) { 
@@ -414,18 +439,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
     } else { 
         NSMutableArray *active = [[defaults arrayForKey:@"activeCustomDaemonIDs"] mutableCopy] ?: [[defaults arrayForKey:@"customDaemonIDs"] mutableCopy] ?: [NSMutableArray array];
-        if (enabled) {
-            if (![active containsObject:self.targetID]) [active addObject:self.targetID];
-        } else {
-            [active removeObject:self.targetID];
-        }
+        if (enabled && ![active containsObject:self.targetID]) [active addObject:self.targetID];
+        else if (!enabled) [active removeObject:self.targetID];
+        
         [defaults setObject:active forKey:@"activeCustomDaemonIDs"];
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    ads_post_notification();
     
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
@@ -436,43 +459,30 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
-        return @NO;
-    }
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) return @NO;
+    if ([self isGlobalOverrideActiveForFeature:featureKey]) return @YES;
 
-    if ([self isGlobalOverrideActiveForFeature:featureKey]) {
-        return @YES;
-    }
-
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     [defaults synchronize]; 
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     
+    // Resolve defaults if explicit rules aren't yet defined
     if (!rules || rules[featureKey] == nil) { 
-        
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
-        if (![allProtected containsObject:self.targetID]) {
-            return @NO;
-        }
+        if (![allProtected containsObject:self.targetID]) return @NO;
 
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-        if (level == 0) level = 1;
-        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
+        BOOL isIOS16 = ads_is_ios16();
 
-        if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16OrGreater ? @YES : @NO; 
-        if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16OrGreater ? @YES : @NO; 
-        if ([featureKey isEqualToString:@"disableJS"]) return isIOS16OrGreater ? @NO : @YES; 
+        if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJS"]) return isIOS16 ? @NO : @YES; 
         
         if ([featureKey isEqualToString:@"spoofUA"]) {
             if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
-            
-            // Allow Safari to be spoofed on all levels (Level 1+)
-            if ([self.targetID isEqualToString:@"com.apple.mobilesafari"] || [self.targetID isEqualToString:@"com.apple.SafariViewService"]) {
-                return @YES;
-            }
-            
+            if ([self.targetID isEqualToString:@"com.apple.mobilesafari"] || [self.targetID isEqualToString:@"com.apple.SafariViewService"]) return @YES;
             if ([self.targetID hasPrefix:@"com.apple."]) return @NO; 
             return (level >= 2) ? @YES : @NO; 
         }
@@ -506,22 +516,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
     
-    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) {
-        return; 
-    }
+    if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) return; 
 
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSMutableDictionary *rules = [[defaults dictionaryForKey:dictKey] mutableCopy] ?: [NSMutableDictionary dictionary];
     
     rules[featureKey] = value;
     
+    // Auto-resolve JIT conflicts if JS is disabled
     if ([featureKey isEqualToString:@"disableJS"]) {
-        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL isIOS16 = ads_is_ios16();
         if ([value boolValue]) {
-            if (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
+            if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
                 rules[@"disableJIT"] = @YES;
-            } else if (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
+            } else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
                 rules[@"disableJIT15"] = @YES;
             }
         }
@@ -534,21 +543,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             self->_specifiers = nil;
             [self reloadSpecifiers];
         });
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        ads_post_notification();
         return;
     }
     
     [defaults setObject:rules forKey:dictKey];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
-    
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    ads_post_notification();
 }
 @end
 // ==========================================
 
 @implementation AntiDarkSwordPrefsRootListController
 
+// Checks the filesystem/workspace to verify if an app is actually present
 - (BOOL)isTargetInstalled:(NSString *)targetID {
     NSArray *coreServices = @[
         @"com.apple.imagent", @"com.apple.mediaserverd",
@@ -559,22 +568,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"
     ];
     
-    if ([coreServices containsObject:targetID]) {
-        return YES;
-    }
-    
-    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) {
-        return YES; 
-    }
+    if ([coreServices containsObject:targetID]) return YES;
+    if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES; 
 
     @try {
         Class LSAppWorkspace = NSClassFromString(@"LSApplicationWorkspace");
         if (LSAppWorkspace) {
             LSApplicationWorkspace *workspace = [LSAppWorkspace defaultWorkspace];
             if (workspace && [workspace respondsToSelector:@selector(applicationIsInstalled:)]) {
-                if ([workspace applicationIsInstalled:targetID]) {
-                    return YES;
-                }
+                if ([workspace applicationIsInstalled:targetID]) return YES;
             }
         }
     } @catch (NSException *e) {}
@@ -585,9 +587,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             LSApplicationProxy *proxy = [LSAppProxy applicationProxyForIdentifier:targetID];
             if (proxy && [proxy respondsToSelector:@selector(bundleURL)]) {
                 NSURL *bundleURL = [proxy bundleURL];
-                if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) {
-                    return YES;
-                }
+                if (bundleURL && [[NSFileManager defaultManager] fileExistsAtPath:bundleURL.path]) return YES;
             }
         }
     } @catch (NSException *e) {}
@@ -597,84 +597,49 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
     NSDictionary *knownNames = @{
-        @"com.google.Gmail": @"Gmail",
-        @"com.microsoft.Office.Outlook": @"Outlook",
-        @"com.tinyspeck.chatlyio": @"Slack",
-        @"com.microsoft.skype.teams": @"Microsoft Teams",
-        @"com.google.chrome.ios": @"Chrome",
-        @"com.brave.ios.browser": @"Brave",
-        @"com.tumblr.tumblr": @"Tumblr",
-        @"com.yahoo.Aerogram": @"Yahoo Mail",
-        @"ch.protonmail.protonmail": @"Proton Mail",
-        @"org.whispersystems.signal": @"Signal",
-        @"ph.telegra.Telegraph": @"Telegram",
-        @"com.facebook.Messenger": @"Messenger",
-        @"com.toyopagroup.picaboo": @"Snapchat",
-        @"com.tencent.xin": @"WeChat",
-        @"com.viber": @"Viber",
-        @"jp.naver.line": @"LINE",
-        @"net.whatsapp.WhatsApp": @"WhatsApp",
-        @"com.hammerandchisel.discord": @"Discord",
-        @"com.google.GoogleMobile": @"Google",
-        @"org.mozilla.ios.Firefox": @"Firefox",
-        @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
-        @"pinterest": @"Pinterest",
-        @"com.facebook.Facebook": @"Facebook",
-        @"com.atebits.Tweetie2": @"X (Twitter)",
-        @"com.burbn.instagram": @"Instagram",
-        @"com.zhiliaoapp.musically": @"TikTok",
-        @"com.linkedin.LinkedIn": @"LinkedIn",
-        @"com.reddit.Reddit": @"Reddit",
-        @"com.google.ios.youtube": @"YouTube",
-        @"tv.twitch": @"Twitch",
-        @"com.google.gemini": @"Google Gemini",
-        @"com.openai.chat": @"ChatGPT",
-        @"com.deepseek.chat": @"DeepSeek",
-        @"com.github.stormbreaker.prod": @"GitHub",
-        @"org.coolstar.SileoStore": @"Sileo",
-        @"xyz.willy.Zebra": @"Zebra",
-        @"com.tigisoftware.Filza": @"Filza",
-        @"com.apple.Passbook": @"Apple Wallet",
-        @"com.squareup.cash": @"Cash App",
-        @"net.kortina.labs.Venmo": @"Venmo",
-        @"com.yourcompany.PPClient": @"PayPal",
-        @"com.robinhood.release.Robinhood": @"Robinhood",
-        @"com.vilcsak.bitcoin2": @"Coinbase",
-        @"com.sixdays.trust": @"Trust Wallet",
-        @"io.metamask.MetaMask": @"MetaMask",
-        @"app.phantom.phantom": @"Phantom",
-        @"com.chase": @"Chase",
-        @"com.bankofamerica.BofAMobileBanking": @"Bank of America",
-        @"com.wellsfargo.net.mobilebanking": @"Wells Fargo",
-        @"com.citi.citimobile": @"Citi",
-        @"com.capitalone.enterprisemobilebanking": @"Capital One",
-        @"com.americanexpress.amelia": @"Amex",
-        @"com.fidelity.iphone": @"Fidelity",
-        @"com.schwab.mobile": @"Charles Schwab",
-        @"com.etrade.mobilepro.iphone": @"E*TRADE",
-        @"com.discoverfinancial.mobile": @"Discover",
-        @"com.usbank.mobilebanking": @"U.S. Bank",
-        @"com.monzo.ios": @"Monzo",
-        @"com.revolut.iphone": @"Revolut",
-        @"com.binance.dev": @"Binance",
-        @"com.kraken.invest": @"Kraken",
-        @"com.barclays.ios.bmb": @"Barclays",
-        @"com.ally.auto": @"Ally",
-        @"com.navyfederal.navyfederal.mydata": @"Navy Federal",
-        @"com.1debit.ChimeProdApp": @"Chime"
+        @"com.google.Gmail": @"Gmail", @"com.microsoft.Office.Outlook": @"Outlook",
+        @"com.tinyspeck.chatlyio": @"Slack", @"com.microsoft.skype.teams": @"Microsoft Teams",
+        @"com.google.chrome.ios": @"Chrome", @"com.brave.ios.browser": @"Brave",
+        @"com.tumblr.tumblr": @"Tumblr", @"com.yahoo.Aerogram": @"Yahoo Mail",
+        @"ch.protonmail.protonmail": @"Proton Mail", @"org.whispersystems.signal": @"Signal",
+        @"ph.telegra.Telegraph": @"Telegram", @"com.facebook.Messenger": @"Messenger",
+        @"com.toyopagroup.picaboo": @"Snapchat", @"com.tencent.xin": @"WeChat",
+        @"com.viber": @"Viber", @"jp.naver.line": @"LINE", @"net.whatsapp.WhatsApp": @"WhatsApp",
+        @"com.hammerandchisel.discord": @"Discord", @"com.google.GoogleMobile": @"Google",
+        @"org.mozilla.ios.Firefox": @"Firefox", @"com.duckduckgo.mobile.ios": @"DuckDuckGo",
+        @"pinterest": @"Pinterest", @"com.facebook.Facebook": @"Facebook",
+        @"com.atebits.Tweetie2": @"X (Twitter)", @"com.burbn.instagram": @"Instagram",
+        @"com.zhiliaoapp.musically": @"TikTok", @"com.linkedin.LinkedIn": @"LinkedIn",
+        @"com.reddit.Reddit": @"Reddit", @"com.google.ios.youtube": @"YouTube",
+        @"tv.twitch": @"Twitch", @"com.google.gemini": @"Google Gemini",
+        @"com.openai.chat": @"ChatGPT", @"com.deepseek.chat": @"DeepSeek",
+        @"com.github.stormbreaker.prod": @"GitHub", @"org.coolstar.SileoStore": @"Sileo",
+        @"xyz.willy.Zebra": @"Zebra", @"com.tigisoftware.Filza": @"Filza",
+        @"com.apple.Passbook": @"Apple Wallet", @"com.squareup.cash": @"Cash App",
+        @"net.kortina.labs.Venmo": @"Venmo", @"com.yourcompany.PPClient": @"PayPal",
+        @"com.robinhood.release.Robinhood": @"Robinhood", @"com.vilcsak.bitcoin2": @"Coinbase",
+        @"com.sixdays.trust": @"Trust Wallet", @"io.metamask.MetaMask": @"MetaMask",
+        @"app.phantom.phantom": @"Phantom", @"com.chase": @"Chase",
+        @"com.bankofamerica.BofAMobileBanking": @"Bank of America", @"com.wellsfargo.net.mobilebanking": @"Wells Fargo",
+        @"com.citi.citimobile": @"Citi", @"com.capitalone.enterprisemobilebanking": @"Capital One",
+        @"com.americanexpress.amelia": @"Amex", @"com.fidelity.iphone": @"Fidelity",
+        @"com.schwab.mobile": @"Charles Schwab", @"com.etrade.mobilepro.iphone": @"E*TRADE",
+        @"com.discoverfinancial.mobile": @"Discover", @"com.usbank.mobilebanking": @"U.S. Bank",
+        @"com.monzo.ios": @"Monzo", @"com.revolut.iphone": @"Revolut",
+        @"com.binance.dev": @"Binance", @"com.kraken.invest": @"Kraken",
+        @"com.barclays.ios.bmb": @"Barclays", @"com.ally.auto": @"Ally",
+        @"com.navyfederal.navyfederal.mydata": @"Navy Federal", @"com.1debit.ChimeProdApp": @"Chime"
     };
 
     if (knownNames[targetID]) return knownNames[targetID];
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; 
     
     NSArray *daemons = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd",
-        @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.apsd", @"com.apple.identityservicesd",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
     ];
-    
     if ([daemons containsObject:targetID]) return targetID;
 
     @try {
@@ -713,6 +678,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
     }
     
+    // Fallback vector image for processes without app icons
     if (!icon) {
         if (@available(iOS 13.0, *)) {
             icon = [UIImage systemImageNamed:@"gearshape.fill"];
@@ -720,6 +686,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
     }
     
+    // Normalize bounds
     if (icon) {
         CGSize newSize = CGSizeMake(23, 23);
         UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
@@ -733,12 +700,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-    if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
-        return;
-    }
+    NSUserDefaults *defaults = ads_defaults();
+    if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) return;
     
-    BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+    BOOL isIOS16 = ads_is_ios16();
 
     NSArray *browsers = @[
         @"com.apple.mobilesafari", @"com.apple.SafariViewService",
@@ -761,18 +726,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
     [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"]];
 
+    // Seed defaults based on the selected tier profile
     for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
-        
-        if (!force && [defaults objectForKey:dictKey]) {
-            continue;
-        }
+        if (!force && [defaults objectForKey:dictKey]) continue;
 
         NSMutableDictionary *rules = [NSMutableDictionary dictionary];
         
-        rules[@"disableJIT"] = (isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
-        rules[@"disableJIT15"] = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
-        rules[@"disableJS"] = (!isIOS16OrGreater && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJIT"] = (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJIT15"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJS"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
         
         rules[@"disableMedia"] = @NO;
         rules[@"disableRTC"] = @NO;
@@ -789,23 +752,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
         } else if ([browsers containsObject:targetID]) {
-            // Apply Spoof UA to Safari on Level 1, but keep 3rd party browsers at Level 2
             if ([targetID isEqualToString:@"com.apple.mobilesafari"] || [targetID isEqualToString:@"com.apple.SafariViewService"]) {
                 rules[@"spoofUA"] = @YES;
             } else {
                 rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
             }
-            
             if (level >= 3) {
                 rules[@"disableRTC"] = @YES;
                 rules[@"disableMedia"] = @YES;
             }
-        } else if ([AntiDarkSwordAppController isDaemonTarget:targetID]) {
-            // WebKit mitigations forcefully skipped.
-        } else {
-            if (![targetID hasPrefix:@"com.apple."]) {
-                rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
-            }
+        } else if (![AntiDarkSwordAppController isDaemonTarget:targetID]) {
+            if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         }
         
         [defaults setObject:rules forKey:dictKey];
@@ -832,13 +789,12 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
         @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
         @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
-        @"com.hammerandchisel.discord",
-        @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-        @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
+        @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios", 
+        @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
         @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
         @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
-        @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-        @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+        @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini", 
+        @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
         @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
         @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
         @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
@@ -856,18 +812,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         return [nameA caseInsensitiveCompare:nameB];
     }];
 
-    NSArray *tier2JB = @[
-        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza"
-    ];
+    NSArray *tier2JB = @[ @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza" ];
     
-    if (level >= 3) {
-        [items addObject:@"DAEMONS_GROUP"];
-    }
-
-    // Then add Tier 1 (Safari, Messages, etc.) underneath it
+    if (level >= 3) [items addObject:@"DAEMONS_GROUP"];
     [items addObjectsFromArray:tier1];
     
-    // Then add Tier 2 and Jailbreak apps
     if (level >= 2) {
         [items addObjectsFromArray:sortedTier2];
         [items addObjectsFromArray:tier2JB];
@@ -891,8 +840,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSInteger ruleType = [ruleTypeObj integerValue];
         BOOL isEnabled = YES;
 
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSUserDefaults *defaults = ads_defaults();
 
+        // Calculate dynamic cell backgrounds based on active protection state
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
@@ -914,19 +864,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             isEnabled = [active containsObject:targetID];
         }
 
-        if (isEnabled) {
-            if (@available(iOS 13.0, *)) {
-                cell.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
-            } else {
-                cell.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
-            }
-        } else {
-            if (@available(iOS 13.0, *)) {
-                cell.backgroundColor = [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
-            } else {
-                cell.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
-            }
-        }
+        cell.backgroundColor = isEnabled ? ads_color_green() : ads_color_red();
     } else {
         if (@available(iOS 13.0, *)) {
             cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
@@ -941,12 +879,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSUserDefaults *defaults = ads_defaults();
         [defaults synchronize]; 
         
-        BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+        BOOL isIOS16 = ads_is_ios16();
         BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
         
+        // Ensure default UA string falls back safely
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
             selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -954,6 +893,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [defaults synchronize];
         }
 
+        // Hide Custom UA Field unless actively selected
         if (![selectedUA isEqualToString:@"CUSTOM"]) {
             for (int i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
@@ -967,15 +907,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
+        // Order Global Toggles Systematically
         NSArray *desiredOrder = @[
-            @"globalUASpoofingEnabled",
-            @"globalDisableJIT",
-            @"globalDisableJIT15",
-            @"globalDisableJS",
-            @"globalDisableRTC",
-            @"globalDisableMedia",
-            @"globalDisableIMessageDL",
-            @"globalDisableFileAccess"
+            @"globalUASpoofingEnabled", @"globalDisableJIT", @"globalDisableJIT15",
+            @"globalDisableJS", @"globalDisableRTC", @"globalDisableMedia",
+            @"globalDisableIMessageDL", @"globalDisableFileAccess"
         ];
         
         NSMutableDictionary *globalSpecsDict = [NSMutableDictionary dictionary];
@@ -986,28 +922,22 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             PSSpecifier *s = specs[i];
             NSString *key = [s propertyForKey:@"key"];
             
-            if ([[s propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"]) {
-                mitigationsGroupIndex = i;
-            }
+            if ([[s propertyForKey:@"id"] isEqualToString:@"GlobalMitigationsGroup"]) mitigationsGroupIndex = i;
             
             if ([desiredOrder containsObject:key]) {
                 if ([key isEqualToString:@"globalDisableJIT"]) {
-                    if (!isIOS16OrGreater || (isIOS16OrGreater && globalJSEnabled)) {
-                        [s setProperty:@NO forKey:@"enabled"];
-                    }
+                    if (!isIOS16 || (isIOS16 && globalJSEnabled)) [s setProperty:@NO forKey:@"enabled"];
                 }
                 if ([key isEqualToString:@"globalDisableJIT15"]) {
-                    if (isIOS16OrGreater || (!isIOS16OrGreater && globalJSEnabled)) {
-                        [s setProperty:@NO forKey:@"enabled"];
-                    }
+                    if (isIOS16 || (!isIOS16 && globalJSEnabled)) [s setProperty:@NO forKey:@"enabled"];
                 }
-                
                 globalSpecsDict[key] = s;
             } else {
                 [nonGlobalSpecs addObject:s];
             }
         }
         
+        // Re-inject Global toggles beneath the respective group UI header
         if (mitigationsGroupIndex != NSNotFound && globalSpecsDict.count > 0) {
             specs = [nonGlobalSpecs mutableCopy];
             NSUInteger insertPoint = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
@@ -1015,17 +945,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }] + 1;
             
             for (NSString *key in desiredOrder) {
-                if (globalSpecsDict[key]) {
-                    [specs insertObject:globalSpecsDict[key] atIndex:insertPoint++];
-                }
+                if (globalSpecsDict[key]) [specs insertObject:globalSpecsDict[key] atIndex:insertPoint++];
             }
         }
 
+        // Apply controller classes and footers
         for (PSSpecifier *s in specs) {
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
             }
-            
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
@@ -1035,6 +963,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             }
         }
 
+        // Inject dynamic preset application links into the Settings pane
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
         }];
@@ -1046,7 +975,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
-                
                 if ([item isEqualToString:@"DAEMONS_GROUP"]) {
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:@"Restrict System Daemons" target:self set:nil get:nil detail:[AntiDarkSwordDaemonListController class] cell:PSLinkCell edit:nil];
                     [spec setProperty:@"DAEMONS_GROUP" forKey:@"targetID"];
@@ -1065,16 +993,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                         UIGraphicsEndImageContext();
                         [spec setProperty:resizedIcon forKey:@"iconImage"];
                     }
-                    
                     [specs insertObject:spec atIndex:insertIndexAuto++];
                     continue;
                 }
 
-                BOOL isInstalled = [self isTargetInstalled:item];
-                
-                if (!isInstalled) {
-                    continue; // HIDES CELL COMPLETELY IF UNINSTALLED
-                }
+                if (![self isTargetInstalled:item]) continue; 
 
                 NSString *displayName = [self displayNameForTargetID:item];
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
@@ -1082,14 +1005,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 [spec setProperty:@(0) forKey:@"ruleType"];
                 
                 UIImage *icon = [self iconForTargetID:item];
-                if (icon) {
-                    [spec setProperty:icon forKey:@"iconImage"];
-                }
+                if (icon) [spec setProperty:icon forKey:@"iconImage"];
                 
                 [specs insertObject:spec atIndex:insertIndexAuto++];
             }
         }
         
+        // Inject user-defined custom daemon targets
         NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
         }];
@@ -1105,9 +1027,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 [spec setProperty:@YES forKey:@"isCustomDaemon"];
                 
                 UIImage *icon = [self iconForTargetID:daemonID];
-                if (icon) {
-                    [spec setProperty:icon forKey:@"iconImage"];
-                }
+                if (icon) [spec setProperty:icon forKey:@"iconImage"];
                 
                 [specs insertObject:spec atIndex:insertIndexCustom++];
             }
@@ -1121,7 +1041,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSInteger currentLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
     [self populateDefaultRulesForLevel:currentLevel force:NO];
     
@@ -1134,7 +1054,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     saveButton.enabled = needsRespring || (isEnabled && needsReboot);
     
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
     
     [self setupHeaderView];
     [self setupFooterView];
@@ -1157,18 +1077,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         imageView.clipsToBounds = YES;
         
-        // --- NEW: Make the banner clickable ---
-        imageView.userInteractionEnabled = YES; // Images have interaction disabled by default
+        imageView.userInteractionEnabled = YES; 
         UITapGestureRecognizer *bannerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openBannerLink)];
         [imageView addGestureRecognizer:bannerTap];
-        // --------------------------------------
         
         [headerView addSubview:imageView];
         self.table.tableHeaderView = headerView;
     }
 }
 
-// Action triggered by tapping the banner
 - (void)openBannerLink {
     NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
     if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
@@ -1209,13 +1126,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)dealloc {
-    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL);
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL);
 }
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     AntiDarkSwordPrefsRootListController *controller = (__bridge AntiDarkSwordPrefsRootListController *)observer;
     if (controller) {
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSUserDefaults *defaults = ads_defaults();
         BOOL isEnabled = [defaults boolForKey:@"enabled"];
         BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
         BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
@@ -1227,7 +1144,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)flagSaveRequirement {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
     
@@ -1237,32 +1154,25 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
 }
 
-// =========================================================================
-// MISSING SETTER METHOD ADDED RIGHT HERE FOR THE ENABLE PROTECTION SWITCH
-// =========================================================================
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
-    // 1. Save the value using the default mechanism
     [self setPreferenceValue:value specifier:specifier];
     
-    // 2. Determine if a userspace reboot is required
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
     NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
     
-    // If daemons are actively being restricted, toggling the tweak completely on/off requires a userspace reboot to hook/unhook them
+    // Toggling master protection triggers daemon reloading if high-security targets are active
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
     }
     
-    // 3. Automatically present the prompt (If they hit Cancel, the change remains staged and they can use the "Save" Nav button later)
     [self savePrompt];
 }
-// =========================================================================
 
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
 
     if ([key isEqualToString:@"customUAString"]) {
         NSString *input = (NSString *)value;
@@ -1271,7 +1181,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (trimmed.length == 0) {
             NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
             value = ios18UA;
-            
             [defaults setObject:ios18UA forKey:@"selectedUAPreset"];
             [defaults synchronize];
             
@@ -1308,14 +1217,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             [self setPreferenceValue:value specifier:specifier];
             
             if ([key isEqualToString:@"globalDisableJS"]) {
-                BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-                NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-                
-                if (isIOS16OrGreater) {
-                    [defaults setBool:YES forKey:@"globalDisableJIT"];
-                } else {
-                    [defaults setBool:YES forKey:@"globalDisableJIT15"];
-                }
+                BOOL isIOS16 = ads_is_ios16();
+                NSUserDefaults *defaults = ads_defaults();
+                if (isIOS16) [defaults setBool:YES forKey:@"globalDisableJIT"];
+                else [defaults setBool:YES forKey:@"globalDisableJIT15"];
                 [defaults synchronize];
             }
             
@@ -1331,60 +1236,49 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         [self setPreferenceValue:value specifier:specifier];
-        
-        if ([key isEqualToString:@"globalDisableJS"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self->_specifiers = nil;
-                [self reloadSpecifiers];
-            });
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self->_specifiers = nil;
-                [self reloadSpecifiers];
-            });
-        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_specifiers = nil;
+            [self reloadSpecifiers];
+        });
     }
 }
 
 - (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     BOOL enabled = [value boolValue];
     [defaults setObject:value forKey:@"autoProtectEnabled"];
     
-    if (enabled) {
-        if (![defaults boolForKey:@"enabled"]) {
-            [defaults setBool:YES forKey:@"enabled"];
-        }
+    if (enabled && ![defaults boolForKey:@"enabled"]) {
+        [defaults setBool:YES forKey:@"enabled"];
     }
     
     if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
+    
     [defaults synchronize];
     [self flagSaveRequirement];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    ads_post_notification();
     
     _specifiers = nil;
     [self reloadSpecifiers];
 }
 
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"];
     NSInteger newLevel = [value integerValue];
     
     [defaults setObject:value forKey:@"autoProtectLevel"];
-    
-    if (oldLevel != newLevel) {
-        [self populateDefaultRulesForLevel:newLevel force:YES];
-    }
+    if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:YES];
     
     if (oldLevel >= 3 || newLevel >= 3) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
+    
     [defaults synchronize];
     [self flagSaveRequirement];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+    ads_post_notification();
     
     _specifiers = nil;
     [self reloadSpecifiers];
@@ -1401,7 +1295,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (inputText.length > 0) {
             NSArray *inputIDs = [inputText componentsSeparatedByString:@","];
             
-            NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+            NSUserDefaults *defaults = ads_defaults();
             NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
             NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
             BOOL changesMade = NO;
@@ -1424,7 +1318,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 
                 _specifiers = nil;
                 [self reloadSpecifiers];
-                CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+                ads_post_notification();
             }
         }
     }]];
@@ -1441,7 +1335,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
         NSString *daemonID = [spec propertyForKey:@"daemonID"];
         
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+        NSUserDefaults *defaults = ads_defaults();
         NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy];
         NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
         
@@ -1458,7 +1352,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self flagSaveRequirement];
         
         [self removeSpecifier:spec animated:YES];
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        ads_post_notification();
     }
 }
 
@@ -1466,17 +1360,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
-        
+        NSUserDefaults *defaults = ads_defaults();
         NSDictionary *dict = [defaults dictionaryRepresentation];
-        for (NSString *key in dict) {
-            [defaults removeObjectForKey:key];
-        }
+        for (NSString *key in dict) [defaults removeObjectForKey:key];
         
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, NULL, YES);
+        ads_post_notification();
         
         pid_t pid;
         const char* args[] = {"launchctl", "reboot", "userspace", NULL};
@@ -1486,7 +1377,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 - (void)savePrompt {
-    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@"com.eolnmsuk.antidarkswordprefs"];
+    NSUserDefaults *defaults = ads_defaults();
     BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
     
     NSString *title = @"Save";
@@ -1496,7 +1387,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
-    // CHANGED: Passed the 'btn' variable here instead of the hardcoded string
     [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"];
         [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
