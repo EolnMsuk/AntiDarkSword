@@ -146,7 +146,7 @@ Level 3
 │   ├── Disable WebGL & WebRTC: ON (NEW in Level 3)
 │   └── Disable Media Auto-Play: ON (NEW in Level 3)
 │
-└── ⚙️ System Daemons (imagent, mediaserverd, networkd, apsd, identityservicesd)
+└── ⚙️ System Daemons (imagent, mediaserverd, apsd, identityservicesd)
     ├── WebKit Mitigations: BYPASSED (Daemons don't use standard WebKit rules)
     └── System Hooking: ON (Disables zero-click payload parsing at the lowest system level)
 ```
