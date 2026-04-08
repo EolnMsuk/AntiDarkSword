@@ -2,6 +2,9 @@
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 
+// Import our custom logging system from the root folder
+#import "../ADSLogging.h"
+
 // =========================================================
 // PRIVATE IMESSAGE INTERFACES
 // =========================================================
