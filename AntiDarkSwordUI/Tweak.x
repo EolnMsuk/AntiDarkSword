@@ -316,7 +316,18 @@ static void loadPrefs() {
 }
 
 %ctor {
+    // 1. Log that the tweak successfully attached to a process
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
+    
     loadPrefs();
+    
+    // 2. Log if protection is actually active for this specific process
+    if (currentProcessRestricted) {
+        ADSLog(@"[STATUS] Protection is ACTIVE for this process. JS:%d JIT:%d Media:%d RTC:%d", applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC);
+    } else {
+        ADSLog(@"[STATUS] Process is unrestricted. Tweak is dormant here.");
+    }
+    
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
@@ -329,6 +340,9 @@ static void loadPrefs() {
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA) {
+        // Log that we are actively spoofing the UA via JavaScript
+        ADSLog(@"[MITIGATION] Spoofing WKWebView User-Agent to: %@", customUAString);
+        
         NSString *platform = @"iPhone";
         if ([customUAString containsString:@"iPad"]) platform = @"iPad";
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
