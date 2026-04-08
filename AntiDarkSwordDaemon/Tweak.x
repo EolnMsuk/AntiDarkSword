@@ -246,7 +246,15 @@ static void loadPrefs() {
 }
 
 %ctor {
+    // Log that the daemon tweak successfully attached
+    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
+    
     loadPrefs();
+    
+    if (currentProcessRestricted) {
+        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
+    }
+    
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
@@ -296,12 +304,14 @@ static void loadPrefs() {
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
     if (applyDisableIMessageDL) {
+        ADSLog(@"[MITIGATION] Blocked auto-download of an iMessage file transfer.");
         return NO;
     }
     return %orig;
 }
 - (BOOL)canAutoDownload {
     if (applyDisableIMessageDL) {
+        ADSLog(@"[MITIGATION] Denied canAutoDownload permission for iMessage transfer.");
         return NO;
     }
     return %orig;
