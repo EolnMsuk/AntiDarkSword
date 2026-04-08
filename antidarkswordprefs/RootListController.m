@@ -87,23 +87,23 @@ static inline UIColor *ads_color_red(void) {
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
     if (self) {
-        // 1. Remove the grey cell background to inherit the pitch-black Settings background
+        // 1. NUKE the grey background completely
         self.backgroundColor = [UIColor clearColor];
-        self.backgroundView = [[UIView alloc] init];
-        self.backgroundView.backgroundColor = [UIColor clearColor];
+        self.backgroundView = nil; // Destroys the default grey grouped background
+        self.contentView.backgroundColor = [UIColor clearColor]; // Clears the inner view
         
         NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
         
-        // 2. Setup Icon
+        // 2. Setup Icon (50% larger: 45x45)
         NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
         UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
         UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
-        iconView.layer.cornerRadius = 6.0;
+        iconView.layer.cornerRadius = 9.0; // Scaled up the corner radius proportionally
         iconView.clipsToBounds = YES;
         iconView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:iconView];
         
-        // 3. Setup Version Label (Removed "AntiDarkSword" name)
+        // 3. Setup Version Label
         NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
         UILabel *versionLabel = [[UILabel alloc] init];
         versionLabel.text = [NSString stringWithFormat:@"v%@", version];
@@ -119,11 +119,11 @@ static inline UIColor *ads_color_red(void) {
         
         // 4. AutoLayout Constraints for Perfect Centering
         [NSLayoutConstraint activateConstraints:@[
-            // Center Icon Horizontally
+            // Center Icon Horizontally (Now 45x45)
             [iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
-            [iconView.widthAnchor constraintEqualToConstant:30],
-            [iconView.heightAnchor constraintEqualToConstant:30],
+            [iconView.widthAnchor constraintEqualToConstant:45],
+            [iconView.heightAnchor constraintEqualToConstant:45],
             
             // Center Label Horizontally
             [versionLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
