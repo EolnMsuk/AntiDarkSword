@@ -347,7 +347,12 @@
             <key>cell</key>
             <string>PSGroupCell</string>
         </dict>
-        
+        <dict>
+            <key>cellClass</key>
+            <string>AntiDarkSwordVersionCell</string>
+            <key>height</key>
+            <real>100</real>
+        </dict>
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
