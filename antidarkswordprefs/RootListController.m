@@ -87,37 +87,63 @@ static inline UIColor *ads_color_red(void) {
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
     if (self) {
-        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+        // 1. Remove the grey cell background to inherit the pitch-black Settings background
+        self.backgroundColor = [UIColor clearColor];
+        self.backgroundView = [[UIView alloc] init];
+        self.backgroundView.backgroundColor = [UIColor clearColor];
         
         NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
+        
+        // 2. Setup Icon
         NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
         UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
-        
         UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
-        iconView.frame = CGRectMake((screenWidth - 30) / 2, 20, 30, 30);
-        iconView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
         iconView.layer.cornerRadius = 6.0;
         iconView.clipsToBounds = YES;
+        iconView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:iconView];
         
+        // 3. Setup Version Label (Removed "AntiDarkSword" name)
         NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
-        UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60, screenWidth, 20)];
-        versionLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@", version];
+        UILabel *versionLabel = [[UILabel alloc] init];
+        versionLabel.text = [NSString stringWithFormat:@"v%@", version];
         versionLabel.textAlignment = NSTextAlignmentCenter;
         versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-        
         if (@available(iOS 13.0, *)) {
             versionLabel.textColor = [UIColor secondaryLabelColor];
         } else {
             versionLabel.textColor = [UIColor grayColor];
         }
-        
-        versionLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:versionLabel];
         
-        self.backgroundColor = [UIColor clearColor];
+        // 4. AutoLayout Constraints for Perfect Centering
+        [NSLayoutConstraint activateConstraints:@[
+            // Center Icon Horizontally
+            [iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
+            [iconView.widthAnchor constraintEqualToConstant:30],
+            [iconView.heightAnchor constraintEqualToConstant:30],
+            
+            // Center Label Horizontally
+            [versionLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [versionLabel.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:10]
+        ]];
+        
+        // 5. Make it Clickable (Opens GitHub)
+        self.contentView.userInteractionEnabled = YES;
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openGitHubURL)];
+        [self.contentView addGestureRecognizer:tap];
     }
     return self;
+}
+
+// The click action handler for the gesture recognizer
+- (void)openGitHubURL {
+    NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
+    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
+        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
+    }
 }
 @end
 
