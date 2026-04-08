@@ -87,23 +87,18 @@ static inline UIColor *ads_color_red(void) {
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
     if (self) {
-        // 1. NUKE the grey background completely
-        self.backgroundColor = [UIColor clearColor];
-        self.backgroundView = nil; // Destroys the default grey grouped background
-        self.contentView.backgroundColor = [UIColor clearColor]; // Clears the inner view
-        
         NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
         
-        // 2. Setup Icon (50% larger: 45x45)
+        // 1. Setup Icon (45x45)
         NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
         UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
         UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
-        iconView.layer.cornerRadius = 9.0; // Scaled up the corner radius proportionally
+        iconView.layer.cornerRadius = 9.0;
         iconView.clipsToBounds = YES;
         iconView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:iconView];
         
-        // 3. Setup Version Label
+        // 2. Setup Version Label
         NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
         UILabel *versionLabel = [[UILabel alloc] init];
         versionLabel.text = [NSString stringWithFormat:@"v%@", version];
@@ -117,20 +112,18 @@ static inline UIColor *ads_color_red(void) {
         versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:versionLabel];
         
-        // 4. AutoLayout Constraints for Perfect Centering
+        // 3. AutoLayout Constraints for Perfect Centering
         [NSLayoutConstraint activateConstraints:@[
-            // Center Icon Horizontally (Now 45x45)
             [iconView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
             [iconView.widthAnchor constraintEqualToConstant:45],
             [iconView.heightAnchor constraintEqualToConstant:45],
             
-            // Center Label Horizontally
             [versionLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
             [versionLabel.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:10]
         ]];
         
-        // 5. Make it Clickable (Opens GitHub)
+        // 4. Make it Clickable (Opens GitHub)
         self.contentView.userInteractionEnabled = YES;
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openGitHubURL)];
         [self.contentView addGestureRecognizer:tap];
@@ -138,7 +131,6 @@ static inline UIColor *ads_color_red(void) {
     return self;
 }
 
-// The click action handler for the gesture recognizer
 - (void)openGitHubURL {
     NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
     if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
