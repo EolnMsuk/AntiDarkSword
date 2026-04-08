@@ -5,8 +5,8 @@
 #import <sys/types.h>
 #import <objc/runtime.h>
 
-// If you created ADSLogging.h, import it here:
-// #import "../ADSLogging.h"
+// Import our custom logging system from the root folder
+#import "../ADSLogging.h"
 
 // ==========================================
 // Preprocessor Macros & Inline Helpers
