@@ -820,9 +820,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     NSArray *tier1 = @[
         @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-        @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
-        @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
-        @"com.apple.Maps", @"com.apple.weather", @"com.apple.Passbook",
+        @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news", 
+        @"com.apple.podcasts", @"com.apple.stocks", 
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
