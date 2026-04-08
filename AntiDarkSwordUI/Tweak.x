@@ -4,7 +4,7 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
 
-// Import our custom logging system from the root folder
+// Import custom logging system from the root folder
 #import "../ADSLogging.h"
 
 // =========================================================
@@ -24,6 +24,7 @@
 
 #define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
+// Runtime State Variables
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
 static BOOL globalUASpoofingEnabled = NO;
@@ -45,6 +46,7 @@ static BOOL disableJS = NO;
 static BOOL disableMedia = NO;
 static BOOL disableRTC = NO;
 static BOOL disableFileAccess = NO;
+
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
 static BOOL applyDisableJIT15 = NO;
@@ -53,19 +55,103 @@ static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
 static BOOL applyDisableFileAccess = NO;
 
+// =========================================================
+// PREFERENCES PARSING HELPERS
+// =========================================================
+
+// Extracts user-defined restricted apps from various preference dictionary formats
+static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
+    id restrictedAppsRaw = prefs[@"restrictedApps"];
+    if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
+        for (NSString *key in [restrictedAppsRaw allKeys]) {
+            if ([restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)] && [restrictedAppsRaw[key] boolValue]) {
+                if (![restrictedAppsArray containsObject:key]) [restrictedAppsArray addObject:key];
+            }
+        }
+    } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
+        for (id item in restrictedAppsRaw) {
+            if ([item isKindOfClass:[NSString class]] && ![restrictedAppsArray containsObject:item]) {
+                [restrictedAppsArray addObject:item];
+            }
+        }
+    }
+
+    for (NSString *key in [prefs allKeys]) {
+        if ([key hasPrefix:@"restrictedApps-"] && [prefs[key] respondsToSelector:@selector(boolValue)] && [prefs[key] boolValue]) {
+            NSString *appID = [key substringFromIndex:@"restrictedApps-".length];
+            if (![restrictedAppsArray containsObject:appID]) [restrictedAppsArray addObject:appID];
+        }
+    }
+}
+
+// Consolidates the application of WebKit configuration limits to reduce duplicate hook code
+static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
+    if (!configuration) return;
+
+    // Nuclear Fallback: Disable JavaScript Execution entirely
+    if (applyDisableJS) {
+        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
+        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
+    }
+
+    // iOS 16+ Surgical JIT Mitigation via Lockdown Mode hooks
+    if (applyDisableJIT && [configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+        if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
+            [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
+        }
+    }
+    
+    // iOS 15 Surgical JIT Mitigation via internal Process Pool flags
+    if ((applyDisableJIT15 || applyDisableJIT) && [configuration respondsToSelector:@selector(processPool)]) {
+        if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
+            id poolConfig = [(id)configuration.processPool _configuration];
+            if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
+                [(id)poolConfig setJITEnabled:NO];
+            }
+        }
+    }
+    
+    // Media Auto-Play Mitigations
+    if (applyDisableMedia) {
+        if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) configuration.allowsInlineMediaPlayback = NO;
+        if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+        if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) configuration.allowsPictureInPictureMediaPlayback = NO;
+    }
+    
+    // File Access & WebRTC Networking Restrictions
+    if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
+        @try {
+            if (applyDisableFileAccess) {
+                [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
+                [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
+            }
+            if (applyDisableRTC) {
+                [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
+                [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
+                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
+            }
+        } @catch (NSException *e) {}
+    }
+    
+    // Ensure User Content Controller exists if UA spoofing requires script injection
+    if (shouldSpoofUA && !configuration.userContentController) {
+        configuration.userContentController = [[WKUserContentController alloc] init];
+    }
+}
+
 static void loadPrefs() {
     NSDictionary *prefs = nil;
     if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
     }
     
+    // Fallback to IPC CFPreferences if local file read fails
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
             CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) {
-                prefs = (__bridge_transfer NSDictionary *)dict;
-            }
+            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
             CFRelease(keyList);
         }
     }
@@ -76,36 +162,9 @@ static void loadPrefs() {
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
-        id restrictedAppsRaw = prefs[@"restrictedApps"];
-        if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
-            for (id key in [restrictedAppsRaw allKeys]) {
-                if ([key isKindOfClass:[NSString class]] && [restrictedAppsRaw[key] respondsToSelector:@selector(boolValue)]) {
-                    if ([restrictedAppsRaw[key] boolValue]) {
-                        [restrictedAppsArray addObject:key];
-                    }
-                }
-            }
-        } else if ([restrictedAppsRaw isKindOfClass:[NSArray class]]) {
-            for (id item in restrictedAppsRaw) {
-                if ([item isKindOfClass:[NSString class]]) {
-                    [restrictedAppsArray addObjectsFromArray:restrictedAppsRaw];
-                }
-            }
-        }
+        parseRestrictedApps(prefs, restrictedAppsArray);
 
-        for (id key in [prefs allKeys]) {
-            if ([key isKindOfClass:[NSString class]] && [key hasPrefix:@"restrictedApps-"]) {
-                if ([prefs[key] respondsToSelector:@selector(boolValue)]) {
-                    NSString *appID = [(NSString *)key substringFromIndex:@"restrictedApps-".length];
-                    if ([prefs[key] boolValue]) {
-                        if (![restrictedAppsArray containsObject:appID]) {
-                            [restrictedAppsArray addObject:appID];
-                        }
-                    }
-                }
-            }
-        }
-
+        // Extract Global Rules
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableJIT = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT"] boolValue] : NO;
@@ -118,15 +177,12 @@ static void loadPrefs() {
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
-        if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) {
-            activeCustomDaemonIDs = customDaemonIDsRaw;
-        }
+        if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
         id disabledPresetRaw = prefs[@"disabledPresetRules"];
-        if ([disabledPresetRaw isKindOfClass:[NSArray class]]) {
-            disabledPresetRules = disabledPresetRaw;
-        }
+        if ([disabledPresetRaw isKindOfClass:[NSArray class]]) disabledPresetRules = disabledPresetRaw;
         
+        // Resolve User Agent String Selection
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
@@ -137,91 +193,75 @@ static void loadPrefs() {
         NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
         if ([presetUA isEqualToString:@"CUSTOM"]) {
             NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-            if (!trimmedUA || trimmedUA.length == 0) {
-                customUAString = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
-            } else {
-                customUAString = trimmedUA;
-            }
+            customUAString = (trimmedUA.length > 0) ? trimmedUA : @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         } else {
             customUAString = presetUA;
         }
     }
     
+    // Evaluate if the current host process falls under protection rules
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     BOOL isPresetMatch = NO;
     NSString *matchedID = nil;
     
-    if (bundleID && [activeCustomDaemonIDs containsObject:bundleID]) {
-        isTargetRestricted = YES;
-        matchedID = bundleID;
-    } else if (processName && [activeCustomDaemonIDs containsObject:processName]) {
-        isTargetRestricted = YES;
-        matchedID = processName;
+    NSString *targetsToCheck[] = { bundleID, processName };
+    
+    // Check Custom Daemons and Manual Apps
+    for (int i = 0; i < 2; i++) {
+        NSString *target = targetsToCheck[i];
+        if (!target) continue;
+        if ([activeCustomDaemonIDs containsObject:target] || [restrictedAppsArray containsObject:target]) {
+            isTargetRestricted = YES;
+            matchedID = target;
+            break;
+        }
     }
 
-    if (!isTargetRestricted) {
-        if (bundleID && [restrictedAppsArray containsObject:bundleID]) {
-            isTargetRestricted = YES;
-            matchedID = bundleID;
-        } else if (processName && [restrictedAppsArray containsObject:processName]) {
-            isTargetRestricted = YES;
-            matchedID = processName;
-        }
+    // Check Auto-Protect Tiers
+    if (!isTargetRestricted && globalTweakEnabled) {
+        NSArray *tier1 = @[
+            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.mobilenotes", 
+            @"com.apple.iBooks", @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService", 
+            @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+        ];
+        NSArray *tier2 = @[
+            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
+            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"com.toyopagroup.picaboo", 
+            @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios", 
+            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios", @"pinterest", 
+            @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", 
+            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit", @"com.google.ios.youtube", 
+            @"tv.twitch", @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza", @"com.squareup.cash", 
+            @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", @"com.robinhood.release.Robinhood", 
+            @"com.vilcsak.bitcoin2", @"com.sixdays.trust", @"io.metamask.MetaMask", @"app.phantom.phantom", 
+            @"com.chase", @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", @"com.citi.citimobile", 
+            @"com.capitalone.enterprisemobilebanking", @"com.americanexpress.amelia", @"com.fidelity.iphone", 
+            @"com.schwab.mobile", @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", 
+            @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", 
+            @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", 
+            @"com.1debit.ChimeProdApp"
+        ];
+        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
         
-        if (!isTargetRestricted && globalTweakEnabled) {
-            NSArray *tier1 = @[
-                @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-                @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news", 
-                @"com.apple.podcasts", @"com.apple.stocks", 
-                @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-                @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-                @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-            ];
-            NSArray *tier2 = @[
-                @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
-                @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
-                @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", 
-                @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", 
-                @"com.hammerandchisel.discord",
-                @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-                @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios",
-                @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", 
-                @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", 
-                @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch",
-                @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-                @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-                @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", 
-                @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", 
-                @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", 
-                @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", 
-                @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
-                @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
-                @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
-                @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
-                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
-            ];
-            NSArray *tier3 = @[
-                @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
-            ];
+        for (int i = 0; i < 2; i++) {
+            NSString *target = targetsToCheck[i];
+            if (!target) continue;
             
             NSString *targetMatch = nil;
-            if (bundleID) {
-                if ([tier1 containsObject:bundleID]) targetMatch = bundleID;
-                else if (autoProtectLevel >= 2 && [tier2 containsObject:bundleID]) targetMatch = bundleID;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:bundleID]) targetMatch = bundleID;
-            }
-            if (!targetMatch && processName) {
-                if ([tier1 containsObject:processName]) targetMatch = processName;
-                else if (autoProtectLevel >= 2 && [tier2 containsObject:processName]) targetMatch = processName;
-                else if (autoProtectLevel >= 3 && [tier3 containsObject:processName]) targetMatch = processName;
-            }
+            if ([tier1 containsObject:target]) targetMatch = target;
+            else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
+            else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
             
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
                 isPresetMatch = YES;
+                break;
             }
         }
     }
@@ -236,8 +276,8 @@ static void loadPrefs() {
     disableJIT15 = NO;
     disableJS = NO;
     disableFileAccess = NO;
-    
-    // 2. If it's a PRESET app, apply secure defaults if no dictionary exists yet
+
+    // 2. Apply secure defaults for PRESET matches lacking a user dictionary
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
         disableJIT = isIOS16OrGreater;
@@ -246,44 +286,39 @@ static void loadPrefs() {
 
         NSArray *msgAndMail = @[
             @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
-            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
-            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
-            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", 
-            @"com.apple.Passbook"
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.google.Gmail", 
+            @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail", 
+            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
         
         NSArray *browsers = @[
-            @"com.apple.mobilesafari", @"com.apple.SafariViewService",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", 
-            @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", 
+            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-        
+
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = YES;
             disableRTC = YES; 
             disableFileAccess = YES; 
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
-            // Enforce Safari UA spoofing at Level 1 if no custom dictionary exists yet
+            // Enforce Safari UA spoofing at Level 1
             if ([matchedID isEqualToString:@"com.apple.mobilesafari"] || [matchedID isEqualToString:@"com.apple.SafariViewService"]) {
                 spoofUARule = YES;
             } else {
                 spoofUARule = (autoProtectLevel >= 2);
             }
-            
             if (autoProtectLevel >= 3) { 
                 disableRTC = YES;
                 disableMedia = YES;
             }
-        } else if ([matchedID containsString:@"daemon"] || [matchedID hasPrefix:@"com.apple."]) {
-            // Daemons skip webkit mitigations by default
-        } else {
-            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
+        } else if (![matchedID containsString:@"daemon"] && ![matchedID hasPrefix:@"com.apple."]) {
+            spoofUARule = (autoProtectLevel >= 2);
         }
     }
 
-    // 3. Override with saved user dictionary if it exists
+    // 3. Override with saved user dictionary explicit rules
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
@@ -298,6 +333,7 @@ static void loadPrefs() {
         }
     }
 
+    // Process Final Evaluation Matrix (Global Rules override Local Rules)
     applyDisableJIT = globalTweakEnabled && (globalDisableJIT || (currentProcessRestricted && disableJIT));
     applyDisableJIT15 = globalTweakEnabled && (globalDisableJIT15 || (currentProcessRestricted && disableJIT15));
     applyDisableJS = globalTweakEnabled && (globalDisableJS || (currentProcessRestricted && disableJS));
@@ -316,12 +352,9 @@ static void loadPrefs() {
 }
 
 %ctor {
-    // 1. Log that the tweak successfully attached to a process
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
-    
     loadPrefs();
     
-    // 2. Log if protection is actually active for this specific process
     if (currentProcessRestricted) {
         ADSLog(@"[STATUS] Protection is ACTIVE for this process. JS:%d JIT:%d Media:%d RTC:%d", applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC);
     } else {
@@ -340,7 +373,6 @@ static void loadPrefs() {
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA) {
-        // Log that we are actively spoofing the UA via JavaScript
         ADSLog(@"[MITIGATION] Spoofing WKWebView User-Agent to: %@", customUAString);
         
         NSString *platform = @"iPhone";
@@ -367,6 +399,7 @@ static void loadPrefs() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
+        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -375,9 +408,7 @@ static void loadPrefs() {
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
-    if (shouldSpoofUA) {
-        return %orig(@"");
-    }
+    if (shouldSpoofUA) return %orig(@"");
     %orig;
 }
 %end
@@ -385,68 +416,12 @@ static void loadPrefs() {
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    
-    // Nuclear Fallback
-    if (applyDisableJS) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
-        if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-    }
-
-    // iOS 16 Surgical JIT Mitigation
-    if (applyDisableJIT) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
-                [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
-            }
-        }
-    }
-    
-    // iOS 15 Surgical JIT Mitigation
-    if (applyDisableJIT15 || applyDisableJIT) {
-        if ([configuration respondsToSelector:@selector(processPool)]) {
-            if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
-                id poolConfig = [(id)configuration.processPool _configuration];
-                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
-                    [(id)poolConfig setJITEnabled:NO];
-                }
-            }
-        }
-    }
-    
-    if (applyDisableMedia) {
-        if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) configuration.allowsInlineMediaPlayback = NO;
-        if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-        if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) configuration.allowsPictureInPictureMediaPlayback = NO;
-    }
-    
-    if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-        @try {
-            if (applyDisableFileAccess) {
-                [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-            }
-            if (applyDisableRTC) {
-                [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-            }
-        } @catch (NSException *e) {}
-    }
-    
-    if (shouldSpoofUA) {
-        if (!configuration.userContentController) {
-            configuration.userContentController = [[WKUserContentController alloc] init];
-        }
-    }
+    applyWebKitMitigations(configuration);
     
     WKWebView *webView = %orig(frame, configuration);
-    if (shouldSpoofUA) {
-        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
-            webView.customUserAgent = customUAString;
-        }
+    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+        webView.customUserAgent = customUAString;
     }
-    
     return webView;
 }
 
@@ -454,80 +429,22 @@ static void loadPrefs() {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     
-    // Nuclear Fallback
-    if (applyDisableJS) {
-        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) webView.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) webView.configuration.preferences.javaScriptEnabled = NO;
-        if ([webView.configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)]) webView.configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
-    }
-
-    // iOS 16 Surgical JIT Mitigation
-    if (applyDisableJIT) {
-        if ([webView.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            if ([webView.configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)]) {
-                [(id)webView.configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
-            }
-        }
-    }
+    applyWebKitMitigations(webView.configuration);
     
-    // iOS 15 Surgical JIT Mitigation
-    if (applyDisableJIT15 || applyDisableJIT) {
-        if ([webView.configuration respondsToSelector:@selector(processPool)]) {
-            if ([webView.configuration.processPool respondsToSelector:@selector(_configuration)]) {
-                id poolConfig = [(id)webView.configuration.processPool _configuration];
-                if ([poolConfig respondsToSelector:@selector(setJITEnabled:)]) {
-                    [(id)poolConfig setJITEnabled:NO];
-                }
-            }
-        }
+    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+        webView.customUserAgent = customUAString;
     }
-    
-    if (applyDisableMedia) {
-        if ([webView.configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)]) webView.configuration.allowsInlineMediaPlayback = NO;
-        if ([webView.configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)]) webView.configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-        if ([webView.configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)]) webView.configuration.allowsPictureInPictureMediaPlayback = NO;
-    }
-    
-    if ([webView.configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
-        @try {
-            if (applyDisableFileAccess) {
-                [webView.configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
-                [webView.configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
-            }
-            if (applyDisableRTC) {
-                [webView.configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
-                [webView.configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"]; 
-                [webView.configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
-            }
-        } @catch (NSException *e) {}
-    }
-    
-    if (shouldSpoofUA) {
-        if (!webView.configuration.userContentController) {
-            webView.configuration.userContentController = [[WKUserContentController alloc] init];
-        }
-        if ([webView respondsToSelector:@selector(setCustomUserAgent:)]) {
-            webView.customUserAgent = customUAString;
-        }
-    }
-    
     return webView;
 }
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) self.configuration.preferences.javaScriptEnabled = NO;
     }
 
     if (shouldSpoofUA) {
-        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
-            self.customUserAgent = customUAString;
-        }
+        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) self.customUserAgent = customUAString;
         
         if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
             NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
@@ -543,18 +460,12 @@ static void loadPrefs() {
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
-        }
-        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) {
-            self.configuration.preferences.javaScriptEnabled = NO;
-        }
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) self.configuration.preferences.javaScriptEnabled = NO;
     }
 
-    if (shouldSpoofUA) {
-        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) {
-            self.customUserAgent = customUAString;
-        }
+    if (shouldSpoofUA && [self respondsToSelector:@selector(setCustomUserAgent:)]) {
+        self.customUserAgent = customUAString;
     }
     return %orig;
 }
@@ -582,36 +493,27 @@ static void loadPrefs() {
 }
 
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
-    if (shouldSpoofUA) {
-        %orig(customUAString);
-    } else {
-        %orig;
-    }
+    if (shouldSpoofUA) %orig(customUAString);
+    else %orig;
 }
 %end
 
 %hook WKWebpagePreferences
 - (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (applyDisableJS && allowed) {
-        return %orig(NO);
-    }
+    if (applyDisableJS && allowed) return %orig(NO);
     %orig;
 }
 %end
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (applyDisableJS && enabled) {
-        return %orig(NO);
-    }
+    if (applyDisableJS && enabled) return %orig(NO);
     %orig;
 }
 %end
 
 %hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (applyDisableJS) {
-        return NULL;
-    }
+    if (applyDisableJS) return NULL;
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
 }
 
@@ -621,9 +523,7 @@ static void loadPrefs() {
 
 %hook UIWebView
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (applyDisableJS) {
-        return @"";
-    }
+    if (applyDisableJS) return @"";
     return %orig;
 }
 %end
