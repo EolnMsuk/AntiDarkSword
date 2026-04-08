@@ -77,6 +77,54 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 // ==========================================
+// Custom Version & Icon Cell
+// ==========================================
+@interface PSTableCell : UITableViewCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier;
+@end
+
+@interface AntiDarkSwordVersionCell : PSTableCell
+@end
+
+@implementation AntiDarkSwordVersionCell
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
+    if (self) {
+        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+        
+        NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
+        NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
+        UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
+        
+        UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
+        iconView.frame = CGRectMake((screenWidth - 30) / 2, 20, 30, 30);
+        iconView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
+        iconView.layer.cornerRadius = 6.0;
+        iconView.clipsToBounds = YES;
+        [self.contentView addSubview:iconView];
+        
+        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
+        UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60, screenWidth, 20)];
+        versionLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@", version];
+        versionLabel.textAlignment = NSTextAlignmentCenter;
+        versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        
+        if (@available(iOS 13.0, *)) {
+            versionLabel.textColor = [UIColor secondaryLabelColor];
+        } else {
+            versionLabel.textColor = [UIColor grayColor];
+        }
+        
+        versionLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+        [self.contentView addSubview:versionLabel];
+        
+        self.backgroundColor = [UIColor clearColor];
+    }
+    return self;
+}
+@end
+
+// ==========================================
 // App-Specific Feature Drill-Down Controller
 // ==========================================
 @interface AntiDarkSwordAppController : PSListController
@@ -1058,7 +1106,6 @@ static inline UIColor *ads_color_red(void) {
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
     
     [self setupHeaderView];
-    [self setupFooterView];
 }
 
 - (void)setupHeaderView {
@@ -1092,38 +1139,6 @@ static inline UIColor *ads_color_red(void) {
     if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
         [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
     }
-}
-
-- (void)setupFooterView {
-    CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-    UIView *footerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, 100)];
-    footerView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    
-    NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-    NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
-    UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
-    
-    UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
-    iconView.frame = CGRectMake((screenWidth - 30) / 2, 20, 30, 30);
-    iconView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
-    iconView.layer.cornerRadius = 6.0;
-    iconView.clipsToBounds = YES;
-    [footerView addSubview:iconView];
-    
-    NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
-    UILabel *versionLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 60, screenWidth, 20)];
-    versionLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@", version];
-    versionLabel.textAlignment = NSTextAlignmentCenter;
-    versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    if (@available(iOS 13.0, *)) {
-        versionLabel.textColor = [UIColor secondaryLabelColor];
-    } else {
-        versionLabel.textColor = [UIColor grayColor];
-    }
-    versionLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    [footerView addSubview:versionLabel];
-    
-    self.table.tableFooterView = footerView;
 }
 
 - (void)dealloc {
