@@ -1,6 +1,7 @@
 // antidarkswordprefs/RootListController.m
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
+#import <Preferences/PSTableCell.h> // <-- Add this line
 #import <UIKit/UIKit.h>
 #import <spawn.h>
 #import <sys/types.h>
@@ -79,10 +80,6 @@ static inline UIColor *ads_color_red(void) {
 // ==========================================
 // Custom Version & Icon Cell
 // ==========================================
-@interface PSTableCell : UITableViewCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier;
-@end
-
 @interface AntiDarkSwordVersionCell : PSTableCell
 @end
 
