@@ -198,7 +198,7 @@ static void loadPrefs() {
                 @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", 
                 @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", 
                 @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", 
-                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
+                @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
             ];
             NSArray *tier3 = @[
                 @"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"
