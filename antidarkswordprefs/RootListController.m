@@ -1,10 +1,11 @@
 // antidarkswordprefs/RootListController.m
 #import <Preferences/PSListController.h>
 #import <Preferences/PSSpecifier.h>
-#import <Preferences/PSTableCell.h> // <-- Add this line
+#import <Preferences/PSTableCell.h>
 #import <UIKit/UIKit.h>
 #import <spawn.h>
 #import <sys/types.h>
+#import <sys/wait.h>
 #import <objc/runtime.h>
 
 // Import our custom logging system from the root folder
@@ -114,7 +115,6 @@ static inline UIColor *ads_color_red(void) {
         
         // 3. AutoLayout Constraints for Left-Alignment
         [NSLayoutConstraint activateConstraints:@[
-            // Align Icon to the left margin guide
             [iconView.leadingAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leadingAnchor],
             [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
             [iconView.widthAnchor constraintEqualToConstant:45],
@@ -169,8 +169,8 @@ static inline UIColor *ads_color_red(void) {
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        // Generate toggles for essential daemons
-        NSArray *daemons = @[@"imagent", @"mediaserverd", @"apsd", @"identityservicesd"];
+        // 🔴 BUG FIX: Removed mediaserverd
+        NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
@@ -228,7 +228,6 @@ static inline UIColor *ads_color_red(void) {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
     
-    // Extract bundle ID safely
     NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
     if (!bundleID) {
         NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
@@ -244,19 +243,15 @@ static inline UIColor *ads_color_red(void) {
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
-        // Hide default AltList controls to implement a custom UI
         if ([cell respondsToSelector:@selector(control)]) {
             id control = [cell control];
-            if ([control isKindOfClass:[UIView class]]) {
-                ((UIView *)control).hidden = YES;
-            }
+            if ([control isKindOfClass:[UIView class]]) ((UIView *)control).hidden = YES;
         }
         
         cell.accessoryView = nil;
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         
-        // Determine manual rule state
         BOOL isManualRuleActive = NO;
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
         if ([defaults objectForKey:prefKey]) {
@@ -266,15 +261,12 @@ static inline UIColor *ads_color_red(void) {
             isManualRuleActive = [apps[bundleID] boolValue];
         }
 
-        // Apply UI styling based on protection status
         if ([presetApps containsObject:bundleID]) {
-            // Disabled state for apps already protected by a preset
             cell.userInteractionEnabled = NO;
             cell.textLabel.alpha = 0.5;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 0.5;
             cell.backgroundColor = [UIColor clearColor];
         } else {
-            // Interactive state for customizable apps
             cell.userInteractionEnabled = YES;
             cell.textLabel.alpha = 1.0;
             if (cell.detailTextLabel) cell.detailTextLabel.alpha = 1.0;
@@ -292,9 +284,7 @@ static inline UIColor *ads_color_red(void) {
     NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
     if (!bundleID) {
         NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
-        if ([alKey hasPrefix:@"restrictedApps-"]) {
-            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
-        }
+        if ([alKey hasPrefix:@"restrictedApps-"]) bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
     }
 
     if (bundleID) {
@@ -304,10 +294,8 @@ static inline UIColor *ads_color_red(void) {
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
         
-        // Block navigation if the app is locked by a preset level
         if ([presetApps containsObject:bundleID]) return; 
 
-        // Push detailed configuration controller for the selected app
         AntiDarkSwordAppController *detailController = [[AntiDarkSwordAppController alloc] init];
         detailController.targetID = bundleID;
         detailController.ruleType = 1; 
@@ -329,16 +317,15 @@ static inline UIColor *ads_color_red(void) {
 // ==========================================
 @implementation AntiDarkSwordAppController
 
-// Evaluates if the target bundle ID belongs to a known system daemon or extension
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
+    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *daemons = @[
-        @"com.apple.imagent", @"imagent", @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.imagent", @"imagent",
         @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd"
     ];
     if ([daemons containsObject:targetID]) return YES;
     
-    // Fallback heuristic checks for daemon identification
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
     if ([targetID containsString:@"daemon"]) return YES;
     if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) return YES;
@@ -346,7 +333,6 @@ static inline UIColor *ads_color_red(void) {
     return NO;
 }
 
-// Determines if a specific mitigation feature makes logical sense for the target type
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID {
     BOOL isDaemon = [self isDaemonTarget:targetID];
     BOOL isMessageApp = [targetID isEqualToString:@"com.apple.MobileSMS"] || 
@@ -378,7 +364,6 @@ static inline UIColor *ads_color_red(void) {
     self.title = [specifier name] ?: self.targetID;
 }
 
-// Checks if a global blanket rule overrides app-specific settings
 - (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey {
     NSUserDefaults *defaults = ads_defaults();
     if ([featureKey isEqualToString:@"spoofUA"]) return [defaults boolForKey:@"globalUASpoofingEnabled"];
@@ -398,7 +383,6 @@ static inline UIColor *ads_color_red(void) {
         NSUserDefaults *defaults = ads_defaults();
         [defaults synchronize];
         
-        // Rule Status Section
         PSSpecifier *enableGroup = [PSSpecifier preferenceSpecifierNamed:@"Rule Status" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:enableGroup];
         
@@ -407,7 +391,6 @@ static inline UIColor *ads_color_red(void) {
         
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
-        // Mitigations Section
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
         [specs addObject:featGroup];
@@ -434,7 +417,6 @@ static inline UIColor *ads_color_red(void) {
             isJSTurnedOn = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
         }
         
-        // Construct visual toggles for each mitigation feature
         for (NSDictionary *feat in features) {
             NSString *featKey = feat[@"key"];
             BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID];
@@ -443,7 +425,6 @@ static inline UIColor *ads_color_red(void) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:feat[@"label"] target:self set:@selector(setFeatureValue:specifier:) get:@selector(getFeatureValue:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:featKey forKey:@"featureKey"];
             
-            // Logic to disable/lock UI switches based on OS version and dependencies
             if (isApplicable) {
                 if (isGlobalOverride) {
                     [spec setProperty:@NO forKey:@"enabled"];
@@ -457,7 +438,6 @@ static inline UIColor *ads_color_red(void) {
             } else {
                 [spec setProperty:@NO forKey:@"enabled"];
             }
-            
             [specs addObject:spec];
         }
         
@@ -523,7 +503,6 @@ static inline UIColor *ads_color_red(void) {
 
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
-    
     if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) return @NO;
     if ([self isGlobalOverrideActiveForFeature:featureKey]) return @YES;
 
@@ -532,7 +511,6 @@ static inline UIColor *ads_color_red(void) {
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     
-    // Resolve defaults if explicit rules aren't yet defined
     if (!rules || rules[featureKey] == nil) { 
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
         NSArray *allProtected = [rootCtrl autoProtectedItemsForLevel:3];
@@ -580,7 +558,6 @@ static inline UIColor *ads_color_red(void) {
 
 - (void)setFeatureValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
-    
     if (![AntiDarkSwordAppController isApplicableFeature:featureKey forTarget:self.targetID]) return; 
 
     NSUserDefaults *defaults = ads_defaults();
@@ -589,7 +566,6 @@ static inline UIColor *ads_color_red(void) {
     
     rules[featureKey] = value;
     
-    // Auto-resolve JIT conflicts if JS is disabled
     if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16 = ads_is_ios16();
         if ([value boolValue]) {
@@ -622,15 +598,14 @@ static inline UIColor *ads_color_red(void) {
 
 @implementation AntiDarkSwordPrefsRootListController
 
-// Checks the filesystem/workspace to verify if an app is actually present
 - (BOOL)isTargetInstalled:(NSString *)targetID {
+    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *coreServices = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd",
-        @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.SafariViewService",
-        @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
-        @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
-        @"com.apple.QuickLookDaemon",
-        @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"
+        @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd", 
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService", 
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"imagent", @"apsd", @"identityservicesd"
     ];
     
     if ([coreServices containsObject:targetID]) return YES;
@@ -699,8 +674,9 @@ static inline UIColor *ads_color_red(void) {
     if (knownNames[targetID]) return knownNames[targetID];
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; 
     
+    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *daemons = @[
-        @"com.apple.imagent", @"com.apple.mediaserverd", @"com.apple.apsd", @"com.apple.identityservicesd",
+        @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
@@ -725,13 +701,13 @@ static inline UIColor *ads_color_red(void) {
     UIImage *icon = nil;
     
     if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
+        // 🔴 BUG FIX: Removed mediaserverd
         NSArray *daemons = @[
-            @"com.apple.imagent", @"com.apple.mediaserverd",
-            @"com.apple.apsd", @"com.apple.identityservicesd",
+            @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd",
             @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"
+            @"imagent", @"apsd", @"identityservicesd"
         ];
         
         if (![daemons containsObject:targetID]) {
@@ -743,7 +719,6 @@ static inline UIColor *ads_color_red(void) {
         }
     }
     
-    // Fallback vector image for processes without app icons
     if (!icon) {
         if (@available(iOS 13.0, *)) {
             icon = [UIImage systemImageNamed:@"gearshape.fill"];
@@ -751,7 +726,6 @@ static inline UIColor *ads_color_red(void) {
         }
     }
     
-    // Normalize bounds
     if (icon) {
         CGSize newSize = CGSizeMake(23, 23);
         UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
@@ -789,9 +763,9 @@ static inline UIColor *ads_color_red(void) {
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
-    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"mediaserverd", @"apsd", @"identityservicesd"]];
+    // 🔴 BUG FIX: Removed mediaserverd
+    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd"]];
 
-    // Seed defaults based on the selected tier profile
     for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
         if (!force && [defaults objectForKey:dictKey]) continue;
@@ -907,11 +881,11 @@ static inline UIColor *ads_color_red(void) {
 
         NSUserDefaults *defaults = ads_defaults();
 
-        // Calculate dynamic cell backgrounds based on active protection state
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-                NSArray *daemons = @[@"imagent", @"mediaserverd", @"apsd", @"identityservicesd"];
+                // 🔴 BUG FIX: Removed mediaserverd
+                NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
                 for (NSString *d in daemons) {
                     if (![disabled containsObject:d]) {
@@ -950,7 +924,6 @@ static inline UIColor *ads_color_red(void) {
         BOOL isIOS16 = ads_is_ios16();
         BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
         
-        // Ensure default UA string falls back safely
         NSString *selectedUA = [defaults stringForKey:@"selectedUAPreset"];
         if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) {
             selectedUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -958,7 +931,6 @@ static inline UIColor *ads_color_red(void) {
             [defaults synchronize];
         }
 
-        // Hide Custom UA Field unless actively selected
         if (![selectedUA isEqualToString:@"CUSTOM"]) {
             for (int i = 0; i < specs.count; i++) {
                 PSSpecifier *s = specs[i];
@@ -972,7 +944,6 @@ static inline UIColor *ads_color_red(void) {
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1;
         NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
-        // Order Global Toggles Systematically
         NSArray *desiredOrder = @[
             @"globalUASpoofingEnabled", @"globalDisableJIT", @"globalDisableJIT15",
             @"globalDisableJS", @"globalDisableRTC", @"globalDisableMedia",
@@ -1002,7 +973,6 @@ static inline UIColor *ads_color_red(void) {
             }
         }
         
-        // Re-inject Global toggles beneath the respective group UI header
         if (mitigationsGroupIndex != NSNotFound && globalSpecsDict.count > 0) {
             specs = [nonGlobalSpecs mutableCopy];
             NSUInteger insertPoint = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
@@ -1014,7 +984,6 @@ static inline UIColor *ads_color_red(void) {
             }
         }
 
-        // Apply controller classes and footers
         for (PSSpecifier *s in specs) {
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
@@ -1028,7 +997,6 @@ static inline UIColor *ads_color_red(void) {
             }
         }
 
-        // Inject dynamic preset application links into the Settings pane
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"];
         }];
@@ -1076,7 +1044,6 @@ static inline UIColor *ads_color_red(void) {
             }
         }
         
-        // Inject user-defined custom daemon targets
         NSUInteger insertIndexCustom = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
             return [[obj propertyForKey:@"id"] isEqualToString:@"AddCustomIDButton"];
         }];
@@ -1186,6 +1153,27 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
 }
 
+// =======================================================
+// DECOY ENABLE METHOD (Task 1 Component)
+// =======================================================
+- (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
+    [self setPreferenceValue:value specifier:specifier];
+    
+    BOOL enabled = [value boolValue];
+    pid_t pid;
+    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+    
+    // Safely unload first to prevent bootstrap errors
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
+    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+    waitpid(pid, NULL, 0); 
+    
+    if (enabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+    }
+}
+
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
     [self setPreferenceValue:value specifier:specifier];
     
@@ -1193,7 +1181,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
     NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
     
-    // Toggling master protection triggers daemon reloading if high-security targets are active
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
@@ -1319,7 +1306,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)addCustomID {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Custom ID" message:@"Enter bundle IDs or process names (comma-separated)" preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"com.apple.imagent, mediaserverd";
+        textField.placeholder = @"com.apple.imagent, apsd";
     }];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Add" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
