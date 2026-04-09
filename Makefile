@@ -4,8 +4,8 @@ THEOS_PACKAGE_SCHEME = rootless
 
 include $(THEOS)/makefiles/common.mk
 
-# Route Theos to build the three independent subprojects
-SUBPROJECTS += AntiDarkSwordUI AntiDarkSwordDaemon antidarkswordprefs
+# Route Theos to build the independent subprojects
+SUBPROJECTS += AntiDarkSwordUI AntiDarkSwordDaemon antidarkswordprefs CorelliumDecoy
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 # This is the "Magic" part that makes the settings show up
