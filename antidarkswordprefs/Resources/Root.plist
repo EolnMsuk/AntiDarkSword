@@ -110,7 +110,7 @@
             <key>label</key>
             <string>Corellium Decoy</string>
             <key>footerText</key>
-            <string>Spoofs the Corellium environment to force advanced exploits (like Coruna) to self-destruct.</string>
+            <string>Spoofs the Corellium environment to trigger advanced exploits (like Coruna) to self-destruct.</string>
         </dict>
         <dict>
             <key>cell</key>
