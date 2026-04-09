@@ -1159,7 +1159,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 - (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
     [self setPreferenceValue:value specifier:specifier];
     
-    BOOL enabled = [value boolValue];
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
+    BOOL decoyEnabled = [value boolValue];
+    
     pid_t pid;
     const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
     
@@ -1168,7 +1171,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0); 
     
-    if (enabled) {
+    // ONLY load the daemon if both the decoy switch AND the master protection switch are ON
+    if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
         posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
     }
@@ -1180,7 +1184,22 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSUserDefaults *defaults = ads_defaults();
     NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
     NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
+    BOOL masterEnabled = [value boolValue];
+    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
     
+    // Synchronize the decoy daemon state with the master switch instantly
+    pid_t pid;
+    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
+    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+    waitpid(pid, NULL, 0);
+    
+    if (masterEnabled && decoyEnabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+    }
+    
+    // Toggling master protection triggers daemon reloading if high-security targets are active
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
