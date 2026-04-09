@@ -14,7 +14,7 @@
                 },
                 {
                     "class": "DepictionMarkdownView",
-                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through aggressive daemon restrictions and granular WebKit isolation."
+                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation."
                 }
             ]
         }
