@@ -1,6 +1,9 @@
 // AntiDarkSwordDaemon/Tweak.x
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <substrate.h>
 
 // Import custom logging system from the root folder
 #import "../ADSLogging.h"
@@ -25,6 +28,7 @@ static BOOL globalTweakEnabled = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
+static BOOL globalDecoyEnabled = NO;
 
 // App-Specific Granular Features for Daemons
 static BOOL globalDisableIMessageDL = NO;
@@ -83,13 +87,12 @@ static void loadPrefs() {
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
+        globalDecoyEnabled = [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
 
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
-        
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
@@ -116,7 +119,6 @@ static void loadPrefs() {
     NSString *processName = [[NSProcessInfo processInfo] processName];
     BOOL isTargetRestricted = NO;
     NSString *matchedID = nil;
-    
     NSString *targetsToCheck[] = { bundleID, processName };
     
     // Check Custom Daemons and Manual Apps
@@ -156,7 +158,8 @@ static void loadPrefs() {
             @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", 
             @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
         ];
-        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+        // 🔴 BUG FIX: Removed mediaserverd to prevent audio deadlocks
+        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"networkd", @"apsd", @"identityservicesd"];
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
@@ -166,7 +169,6 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-            
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -206,7 +208,6 @@ static void loadPrefs() {
     }
 
     applyDisableIMessageDL = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
-    
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
@@ -220,7 +221,6 @@ static void loadPrefs() {
 %ctor {
     ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
     loadPrefs();
-    
     if (currentProcessRestricted) {
         ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
     }
@@ -289,3 +289,50 @@ static void loadPrefs() {
     return %orig;
 }
 %end
+
+// =========================================================
+// CORELLIUM DECOY (ROOTLESS SPOOFING)
+// =========================================================
+
+static int (*orig_access)(const char *path, int amode);
+int hook_access(const char *path, int amode) {
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        return 0; // Lie and say the file exists and is accessible
+    }
+    return orig_access(path, amode);
+}
+
+static int (*orig_stat)(const char *path, struct stat *buf);
+int hook_stat(const char *path, struct stat *buf) {
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        if (buf) {
+            memset(buf, 0, sizeof(struct stat));
+            buf->st_mode = S_IFREG | 0755;
+            buf->st_uid = 0;
+            buf->st_gid = 0;
+            buf->st_size = 34520; // Arbitrary realistic file size
+        }
+        return 0;
+    }
+    return orig_stat(path, buf);
+}
+
+%hook NSFileManager
+- (BOOL)fileExistsAtPath:(NSString *)path {
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) return YES;
+    return %orig;
+}
+- (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+        if (isDirectory) *isDirectory = NO;
+        return YES;
+    }
+    return %orig;
+}
+%end
+
+%ctor {
+    // Bind the C-level file hooks
+    MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
+    MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
+}
