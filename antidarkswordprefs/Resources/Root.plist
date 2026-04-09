@@ -37,7 +37,7 @@
             <key>label</key>
             <string>User Agent Configuration</string>
             <key>footerText</key>
-            <string>Spoofing User Agent (iOS version) bypasses known payloads for Coruna and DarkSword.</string>
+            <string>Spoofing User Agent bypasses known payloads via browser detection for Coruna and DarkSword.</string>
         </dict>
         <dict>
             <key>cell</key>
