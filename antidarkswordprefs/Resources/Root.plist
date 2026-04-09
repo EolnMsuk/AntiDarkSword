@@ -106,6 +106,33 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>id</key>
+            <string>DecoyGroup</string>
+            <key>label</key>
+            <string>Corellium Decoy</string>
+            <key>footerText</key>
+            <string>Spoofs the Corellium environment to force advanced exploits (like Coruna) to self-destruct. (Runs a lightweight dummy process in the background).</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSSwitchCell</string>
+            <key>default</key>
+            <false/>
+            <key>defaults</key>
+            <string>com.eolnmsuk.antidarkswordprefs</string>
+            <key>key</key>
+            <string>corelliumDecoyEnabled</string>
+            <key>label</key>
+            <string>Enable Corellium Honeypot</string>
+            <key>set</key>
+            <string>setDecoyEnabled:specifier:</string>
+            <key>PostNotification</key>
+            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
+        </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+            <key>id</key>
             <string>PresetRulesGroup</string>
             <key>label</key>
             <string>Preset Rules</string>
@@ -191,7 +218,8 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
+            <string>Add bundle IDs or process names.
+Swipe left on rules to remove.</string>
         </dict>
         <dict>
             <key>cell</key>
