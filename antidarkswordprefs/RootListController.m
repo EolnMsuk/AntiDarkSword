@@ -1398,18 +1398,23 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        NSUserDefaults *defaults = ads_defaults();
-        NSDictionary *dict = [defaults dictionaryRepresentation];
-        for (NSString *key in dict) [defaults removeObjectForKey:key];
         
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"];
-        [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
+        pid_t pid;
+        
+        // 1. STOP THE GHOST: Unload the Corellium Decoy so it doesn't auto-boot on restart
+        const char* unloadArgs[] = {"launchctl", "unload", "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+        waitpid(pid, NULL, 0); 
+        
+        // 2. CLEAN WIPE: Properly destroy the entire preference domain (safer than a loop)
+        NSUserDefaults *defaults = ads_defaults();
+        [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
         ads_post_notification();
         
-        pid_t pid;
-        const char* args[] = {"launchctl", "reboot", "userspace", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+        // 3. REBOOT: Flush the substrate hooks
+        const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)rebootArgs, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
