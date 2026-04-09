@@ -30,7 +30,6 @@ static BOOL globalTweakEnabled = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
-
 // Global Overrides
 static BOOL globalDisableJIT = NO;
 static BOOL globalDisableJIT15 = NO;
@@ -38,7 +37,6 @@ static BOOL globalDisableJS = NO;
 static BOOL globalDisableMedia = NO;
 static BOOL globalDisableRTC = NO;
 static BOOL globalDisableFileAccess = NO;
-
 // App-Specific Granular Features
 static BOOL disableJIT = NO;
 static BOOL disableJIT15 = NO;
@@ -46,7 +44,6 @@ static BOOL disableJS = NO;
 static BOOL disableMedia = NO;
 static BOOL disableRTC = NO;
 static BOOL disableFileAccess = NO;
-
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
 static BOOL applyDisableJIT15 = NO;
@@ -54,7 +51,6 @@ static BOOL applyDisableJS = NO;
 static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
 static BOOL applyDisableFileAccess = NO;
-
 // =========================================================
 // PREFERENCES PARSING HELPERS
 // =========================================================
@@ -87,7 +83,6 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 // Consolidates the application of WebKit configuration limits to reduce duplicate hook code
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
-
     // Nuclear Fallback: Disable JavaScript Execution entirely
     if (applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
@@ -160,10 +155,8 @@ static void loadPrefs() {
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-
         // Extract Global Rules
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
@@ -175,7 +168,6 @@ static void loadPrefs() {
         globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
         
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
-        
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
@@ -205,7 +197,6 @@ static void loadPrefs() {
     BOOL isTargetRestricted = NO;
     BOOL isPresetMatch = NO;
     NSString *matchedID = nil;
-    
     NSString *targetsToCheck[] = { bundleID, processName };
     
     // Check Custom Daemons and Manual Apps
@@ -246,7 +237,7 @@ static void loadPrefs() {
             @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", 
             @"com.1debit.ChimeProdApp"
         ];
-        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"mediaserverd", @"networkd", @"apsd", @"identityservicesd"];
+        NSArray *tier3 = @[]; // 🔴 BUG FIX: Removed mediaserverd & daemons to prevent hardware audio deadlocks!
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
@@ -256,7 +247,6 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-            
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -267,7 +257,6 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-    
     // 1. Establish absolute baseline defaults for unconfigured apps
     disableMedia = NO;
     disableRTC = NO;
@@ -276,7 +265,6 @@ static void loadPrefs() {
     disableJIT15 = NO;
     disableJS = NO;
     disableFileAccess = NO;
-
     // 2. Apply secure defaults for PRESET matches lacking a user dictionary
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
@@ -291,12 +279,10 @@ static void loadPrefs() {
             @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
             @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
-        
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", 
             @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = YES;
             disableRTC = YES; 
@@ -354,7 +340,6 @@ static void loadPrefs() {
 %ctor {
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
     loadPrefs();
-    
     if (currentProcessRestricted) {
         ADSLog(@"[STATUS] Protection is ACTIVE for this process. JS:%d JIT:%d Media:%d RTC:%d", applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC);
     } else {
@@ -374,13 +359,11 @@ static void loadPrefs() {
     %orig;
     if (shouldSpoofUA) {
         ADSLog(@"[MITIGATION] Spoofing WKWebView User-Agent to: %@", customUAString);
-        
         NSString *platform = @"iPhone";
         if ([customUAString containsString:@"iPad"]) platform = @"iPad";
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
         else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
         else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
-
         NSString *vendor = @"Apple Computer, Inc.";
         if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
             vendor = @"Google Inc.";
@@ -399,7 +382,6 @@ static void loadPrefs() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -445,7 +427,6 @@ static void loadPrefs() {
 
     if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) self.customUserAgent = customUAString;
-        
         if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
             NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
             if (existingUA && ![existingUA isEqualToString:customUAString]) {
