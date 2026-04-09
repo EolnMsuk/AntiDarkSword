@@ -90,7 +90,10 @@ static void loadPrefs() {
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
-        globalDecoyEnabled = [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
+        
+        // STRICT MASTER SWITCH ENFORCEMENT: Kill hooks if master switch is off
+        BOOL decoyPref = [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
+        globalDecoyEnabled = (globalTweakEnabled && decoyPref);
 
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
