@@ -113,5 +113,5 @@ Level 3
 
 ## 👨‍💻 Developer
 
-Created by: [EolnMsuk](https://github.com/EolnMsuk)  
-Donate: [Venmo](https://venmo.com/user/eolnmsuk)
+Thanks to: [EolnMsuk](https://github.com/EolnMsuk) (AntiDarkSword) and [ghh-jb](https://github.com/ghh-jb/CorelliumDecoy) (CorelliumDecoy)
+Donate: [EolnMsuk](https://venmo.com/user/eolnmsuk)
