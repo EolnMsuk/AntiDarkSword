@@ -218,8 +218,7 @@
             <key>label</key>
             <string>Advanced Custom Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names.
-Swipe left on rules to remove.</string>
+            <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -374,17 +373,6 @@ Swipe left on rules to remove.</string>
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
-        </dict>
-        <dict>
-            <key>cellClass</key>
-            <string>AntiDarkSwordVersionCell</string>
-            <key>height</key>
-            <real>100</real>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
             <key>label</key>
             <string>Info</string>
         </dict>
@@ -392,7 +380,7 @@ Swipe left on rules to remove.</string>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>GitHub</string>
+            <string>💻 GitHub</string>
             <key>action</key>
             <string>openGitHub</string>
         </dict>
@@ -400,16 +388,22 @@ Swipe left on rules to remove.</string>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Donate</string>
+            <string>💲 Donate</string>
             <key>action</key>
             <string>openVenmo</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>label</key>
+            <string>Credits</string>
+            <key>detail</key>
+            <string>AntiDarkSwordCreditsController</string>
         </dict>
 
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
-            <key>label</key>
-            <string>Reset All Settings to Default</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -420,6 +414,17 @@ Swipe left on rules to remove.</string>
             <string>resetToDefaults</string>
             <key>isDestructive</key>
             <true/>
+        </dict>
+        
+        <dict>
+            <key>cell</key>
+            <string>PSGroupCell</string>
+        </dict>
+        <dict>
+            <key>cellClass</key>
+            <string>AntiDarkSwordFooterCell</string>
+            <key>height</key>
+            <real>50</real>
         </dict>
     </array>
     
