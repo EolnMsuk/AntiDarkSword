@@ -113,5 +113,8 @@ Level 3
 
 ## 👨‍💻 Developer
 
-Thanks to: [EolnMsuk](https://github.com/EolnMsuk) (AntiDarkSword) and [ghh-jb](https://github.com/ghh-jb/CorelliumDecoy) (CorelliumDecoy)
-Donate: [EolnMsuk](https://venmo.com/user/eolnmsuk)
+Created by: [EolnMsuk](https://github.com/EolnMsuk) [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/) 
+
+Thanks to: [ghh-jb](https://github.com/ghh-jb) [CorelliumDecoy](https://github.com/ghh-jb/CorelliumDecoy)
+
+Support my work: [Venmo](https://venmo.com/user/eolnmsuk)
