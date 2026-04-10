@@ -88,14 +88,25 @@ static inline UIColor *ads_color_red(void) {
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
     if (self) {
+        // 1. Force pure transparency on all legacy layers
         self.backgroundColor = [UIColor clearColor];
+        self.backgroundView = nil;
+        self.contentView.backgroundColor = [UIColor clearColor];
+        
+        // 2. iOS 14+ Strict Background Override (Destroys the grey cell box)
+        if (@available(iOS 14.0, *)) {
+            self.backgroundConfiguration = [UIBackgroundConfiguration clearConfiguration];
+        }
         
         NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
         NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
         NSString *osPrefix = ads_is_ios16() ? @"iOS 16+" : @"iOS 15";
         
         UILabel *footerLabel = [[UILabel alloc] init];
-        footerLabel.text = [NSString stringWithFormat:@"%@ AntiDarkSword v%@", osPrefix, version];
+        
+        // 3. Formatted to: AntiDarkSword vX.X.X on iOS XX
+        footerLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@ on %@", version, osPrefix];
+        
         footerLabel.textAlignment = NSTextAlignmentCenter;
         footerLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
         
