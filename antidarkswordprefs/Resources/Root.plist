@@ -419,12 +419,8 @@
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
-        </dict>
-        <dict>
-            <key>cellClass</key>
-            <string>AntiDarkSwordFooterCell</string>
-            <key>height</key>
-            <real>50</real>
+            <key>id</key>
+            <string>FooterGroup</string>
         </dict>
     </array>
     
