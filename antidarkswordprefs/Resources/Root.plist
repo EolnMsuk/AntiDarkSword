@@ -380,7 +380,7 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>💻 GitHub</string>
+            <string>💻  GitHub</string>
             <key>action</key>
             <string>openGitHub</string>
         </dict>
@@ -388,7 +388,7 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>💲 Donate</string>
+            <string>💰  Donate</string>
             <key>action</key>
             <string>openVenmo</string>
         </dict>
@@ -396,7 +396,7 @@
             <key>cell</key>
             <string>PSLinkCell</string>
             <key>label</key>
-            <string>Credits</string>
+            <string>👨‍💻  Credits</string>
             <key>detail</key>
             <string>AntiDarkSwordCreditsController</string>
         </dict>
