@@ -2,28 +2,27 @@
 
 # AntiDarkSword ⚔️ (Rootless / Roothide)
 
-AntiDarkSword is an iOS security tweak that hardens jailbroken devices against WebKit and iMessage-based exploits. It reduces the attack surface by neutralizing vectors used in 1-click and 0-click attacks while isolating background daemons to maintain system stability.
+AntiDarkSword is an iOS security tweak that hardens jailbroken devices against WebKit and iMessage-based exploits. It mitigates / spoofs vectors used in 1-click and 0-click attacks while isolating background daemons.
 
 ## 🔍 Core Mechanisms
 
-The tweak replicates and expands upon native security restrictions based on the iOS version:
+The tweak detects native security restrictions based on the iOS version:
 * **iOS 16+:** Disables the JIT compiler by hooking native WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) logic gates.
 * **iOS 15.x:** Disables the JIT compiler via undocumented WebKit `_WKProcessPoolConfiguration` APIs (`JITEnabled`), bridging the gap for devices lacking native Lockdown Mode. Includes a strict JavaScript execution kill-switch.
 
 ## ✨ Features
 
 * **WebKit Hardening:** Forcibly disables the JIT compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access in targeted `WKWebView` instances.
-* **iMessage Mitigation:** Blocks automatic attachment downloading and preview generation within IMCore and ChatKit.
-* **Corellium Honeypot:** Spoofs a virtual research environment using low-level file hooks and a dummy background process, causing advanced post-exploitation kits to abort payload delivery.
-* **User Agent Spoofing:** Overrides the `WKWebView` Custom User Agent to bypass fingerprinting. Includes presets (iOS 18.1, Android Chrome, Windows Edge, macOS) and custom string injection.
-* **Granular Controls:** Assign app-specific mitigation rules (e.g., disable WebRTC but keep JIT enabled for a specific browser). 
-* **Custom Targeting:** Manually assign rules to custom bundle IDs or background daemons via comma-separated input.
-* **Global Mitigations (BETA):** System-wide kill-switches that indiscriminately apply mitigations to all processes.
-* **Zero-Crash Architecture:** Web mitigations are physically isolated from background system tasks, preventing hardware DSP deadlocks and memory limit crashes.
+* **iMessage Mitigation:** Blocks automatic attachment downloading and previews within IMCore and ChatKit.
+* **Corellium Honeypot:** Spoofs a research environment using low-level file hooks and a dummy background process, causing advanced payloads to abort delivery.
+* **User Agent Spoofing:** Spoofs the `WKWebView` Custom User Agent to bypass fingerprinting. Includes presets for iOS 18.1, Android Chrome, Windows Edge, macOS.
+* **Granular Controls:** Assign app-specific mitigation rules. 
+* **Custom Targeting:** Manually assign rules to custom bundle IDs or background daemons.
+* **Global Mitigations:** System-wide kill-switches that indiscriminately apply mitigations to all processes, use with extreme caution.
+* **Zero-Crash Architecture:** Web mitigations are isolated from system tasks, preventing hardware DSP deadlocks and memory limit crashes.
 
 ## 🛑 Mitigated Exploits
 
-Neutralizes exploit chains relying on WebKit JIT, DOM, and JavaScriptCore vulnerabilities:
 * **Exploit Kits & Spyware:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit.
 * **iMessage 0-Clicks:** BLASTPASS (PassKit attachments).
 * **CVEs Patched:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856.
