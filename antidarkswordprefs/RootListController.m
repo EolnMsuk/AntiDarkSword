@@ -79,63 +79,83 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 // ==========================================
-// Custom Version & Icon Cell
+// Custom Dynamic Footer Cell
 // ==========================================
-@interface AntiDarkSwordVersionCell : PSTableCell
+@interface AntiDarkSwordFooterCell : PSTableCell
 @end
 
-@implementation AntiDarkSwordVersionCell
+@implementation AntiDarkSwordFooterCell
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
     if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        
         NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
+        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
+        NSString *osPrefix = ads_is_ios16() ? @"iOS 16+" : @"iOS 15";
         
-        // 1. Setup Icon (45x45)
-        NSString *iconPath = [bundle pathForResource:@"icon" ofType:@"png"];
-        UIImage *iconImage = [UIImage imageWithContentsOfFile:iconPath];
-        UIImageView *iconView = [[UIImageView alloc] initWithImage:iconImage];
-        iconView.layer.cornerRadius = 9.0;
-        iconView.clipsToBounds = YES;
-        iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:iconView];
+        UILabel *footerLabel = [[UILabel alloc] init];
+        footerLabel.text = [NSString stringWithFormat:@"%@ AntiDarkSword v%@", osPrefix, version];
+        footerLabel.textAlignment = NSTextAlignmentCenter;
+        footerLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
         
-        // 2. Setup Version Label
-        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8";
-        UILabel *versionLabel = [[UILabel alloc] init];
-        versionLabel.text = [NSString stringWithFormat:@"v%@", version];
-        versionLabel.textAlignment = NSTextAlignmentLeft;
-        versionLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        // Match the native UI preferences description text color
         if (@available(iOS 13.0, *)) {
-            versionLabel.textColor = [UIColor secondaryLabelColor];
+            footerLabel.textColor = [UIColor secondaryLabelColor];
         } else {
-            versionLabel.textColor = [UIColor grayColor];
+            footerLabel.textColor = [UIColor grayColor];
         }
-        versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:versionLabel];
         
-        // 3. AutoLayout Constraints for Left-Alignment
+        footerLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:footerLabel];
+        
         [NSLayoutConstraint activateConstraints:@[
-            [iconView.leadingAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leadingAnchor],
-            [iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:20],
-            [iconView.widthAnchor constraintEqualToConstant:45],
-            [iconView.heightAnchor constraintEqualToConstant:45],
-            
-            [versionLabel.leadingAnchor constraintEqualToAnchor:self.contentView.layoutMarginsGuide.leadingAnchor],
-            [versionLabel.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:10]
+            [footerLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [footerLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor]
         ]];
-        
-        // 4. Make it Clickable (Opens GitHub)
-        self.contentView.userInteractionEnabled = YES;
-        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openGitHubURL)];
-        [self.contentView addGestureRecognizer:tap];
     }
     return self;
 }
+@end
 
-- (void)openGitHubURL {
-    NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
-    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
-        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
+// ==========================================
+// Credits Sub-Menu Controller
+// ==========================================
+@interface AntiDarkSwordCreditsController : PSListController
+@end
+
+@implementation AntiDarkSwordCreditsController
+- (NSArray *)specifiers {
+    if (!_specifiers) {
+        NSMutableArray *specs = [NSMutableArray array];
+        
+        PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"Contributors" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [specs addObject:group];
+        
+        PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"💻 EolnMsuk - AntiDarkSword" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        eoln->action = @selector(openDevLink);
+        [specs addObject:eoln];
+        
+        PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"💻 ghh-jb - CorelliumDecoy" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        ghh->action = @selector(openDev2Link);
+        [specs addObject:ghh];
+        
+        _specifiers = [specs copy];
+    }
+    return _specifiers;
+}
+
+- (void)openDevLink {
+    NSURL *url = [NSURL URLWithString:@"https://github.com/EolnMsuk/"];
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
+}
+
+- (void)openDev2Link {
+    NSURL *url = [NSURL URLWithString:@"https://github.com/ghh-jb"];
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
     }
 }
 @end
@@ -872,6 +892,15 @@ static inline UIColor *ads_color_red(void) {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+
+    // Explicitly enforce the red tint for the Reset to Defaults button
+    if (spec.action == @selector(resetToDefaults)) {
+        if (@available(iOS 13.0, *)) {
+            cell.textLabel.textColor = [UIColor systemRedColor];
+        } else {
+            cell.textLabel.textColor = [UIColor redColor];
+        }
+    }
 
     id ruleTypeObj = [spec propertyForKey:@"ruleType"];
     if (ruleTypeObj != nil) {
