@@ -29,7 +29,6 @@ jobs:
 
       - name: Compile the Tweak
         run: |
-          make clean
           make package FINALPACKAGE=1
 
       - name: Upload .deb as Artifact
