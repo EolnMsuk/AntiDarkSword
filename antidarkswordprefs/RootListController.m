@@ -132,11 +132,11 @@ static inline UIColor *ads_color_red(void) {
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"Contributors" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:group];
         
-        PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"💻 EolnMsuk - AntiDarkSword" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"💻  EolnMsuk (AntiDarkSword)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         eoln->action = @selector(openDevLink);
         [specs addObject:eoln];
         
-        PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"💻 ghh-jb - CorelliumDecoy" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"💻  ghh-jb (CorelliumDecoy)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         ghh->action = @selector(openDev2Link);
         [specs addObject:ghh];
         
