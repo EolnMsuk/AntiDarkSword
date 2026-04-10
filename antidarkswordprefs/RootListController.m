@@ -894,7 +894,7 @@ static inline UIColor *ads_color_red(void) {
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
 
     // Explicitly enforce the red tint for the Reset to Defaults button
-    if (spec.action == @selector(resetToDefaults)) {
+    if (spec->action == @selector(resetToDefaults)) {
         if (@available(iOS 13.0, *)) {
             cell.textLabel.textColor = [UIColor systemRedColor];
         } else {
