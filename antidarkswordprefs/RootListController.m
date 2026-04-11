@@ -1041,8 +1041,8 @@ static inline UIColor *ads_color_red(void) {
                     jbType = @"Roothide";
                 }
                 
-                // 3. Output Format: © 2026 AntiDarkSword vX.X - iOS 16.1.1 (TYPE OF JAILBREAK)
-                NSString *footerString = [NSString stringWithFormat:@"© 2026 AntiDarkSword v%@ - iOS %@ (%@)", version, osVersion, jbType];
+                // 3. Output Format: AntiDarkSword vX.X (iOS 16.1.1 TYPE OF JAILBREAK)
+                NSString *footerString = [NSString stringWithFormat:@"AntiDarkSword v%@ (iOS %@ %@)", version, osVersion, jbType];
                 [s setProperty:footerString forKey:@"footerText"];
                 [s setProperty:@(1) forKey:@"footerAlignment"]; // 1 = NSTextAlignmentCenter
             }
