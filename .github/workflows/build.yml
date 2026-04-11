@@ -27,6 +27,11 @@ jobs:
           echo "Copying AltList.framework from local repository to Theos..."
           cp -r vendor/AltList.framework $THEOS/lib/
 
+      - name: Fix Script Permissions
+        run: |
+          echo "Applying executable permissions to maintainer scripts..."
+          chmod +x layout/DEBIAN/prerm || true
+
       - name: Compile the Tweak
         run: |
           make package FINALPACKAGE=1
