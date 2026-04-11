@@ -7,7 +7,7 @@
 #import <sys/types.h>
 #import <sys/wait.h>
 #import <objc/runtime.h>
-#import <dlfcn.h> // <-- Added for native Roothide API detection
+#import <dlfcn.h>
 
 // Import our custom logging system from the root folder
 #import "../ADSLogging.h"
