@@ -1378,6 +1378,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     [defaults synchronize];
     [self flagSaveRequirement];
+    ads_post_notification();
+    
+    // FIX: Force UI reconstruction on main thread
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
 }
 
 - (void)addCustomID {
