@@ -86,19 +86,42 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 @implementation AntiDarkSwordCreditsController
+
+// Helper method to perfectly scale high-res images down to icon size
+- (UIImage *)resizeIcon:(UIImage *)image toSize:(CGSize)size {
+    if (!image) return nil;
+    UIGraphicsBeginImageContextWithOptions(size, NO, [UIScreen mainScreen].scale);
+    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    UIImage *resizedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return resizedImage;
+}
+
 - (NSArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
+        NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+        CGSize iconSize = CGSizeMake(29, 29); // Standard Settings icon size
         
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"Contributors" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:group];
         
-        PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"👨‍💻  EolnMsuk (AntiDarkSword)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        // EolnMsuk
+        PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"EolnMsuk (AntiDarkSword)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         eoln->action = @selector(openDevLink);
+        UIImage *rawEoln = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"eoln" ofType:@"png"]];
+        if (rawEoln) {
+            [eoln setProperty:[self resizeIcon:rawEoln toSize:iconSize] forKey:@"iconImage"];
+        }
         [specs addObject:eoln];
         
-        PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"👨‍💻  ghh-jb (CorelliumDecoy)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+        // ghh-jb
+        PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"ghh-jb (CorelliumDecoy)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         ghh->action = @selector(openDev2Link);
+        UIImage *rawGhh = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"ghh-jb" ofType:@"png"]];
+        if (rawGhh) {
+            [ghh setProperty:[self resizeIcon:rawGhh toSize:iconSize] forKey:@"iconImage"];
+        }
         [specs addObject:ghh];
         
         _specifiers = [specs copy];
