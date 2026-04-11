@@ -1365,12 +1365,19 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     
+    if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
+        [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
+        
+        if ([defaults boolForKey:@"enabled"]) {
+            pid_t pid;
+            const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+            const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
+            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+        }
+    }
+    
     [defaults synchronize];
     [self flagSaveRequirement];
-    ads_post_notification();
-    
-    _specifiers = nil;
-    [self reloadSpecifiers];
 }
 
 - (void)addCustomID {
