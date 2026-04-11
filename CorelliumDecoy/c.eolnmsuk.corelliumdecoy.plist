@@ -9,7 +9,7 @@
         <string>/var/jb/usr/libexec/corelliumd</string>
     </array>
     <key>KeepAlive</key>
-    <true/>
+    <false/>
     <key>RunAtLoad</key>
     <true/>
 </dict>
