@@ -7,6 +7,7 @@
 #import <sys/types.h>
 #import <sys/wait.h>
 #import <objc/runtime.h>
+#import <dlfcn.h> // <-- Added for native Roothide API detection
 
 // Import our custom logging system from the root folder
 #import "../ADSLogging.h"
@@ -76,57 +77,6 @@ static inline UIColor *ads_color_red(void) {
 - (NSString *)displayNameForTargetID:(NSString *)targetID;
 - (UIImage *)iconForTargetID:(NSString *)targetID;
 - (BOOL)isTargetInstalled:(NSString *)targetID;
-@end
-
-// ==========================================
-// Custom Dynamic Footer Cell
-// ==========================================
-@interface AntiDarkSwordFooterCell : PSTableCell
-@end
-
-@implementation AntiDarkSwordFooterCell
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier specifier:(PSSpecifier *)specifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier specifier:specifier];
-    if (self) {
-        // 1. Force pure transparency on all legacy layers
-        self.backgroundColor = [UIColor clearColor];
-        self.backgroundView = nil;
-        self.contentView.backgroundColor = [UIColor clearColor];
-        
-        // 2. iOS 14+ Strict Background Override (Destroys the grey cell box)
-        if (@available(iOS 14.0, *)) {
-            self.backgroundConfiguration = [UIBackgroundConfiguration clearConfiguration];
-        }
-        
-        NSBundle *bundle = [NSBundle bundleForClass:NSClassFromString(@"AntiDarkSwordPrefsRootListController")];
-        NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
-        NSString *osPrefix = ads_is_ios16() ? @"iOS 16+" : @"iOS 15";
-        
-        UILabel *footerLabel = [[UILabel alloc] init];
-        
-        // 3. Formatted to: AntiDarkSword vX.X.X on iOS XX
-        footerLabel.text = [NSString stringWithFormat:@"AntiDarkSword v%@ on %@", version, osPrefix];
-        
-        footerLabel.textAlignment = NSTextAlignmentCenter;
-        footerLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
-        
-        // Match the native UI preferences description text color
-        if (@available(iOS 13.0, *)) {
-            footerLabel.textColor = [UIColor secondaryLabelColor];
-        } else {
-            footerLabel.textColor = [UIColor grayColor];
-        }
-        
-        footerLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:footerLabel];
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [footerLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [footerLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor]
-        ]];
-    }
-    return self;
-}
 @end
 
 // ==========================================
@@ -913,6 +863,21 @@ static inline UIColor *ads_color_red(void) {
         }
     }
 
+    // Enforce red background for "Enable Protection" switch when turned OFF
+    if ([[spec propertyForKey:@"key"] isEqualToString:@"enabled"]) {
+        if ([cell respondsToSelector:@selector(control)]) {
+            UISwitch *toggle = (UISwitch *)[cell control];
+            if ([toggle isKindOfClass:[UISwitch class]]) {
+                if (@available(iOS 13.0, *)) {
+                    toggle.backgroundColor = [UIColor systemRedColor];
+                } else {
+                    toggle.backgroundColor = [UIColor redColor];
+                }
+                toggle.layer.cornerRadius = 15.5; // Native hack to mask off-state square background
+            }
+        }
+    }
+
     id ruleTypeObj = [spec propertyForKey:@"ruleType"];
     if (ruleTypeObj != nil) {
         NSString *targetID = [spec propertyForKey:@"targetID"];
@@ -1034,6 +999,29 @@ static inline UIColor *ads_color_red(void) {
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
                 else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown.\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
                 [s setProperty:footerText forKey:@"footerText"];
+            }
+            
+            // Construct the dynamic string and inject it into the final group cell
+            if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
+                // 1. Hardware & OS Info
+                NSString *osVersion = [[UIDevice currentDevice] systemVersion];
+                NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+                NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
+                
+                // 2. Native Jailbreak Detection
+                NSString *jbType = @"Rootless"; // Default assumption for /var/jb tweaks
+                if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) {
+                    jbType = @"Rootful";
+                }
+                // Check if the native Roothide 'jbroot' API exists in memory
+                if (dlsym(RTLD_DEFAULT, "jbroot")) {
+                    jbType = @"Roothide";
+                }
+                
+                // 3. Output Format: © 2026 AntiDarkSword vX.X - iOS 16.1.1 (TYPE OF JAILBREAK)
+                NSString *footerString = [NSString stringWithFormat:@"© 2026 AntiDarkSword v%@ - iOS %@ (%@)", version, osVersion, jbType];
+                [s setProperty:footerString forKey:@"footerText"];
+                [s setProperty:@(1) forKey:@"footerAlignment"]; // 1 = NSTextAlignmentCenter
             }
         }
 
