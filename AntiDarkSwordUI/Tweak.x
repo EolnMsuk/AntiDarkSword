@@ -325,6 +325,8 @@ static void loadPrefs() {
     
     if (currentProcessRestricted) {
         ADSLog(@"[STATUS] Protection is ACTIVE for this process. JS:%d JIT:%d Media:%d RTC:%d", applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC);
+    } else {
+        ADSLog(@"[STATUS] Process is unrestricted. Tweak is dormant here.");
     }
 }
 
