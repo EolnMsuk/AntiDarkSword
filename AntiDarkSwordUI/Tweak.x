@@ -375,14 +375,6 @@ static void reloadPrefsNotification() {
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
-    // Terminate if irrelevant process
-    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
-
-    loadPrefs();
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-}
-
 // =========================================================
 // WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
 // =========================================================
