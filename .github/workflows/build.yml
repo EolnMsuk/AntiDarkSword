@@ -20,27 +20,30 @@ jobs:
         with:
           theos-sdks: 'https://github.com/theos/sdks'
 
-      - name: Fix AltList Path & Load Framework
-        run: |
-          echo "Fixing AltList dylib ID for rootless Dopamine..."
-          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
-          echo "Copying AltList.framework from local repository to Theos..."
-          cp -r vendor/AltList.framework $THEOS/lib/
+      - name: Copy AltList.framework to Theos
+        run: cp -r vendor/AltList.framework $THEOS/lib/
 
       - name: Fix Script Permissions
         run: |
-          echo "Applying executable permissions to maintainer scripts..."
           chmod +x layout/DEBIAN/prerm || true
+          chmod +x layout/DEBIAN/postinst || true
 
-      - name: Compile the Tweak
+      - name: Compile Rootful
         run: |
           make clean
+          install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1
 
-      - name: Upload .deb as Artifact
+      - name: Compile Rootless
+        run: |
+          make clean
+          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+
+      - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AntiDarkSword-Rootless
+          name: AntiDarkSword-Packages
           path: ${{ github.workspace }}/packages/*.deb
 
       - name: Create GitHub Release
@@ -48,7 +51,7 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: "AntiDarkSword Build #${{ github.run_number }}"
-          body: "Automated build of AntiDarkSword compiled directly from the latest push to the main branch."
+          body: "Automated rootful & rootless builds of AntiDarkSword."
           files: ${{ github.workspace }}/packages/*.deb
           draft: false
           prerelease: false
