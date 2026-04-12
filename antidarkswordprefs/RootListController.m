@@ -9,7 +9,6 @@
 #import <objc/runtime.h>
 #import <dlfcn.h>
 
-// Import our custom logging system from the root folder
 #import "../ADSLogging.h"
 
 // ==========================================
@@ -18,22 +17,23 @@
 #define ADS_PREFS_SUITE @"com.eolnmsuk.antidarkswordprefs"
 #define ADS_NOTIF_SAVED CFSTR("com.eolnmsuk.antidarkswordprefs/saved")
 
-// Helper: Instantiates the shared preferences suite
 static inline NSUserDefaults *ads_defaults(void) {
-    return [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    static NSUserDefaults *sharedDefaults = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedDefaults = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    });
+    return sharedDefaults;
 }
 
-// Helper: Posts the Darwin notification to sync preferences across processes
 static inline void ads_post_notification(void) {
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), ADS_NOTIF_SAVED, NULL, NULL, YES);
 }
 
-// Helper: Checks if the device is running iOS 16.0 or higher
 static inline BOOL ads_is_ios16(void) {
     return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 }
 
-// Helper: Standardized Active/Enabled Background Color
 static inline UIColor *ads_color_green(void) {
     if (@available(iOS 13.0, *)) {
         return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
@@ -41,7 +41,6 @@ static inline UIColor *ads_color_green(void) {
     return [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
 }
 
-// Helper: Standardized Inactive/Disabled Background Color
 static inline UIColor *ads_color_red(void) {
     if (@available(iOS 13.0, *)) {
         return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
@@ -50,7 +49,7 @@ static inline UIColor *ads_color_red(void) {
 }
 
 // ==========================================
-// Internal iOS APIs for App Names & Icons
+// Internal iOS APIs
 // ==========================================
 @interface LSApplicationProxy : NSObject
 + (id)applicationProxyForIdentifier:(NSString *)identifier;
@@ -80,14 +79,13 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 // ==========================================
-// Credits Sub-Menu Controller
+// Credits Sub-Menu
 // ==========================================
 @interface AntiDarkSwordCreditsController : PSListController
 @end
 
 @implementation AntiDarkSwordCreditsController
 
-// Helper method to perfectly scale high-res images down to icon size
 - (UIImage *)resizeIcon:(UIImage *)image toSize:(CGSize)size {
     if (!image) return nil;
     UIGraphicsBeginImageContextWithOptions(size, NO, [UIScreen mainScreen].scale);
@@ -101,27 +99,21 @@ static inline UIColor *ads_color_red(void) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-        CGSize iconSize = CGSizeMake(29, 29); // Standard Settings icon size
+        CGSize iconSize = CGSizeMake(29, 29);
         
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"Contributors" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:group];
         
-        // EolnMsuk
         PSSpecifier *eoln = [PSSpecifier preferenceSpecifierNamed:@"EolnMsuk (AntiDarkSword)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         eoln->action = @selector(openDevLink);
         UIImage *rawEoln = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"eoln" ofType:@"png"]];
-        if (rawEoln) {
-            [eoln setProperty:[self resizeIcon:rawEoln toSize:iconSize] forKey:@"iconImage"];
-        }
+        if (rawEoln) [eoln setProperty:[self resizeIcon:rawEoln toSize:iconSize] forKey:@"iconImage"];
         [specs addObject:eoln];
         
-        // ghh-jb
         PSSpecifier *ghh = [PSSpecifier preferenceSpecifierNamed:@"ghh-jb (CorelliumDecoy)" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
         ghh->action = @selector(openDev2Link);
         UIImage *rawGhh = [UIImage imageWithContentsOfFile:[bundle pathForResource:@"ghh-jb" ofType:@"png"]];
-        if (rawGhh) {
-            [ghh setProperty:[self resizeIcon:rawGhh toSize:iconSize] forKey:@"iconImage"];
-        }
+        if (rawGhh) [ghh setProperty:[self resizeIcon:rawGhh toSize:iconSize] forKey:@"iconImage"];
         [specs addObject:ghh];
         
         _specifiers = [specs copy];
@@ -131,21 +123,17 @@ static inline UIColor *ads_color_red(void) {
 
 - (void)openDevLink {
     NSURL *url = [NSURL URLWithString:@"https://github.com/EolnMsuk/"];
-    if ([[UIApplication sharedApplication] canOpenURL:url]) {
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
-    }
+    if ([[UIApplication sharedApplication] canOpenURL:url]) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 
 - (void)openDev2Link {
     NSURL *url = [NSURL URLWithString:@"https://github.com/ghh-jb"];
-    if ([[UIApplication sharedApplication] canOpenURL:url]) {
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
-    }
+    if ([[UIApplication sharedApplication] canOpenURL:url]) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 @end
 
 // ==========================================
-// App-Specific Feature Drill-Down Controller
+// App-Specific Drill-Down
 // ==========================================
 @interface AntiDarkSwordAppController : PSListController
 @property (nonatomic, strong) NSString *targetID;
@@ -156,7 +144,7 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 // ==========================================
-// System Daemon Consolidated List
+// System Daemon List
 // ==========================================
 @interface AntiDarkSwordDaemonListController : PSListController
 @end
@@ -168,12 +156,10 @@ static inline UIColor *ads_color_red(void) {
         NSMutableArray *specs = [NSMutableArray array];
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
 
-        // Header for Daemon toggles
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        // 🔴 BUG FIX: Removed mediaserverd
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -219,9 +205,18 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 @interface AntiDarkSwordAltListController : ATLApplicationListMultiSelectionController
+@property (nonatomic, strong) NSArray *cachedPresetApps;
 @end
 
 @implementation AntiDarkSwordAltListController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    NSUserDefaults *defaults = ads_defaults();
+    NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
+    AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+    self.cachedPresetApps = [rootCtrl autoProtectedItemsForLevel:level];
+}
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
@@ -235,17 +230,12 @@ static inline UIColor *ads_color_red(void) {
     NSString *bundleID = [spec propertyForKey:@"applicationIdentifier"];
     if (!bundleID) {
         NSString *alKey = [spec propertyForKey:@"ALSettingsKey"];
-        if ([alKey hasPrefix:@"restrictedApps-"]) {
-            bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
-        }
+        if ([alKey hasPrefix:@"restrictedApps-"]) bundleID = [alKey substringFromIndex:@"restrictedApps-".length];
     }
     
     if (bundleID) {
         NSUserDefaults *defaults = ads_defaults();
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
-        
-        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
-        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
+        NSArray *presetApps = self.cachedPresetApps ?: @[];
         
         if ([cell respondsToSelector:@selector(control)]) {
             id control = [cell control];
@@ -277,7 +267,6 @@ static inline UIColor *ads_color_red(void) {
             cell.backgroundColor = isManualRuleActive ? ads_color_green() : ads_color_red();
         }
     }
-    
     return cell;
 }
 
@@ -293,10 +282,7 @@ static inline UIColor *ads_color_red(void) {
 
     if (bundleID) {
         NSUserDefaults *defaults = ads_defaults();
-        NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
-        
-        AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
-        NSArray *presetApps = [rootCtrl autoProtectedItemsForLevel:level];
+        NSArray *presetApps = self.cachedPresetApps ?: @[];
         
         if ([presetApps containsObject:bundleID]) return; 
 
@@ -317,23 +303,20 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 // ==========================================
-// App-Specific Feature Drill-Down Implementation
+// App-Specific Feature Drill-Down
 // ==========================================
 @implementation AntiDarkSwordAppController
 
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
-    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *daemons = @[
         @"com.apple.imagent", @"imagent",
         @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd"
     ];
     if ([daemons containsObject:targetID]) return YES;
-    
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
     if ([targetID containsString:@"daemon"]) return YES;
     if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) return YES;
-    
     return NO;
 }
 
@@ -349,15 +332,11 @@ static inline UIColor *ads_color_red(void) {
     if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 && !isDaemon;
     if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && !isDaemon;
 
-    if ([featureKey isEqualToString:@"disableJS"] || 
-        [featureKey isEqualToString:@"disableRTC"] || 
-        [featureKey isEqualToString:@"disableMedia"] || 
-        [featureKey isEqualToString:@"disableFileAccess"]) {
+    if ([featureKey isEqualToString:@"disableJS"] || [featureKey isEqualToString:@"disableRTC"] || 
+        [featureKey isEqualToString:@"disableMedia"] || [featureKey isEqualToString:@"disableFileAccess"]) {
         return !isDaemon; 
     }
-
     if ([featureKey isEqualToString:@"spoofUA"]) return YES; 
-
     return YES;
 }
 
@@ -452,7 +431,7 @@ static inline UIColor *ads_color_red(void) {
 - (id)getMasterEnable:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = ads_defaults();
     
-    if (self.ruleType == 0) {
+    if (self.ruleType == 0) { 
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
         return @(![disabled containsObject:self.targetID]);
     } else if (self.ruleType == 1) { 
@@ -595,12 +574,13 @@ static inline UIColor *ads_color_red(void) {
     ads_post_notification();
 }
 @end
-// ==========================================
 
+// ==========================================
+// Root Controller
+// ==========================================
 @implementation AntiDarkSwordPrefsRootListController
 
 - (BOOL)isTargetInstalled:(NSString *)targetID {
-    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *coreServices = @[
         @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd", 
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService", 
@@ -675,7 +655,6 @@ static inline UIColor *ads_color_red(void) {
     if (knownNames[targetID]) return knownNames[targetID];
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return targetID; 
     
-    // 🔴 BUG FIX: Removed mediaserverd
     NSArray *daemons = @[
         @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd",
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
@@ -702,7 +681,6 @@ static inline UIColor *ads_color_red(void) {
     UIImage *icon = nil;
     
     if ([targetID containsString:@"."] || [targetID isEqualToString:@"pinterest"]) {
-        // 🔴 BUG FIX: Removed mediaserverd
         NSArray *daemons = @[
             @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd",
             @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
@@ -764,7 +742,6 @@ static inline UIColor *ads_color_red(void) {
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
-    // 🔴 BUG FIX: Removed mediaserverd
     [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd"]];
 
     for (NSString *targetID in expandedTargets) {
@@ -788,9 +765,7 @@ static inline UIColor *ads_color_red(void) {
             rules[@"disableRTC"] = [AntiDarkSwordAppController isApplicableFeature:@"disableRTC" forTarget:targetID] ? @YES : @NO;
             rules[@"disableFileAccess"] = [AntiDarkSwordAppController isApplicableFeature:@"disableFileAccess" forTarget:targetID] ? @YES : @NO;
             rules[@"disableIMessageDL"] = [AntiDarkSwordAppController isApplicableFeature:@"disableIMessageDL" forTarget:targetID] ? @YES : @NO;
-            if (![targetID hasPrefix:@"com.apple."]) {
-                rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
-            }
+            if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         } else if ([browsers containsObject:targetID]) {
             if ([targetID isEqualToString:@"com.apple.mobilesafari"] || [targetID isEqualToString:@"com.apple.SafariViewService"]) {
                 rules[@"spoofUA"] = @YES;
@@ -874,7 +849,6 @@ static inline UIColor *ads_color_red(void) {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
 
-    // Explicitly enforce the red tint for the Reset to Defaults button
     if (spec->action == @selector(resetToDefaults)) {
         if (@available(iOS 13.0, *)) {
             cell.textLabel.textColor = [UIColor systemRedColor];
@@ -883,17 +857,13 @@ static inline UIColor *ads_color_red(void) {
         }
     }
 
-    // Enforce red background for "Enable Protection" switch when turned OFF
     if ([[spec propertyForKey:@"key"] isEqualToString:@"enabled"]) {
         if ([cell respondsToSelector:@selector(control)]) {
             UISwitch *toggle = (UISwitch *)[cell control];
             if ([toggle isKindOfClass:[UISwitch class]]) {
-                if (@available(iOS 13.0, *)) {
-                    toggle.backgroundColor = [UIColor systemRedColor];
-                } else {
-                    toggle.backgroundColor = [UIColor redColor];
-                }
-                toggle.layer.cornerRadius = 15.5; // Native hack to mask off-state square background
+                if (@available(iOS 13.0, *)) toggle.backgroundColor = [UIColor systemRedColor];
+                else toggle.backgroundColor = [UIColor redColor];
+                toggle.layer.cornerRadius = 15.5; 
             }
         }
     }
@@ -909,7 +879,6 @@ static inline UIColor *ads_color_red(void) {
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-                // 🔴 BUG FIX: Removed mediaserverd
                 NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
                 for (NSString *d in daemons) {
@@ -930,11 +899,8 @@ static inline UIColor *ads_color_red(void) {
 
         cell.backgroundColor = isEnabled ? ads_color_green() : ads_color_red();
     } else {
-        if (@available(iOS 13.0, *)) {
-            cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-        } else {
-            cell.backgroundColor = [UIColor whiteColor];
-        }
+        if (@available(iOS 13.0, *)) cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        else cell.backgroundColor = [UIColor whiteColor];
     }
 
     return cell;
@@ -1020,27 +986,18 @@ static inline UIColor *ads_color_red(void) {
                 [s setProperty:footerText forKey:@"footerText"];
             }
             
-            // Construct the dynamic string and inject it into the final group cell
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
-                // 1. Hardware & OS Info
                 NSString *osVersion = [[UIDevice currentDevice] systemVersion];
                 NSBundle *bundle = [NSBundle bundleForClass:[self class]];
                 NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
                 
-                // 2. Native Jailbreak Detection
-                NSString *jbType = @"Rootless"; // Default assumption for /var/jb tweaks
-                if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) {
-                    jbType = @"Rootful";
-                }
-                // Check if the native Roothide 'jbroot' API exists in memory
-                if (dlsym(RTLD_DEFAULT, "jbroot")) {
-                    jbType = @"Roothide";
-                }
+                NSString *jbType = @"Rootless";
+                if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) jbType = @"Rootful";
+                if (dlsym(RTLD_DEFAULT, "jbroot")) jbType = @"Roothide";
                 
-                // 3. Output Format: AntiDarkSword vX.X (iOS 16.1.1 TYPE OF JAILBREAK)
                 NSString *footerString = [NSString stringWithFormat:@"AntiDarkSword v%@ (iOS %@ %@)", version, osVersion, jbType];
                 [s setProperty:footerString forKey:@"footerText"];
-                [s setProperty:@(1) forKey:@"footerAlignment"]; // 1 = NSTextAlignmentCenter
+                [s setProperty:@(1) forKey:@"footerAlignment"]; 
             }
         }
 
@@ -1166,9 +1123,7 @@ static inline UIColor *ads_color_red(void) {
 
 - (void)openBannerLink {
     NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
-    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) {
-        [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
-    }
+    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
 }
 
 - (void)dealloc {
@@ -1201,7 +1156,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 
 // =======================================================
-// DECOY ENABLE METHOD (Task 1 Component)
+// DECOY ENABLE METHOD
 // =======================================================
 - (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
     [self setPreferenceValue:value specifier:specifier];
@@ -1213,12 +1168,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     pid_t pid;
     const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
     
-    // Safely unload first to prevent bootstrap errors
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
     posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0); 
     
-    // ONLY load the daemon if both the decoy switch AND the master protection switch are ON
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
         posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
@@ -1234,7 +1187,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL masterEnabled = [value boolValue];
     BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
     
-    // Synchronize the decoy daemon state with the master switch instantly
     pid_t pid;
     const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
@@ -1246,7 +1198,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
     }
     
-    // Toggling master protection triggers daemon reloading if high-security targets are active
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
@@ -1376,7 +1327,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [self flagSaveRequirement];
     ads_post_notification();
     
-    // FIX: Force UI reconstruction on main thread
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
         [self reloadSpecifiers];
@@ -1462,18 +1412,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         pid_t pid;
         
-        // 1. STOP THE GHOST: Unload the Corellium Decoy so it doesn't auto-boot on restart
         const char* unloadArgs[] = {"launchctl", "unload", "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist", NULL};
         posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
         waitpid(pid, NULL, 0); 
         
-        // 2. CLEAN WIPE: Properly destroy the entire preference domain (safer than a loop)
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
         ads_post_notification();
         
-        // 3. REBOOT: Flush the substrate hooks
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
         posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)rebootArgs, NULL);
     }]];
