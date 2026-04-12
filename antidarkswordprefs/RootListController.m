@@ -281,10 +281,9 @@ static inline UIColor *ads_color_red(void) {
     }
 
     if (bundleID) {
-        NSUserDefaults *defaults = ads_defaults();
         NSArray *presetApps = self.cachedPresetApps ?: @[];
         
-        if ([presetApps containsObject:bundleID]) return; 
+        if ([presetApps containsObject:bundleID]) return;
 
         AntiDarkSwordAppController *detailController = [[AntiDarkSwordAppController alloc] init];
         detailController.targetID = bundleID;
