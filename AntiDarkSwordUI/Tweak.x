@@ -21,6 +21,8 @@
 @property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
 @end
 
+#define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+
 // Runtime State Variables
 static BOOL prefsLoaded = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
@@ -133,15 +135,18 @@ static void loadPrefs() {
     if (prefsLoaded) return;
     prefsLoaded = YES;
 
-    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    CFPreferencesAppSynchronize(appID);
-    CFArrayRef keyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     NSDictionary *prefs = nil;
+    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    }
     
-    if (keyList) {
-        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-        CFRelease(keyList);
+    if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keyList) {
+            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+            CFRelease(keyList);
+        }
     }
 
     NSInteger autoProtectLevel = 1;
@@ -183,8 +188,8 @@ static void loadPrefs() {
         }
     }
     
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier];
-    NSString *processName = [[NSProcessInfo processInfo] processName];
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
     BOOL isTargetRestricted = NO;
     BOOL isPresetMatch = NO;
     NSString *matchedID = nil;
@@ -230,7 +235,7 @@ static void loadPrefs() {
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
-            if (!target) continue;
+            if (!target || target.length == 0) continue;
             
             NSString *targetMatch = nil;
             if ([tier1 containsObject:target]) targetMatch = target;
@@ -340,12 +345,15 @@ static void reloadPrefsNotification() {
     NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
 
     // Fast-fail noisy / unrelated background daemons to prevent UI injection + log spam
-    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight", @"Tunnel", @"Preferences", @"cfprefsd", @"searchd"];
+    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight", @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
     if ([ignored containsObject:processName]) return;
 
-    // 1. Path-based Whitelist
-    BOOL isUserApp = [[[NSBundle mainBundle] bundlePath] containsString:@"/Application"];
+    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     
+    // 1. Path-based Whitelist
+    BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
+    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
+
     // 2. Service Whitelist
     NSArray *allowedServices = @[
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
@@ -354,38 +362,30 @@ static void reloadPrefsNotification() {
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
-    // 3. Manual Override Check via Native CFPreferences API (Roothide Safe)
+    // 3. Manual Override Check via global file read (Roothide patched path)
     BOOL isManualOverride = NO;
-    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    CFPreferencesAppSynchronize(appID);
-
-    CFArrayRef customDaemons = (CFArrayRef)CFPreferencesCopyAppValue(CFSTR("activeCustomDaemonIDs"), appID);
-    if (!customDaemons) customDaemons = (CFArrayRef)CFPreferencesCopyAppValue(CFSTR("customDaemonIDs"), appID);
-
-    if (customDaemons && CFGetTypeID(customDaemons) == CFArrayGetTypeID()) {
-        NSArray *daemons = (__bridge NSArray *)customDaemons;
-        if ([daemons containsObject:bundleID] || [daemons containsObject:processName]) isManualOverride = YES;
-    }
-    if (customDaemons) CFRelease(customDaemons);
-
-    if (!isManualOverride && bundleID.length > 0) {
-        NSString *altListKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
-        CFBooleanRef manualApp = (CFBooleanRef)CFPreferencesCopyAppValue((__bridge CFStringRef)altListKey, appID);
-        if (manualApp) {
-            if (CFGetTypeID(manualApp) == CFBooleanGetTypeID() && CFBooleanGetValue(manualApp)) isManualOverride = YES;
-            CFRelease(manualApp);
-        } else {
-            CFDictionaryRef restrictedDict = (CFDictionaryRef)CFPreferencesCopyAppValue(CFSTR("restrictedApps"), appID);
-            if (restrictedDict && CFGetTypeID(restrictedDict) == CFDictionaryGetTypeID()) {
-                NSDictionary *dict = (__bridge NSDictionary *)restrictedDict;
-                if ([dict[bundleID] boolValue]) isManualOverride = YES;
-                CFRelease(restrictedDict);
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    if (prefs) {
+        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
+            isManualOverride = YES;
+        }
+        
+        if (!isManualOverride && bundleID.length > 0) {
+            NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+            if ([prefs[prefKey] boolValue]) {
+                isManualOverride = YES;
+            } else {
+                NSDictionary *restrictedApps = prefs[@"restrictedApps"];
+                if ([restrictedApps isKindOfClass:[NSDictionary class]] && [restrictedApps[bundleID] boolValue]) {
+                    isManualOverride = YES;
+                }
             }
         }
     }
 
     // Terminate if irrelevant process
-    if (!isUserApp && !isAllowedService && !isManualOverride) return;
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
 
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
