@@ -1,6 +1,6 @@
 <img width="1266" height="920" alt="readmeORIG" src="https://github.com/user-attachments/assets/163aa186-5940-4a25-a4bf-e0570d81d795" />
 
-# AntiDarkSword ⚔️ (Rootless / Roothide)
+# AntiDarkSword ⚔️ (Rootless / Rootful / Roothide)
 
 AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken devices against WebKit and iMessage-based exploits (DarkSword & Coruna). It mitigates / spoofs vectors used in 1-click and 0-click attacks while isolating background daemons.
 
@@ -9,6 +9,7 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 The tweak detects native security restrictions based on the iOS version:
 * **iOS 16+:** Disables the JIT compiler by hooking native WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) logic gates.
 * **iOS 15.x:** Disables the JIT compiler via undocumented WebKit `_WKProcessPoolConfiguration` APIs (`JITEnabled`), bridging the gap for devices lacking native Lockdown Mode.
+
 ## ✨ Features
 
 * **WebKit Hardening:** Forcibly disables the JIT compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access in targeted `WKWebView` instances.
@@ -31,19 +32,19 @@ The tweak detects native security restrictions based on the iOS version:
 * **iOS Versions:** 15.0 – 17.0
 * **Architecture:** arm64 / arm64e 
 * **Supported Jailbreaks:** * **Rootless:** Dopamine, Palera1n (iOS 15.0 – 16.7.x)
+  * **Rootful:** Palera1n, XinaA15 (iOS 15.0 – 16.7.x)
   * **Roothide:** Dopamine Roothide 2 
-  * **Rootful:** Use [AntiDarkSword-rootful](https://github.com/EolnMsuk/AntiDarkSword-rootful)
 * **Dependencies:** `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`.
 
 ## 🛠️ Installation
 
-**Rootless Installation:**
-1. Download the latest `.deb` from the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page.
+**Rootless & Rootful Installation:**
+1. Download the appropriate `.deb` (`-Rootless.deb` or `-Rootful.deb`) from the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page.
 2. Install via Sileo, Zebra, or Filza.
 3. Respring.
 
 **Roothide Installation:**
-1. Download the `.deb` from the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page.
+1. Download the `-Rootless.deb` from the **[Releases](https://github.com/EolnMsuk/AntiDarkSword/releases)** page.
 2. Open the **Roothide Patcher** app and select the `.deb` to convert paths.
 3. Install the generated `-roothide.deb` via Sileo or Filza.
 4. Respring.
