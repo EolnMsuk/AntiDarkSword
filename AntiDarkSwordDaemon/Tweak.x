@@ -244,6 +244,8 @@ static void loadPrefs() {
 
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
+    if (![self respondsToSelector:@selector(isAutoDownloadable)]) return %orig;
+
     if (applyDisableIMessageDL) {
         ADSLog(@"[MITIGATION] Blocked auto-download of an iMessage file transfer.");
         return NO;
@@ -252,6 +254,8 @@ static void loadPrefs() {
 }
 
 - (BOOL)canAutoDownload {
+    if (![self respondsToSelector:@selector(canAutoDownload)]) return %orig;
+
     if (applyDisableIMessageDL) {
         ADSLog(@"[MITIGATION] Denied canAutoDownload permission for iMessage transfer.");
         return NO;
