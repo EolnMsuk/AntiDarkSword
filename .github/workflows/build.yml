@@ -44,14 +44,6 @@ jobs:
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword-Rootless.deb"; done
 
-      - name: Compile Roothide
-        run: |
-          make clean
-          rm -rf packages/*
-          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=roothide
-          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword-Roothide.deb"; done
-
       - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -63,7 +55,7 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: "AntiDarkSword Build #${{ github.run_number }}"
-          body: "Automated rootful, rootless, and roothide builds of AntiDarkSword."
+          body: "Automated rootful and rootless builds of AntiDarkSword."
           files: ${{ github.workspace }}/packages/*.deb
           draft: false
           prerelease: false
