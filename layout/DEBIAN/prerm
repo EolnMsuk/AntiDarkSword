@@ -1,9 +1,5 @@
 #!/bin/sh
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    if [ -f "/var/jb/usr/bin/launchctl" ]; then
-        /var/jb/usr/bin/launchctl unload /var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
-    else
-        launchctl unload /Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
-    fi
+    /var/jb/usr/bin/launchctl unload /var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
 fi
 exit 0

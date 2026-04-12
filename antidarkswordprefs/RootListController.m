@@ -34,10 +34,6 @@ static inline BOOL ads_is_ios16(void) {
     return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 }
 
-static inline BOOL ads_is_ios15_plus(void) {
-    return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 15;
-}
-
 static inline UIColor *ads_color_green(void) {
     if (@available(iOS 13.0, *)) {
         return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
@@ -50,15 +46,6 @@ static inline UIColor *ads_color_red(void) {
         return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
     }
     return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
-}
-
-static inline const char *ads_jb_path(const char *path) {
-    static char buffer[1024];
-    if (access("/var/jb", F_OK) == 0) {
-        snprintf(buffer, sizeof(buffer), "/var/jb%s", path);
-        return buffer;
-    }
-    return path;
 }
 
 // ==========================================
@@ -347,10 +334,8 @@ static inline const char *ads_jb_path(const char *path) {
     if ([featureKey isEqualToString:@"disableIMessageDL"]) return isMessageApp;
     
     BOOL isIOS16 = ads_is_ios16();
-    BOOL isIOS15Plus = ads_is_ios15_plus();
-
     if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 && !isDaemon;
-    if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && isIOS15Plus && !isDaemon;
+    if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && !isDaemon;
 
     if ([featureKey isEqualToString:@"disableJS"] || [featureKey isEqualToString:@"disableRTC"] || 
         [featureKey isEqualToString:@"disableMedia"] || [featureKey isEqualToString:@"disableFileAccess"]) {
@@ -411,13 +396,12 @@ static inline const char *ads_jb_path(const char *path) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
         NSDictionary *rules = [defaults dictionaryForKey:dictKey];
         BOOL isIOS16 = ads_is_ios16();
-        BOOL isIOS15Plus = ads_is_ios15_plus();
         BOOL isJSTurnedOn = NO;
         
         if (rules && rules[@"disableJS"] != nil) {
             isJSTurnedOn = [rules[@"disableJS"] boolValue];
         } else {
-            isJSTurnedOn = (!isIOS15Plus || (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]));
+            isJSTurnedOn = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
         }
         
         for (NSDictionary *feat in features) {
@@ -433,7 +417,7 @@ static inline const char *ads_jb_path(const char *path) {
                     [spec setProperty:@NO forKey:@"enabled"];
                 } else if (isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
-                } else if (!isIOS16 && isIOS15Plus && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
+                } else if (!isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) {
                     [spec setProperty:@NO forKey:@"enabled"];
                 } else {
                     [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
@@ -519,11 +503,10 @@ static inline const char *ads_jb_path(const char *path) {
 
         NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
         BOOL isIOS16 = ads_is_ios16();
-        BOOL isIOS15Plus = ads_is_ios15_plus();
 
         if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 ? @YES : @NO; 
-        if ([featureKey isEqualToString:@"disableJIT15"]) return (!isIOS16 && isIOS15Plus) ? @YES : @NO; 
-        if ([featureKey isEqualToString:@"disableJS"]) return (!isIOS15Plus || !isIOS16) ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 ? @YES : @NO; 
+        if ([featureKey isEqualToString:@"disableJS"]) return isIOS16 ? @NO : @YES; 
         
         if ([featureKey isEqualToString:@"spoofUA"]) {
             if ([AntiDarkSwordAppController isDaemonTarget:self.targetID]) return @NO;
@@ -570,11 +553,10 @@ static inline const char *ads_jb_path(const char *path) {
     
     if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16 = ads_is_ios16();
-        BOOL isIOS15Plus = ads_is_ios15_plus();
         if ([value boolValue]) {
             if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
                 rules[@"disableJIT"] = @YES;
-            } else if (!isIOS16 && isIOS15Plus && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
+            } else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
                 rules[@"disableJIT15"] = @YES;
             }
         }
@@ -780,11 +762,10 @@ static inline const char *ads_jb_path(const char *path) {
         if (!force && [defaults objectForKey:dictKey]) continue;
 
         NSMutableDictionary *rules = [NSMutableDictionary dictionary];
-        BOOL isIOS15Plus = ads_is_ios15_plus();
         
         rules[@"disableJIT"] = (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
-        rules[@"disableJIT15"] = (!isIOS16 && isIOS15Plus && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
-        rules[@"disableJS"] = (!isIOS15Plus || (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID])) ? @YES : @NO; 
+        rules[@"disableJIT15"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
+        rules[@"disableJS"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
         
         rules[@"disableMedia"] = @NO;
         rules[@"disableRTC"] = @NO;
@@ -1191,16 +1172,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL decoyEnabled = [value boolValue];
     
     pid_t pid;
-    const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-    const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
+    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
     
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-    posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
+    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0); 
     
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
     }
 }
 
@@ -1214,16 +1194,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
     
     pid_t pid;
-    const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-    const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
-    
+    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-    posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
+    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0);
     
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
     }
     
     if (level >= 3 || customDaemons.count > 0) {
@@ -1282,10 +1260,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             
             if ([key isEqualToString:@"globalDisableJS"]) {
                 BOOL isIOS16 = ads_is_ios16();
-                BOOL isIOS15Plus = ads_is_ios15_plus();
                 NSUserDefaults *defaults = ads_defaults();
                 if (isIOS16) [defaults setBool:YES forKey:@"globalDisableJIT"];
-                else if (isIOS15Plus) [defaults setBool:YES forKey:@"globalDisableJIT15"];
+                else [defaults setBool:YES forKey:@"globalDisableJIT15"];
                 [defaults synchronize];
             }
             
@@ -1346,10 +1323,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([defaults boolForKey:@"enabled"]) {
             pid_t pid;
-            const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-            const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
+            const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
             const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-            posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
+            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
         }
     }
     
@@ -1441,11 +1417,9 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         
         pid_t pid;
-        const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
-        const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
         
-        const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
+        const char* unloadArgs[] = {"launchctl", "unload", "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist", NULL};
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
         waitpid(pid, NULL, 0); 
         
         NSUserDefaults *defaults = ads_defaults();
@@ -1454,7 +1428,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         ads_post_notification();
         
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
-        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)rebootArgs, NULL);
+        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)rebootArgs, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -1477,13 +1451,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         pid_t pid;
         if (needsReboot) {
-            const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
             const char* args[] = {"launchctl", "reboot", "userspace", NULL};
-            posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)args, NULL);
+            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
         } else {
-            const char* killallPath = ads_jb_path("/usr/bin/killall");
             const char* args[] = {"killall", "backboardd", NULL};
-            posix_spawn(&pid, killallPath, NULL, NULL, (char* const*)args, NULL);
+            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
         }
     }]];
     [self presentViewController:alert animated:YES completion:nil];

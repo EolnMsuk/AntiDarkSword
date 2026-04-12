@@ -15,7 +15,7 @@
 - (BOOL)_needsPreviewGeneration;
 @end
 
-#define PREFS_PATH (access("/var/jb", F_OK) == 0 ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
+#define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
@@ -23,7 +23,6 @@ static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
 static BOOL globalDecoyEnabled = NO;
-static BOOL isRootless = NO;
 
 static BOOL globalDisableIMessageDL = NO;
 static BOOL disableIMessageDL = NO;
@@ -75,13 +74,11 @@ static void loadPrefs() {
     
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-        
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
         
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
-        
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
@@ -90,14 +87,12 @@ static void loadPrefs() {
         
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
-        
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         }
         
         id manualUARaw = prefs[@"customUAString"];
         NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
-        
         if ([presetUA isEqualToString:@"CUSTOM"]) {
             NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             customUAString = (trimmedUA.length > 0) ? trimmedUA : @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
@@ -169,20 +164,19 @@ static void loadPrefs() {
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     
     // LIMITATION ENFORCEMENT: Only apply decoy hooks if process is restricted
-    BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)]) ?
-                     [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
+    BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)]) ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
     globalDecoyEnabled = (globalTweakEnabled && decoyPref && currentProcessRestricted);
 
     BOOL spoofUARule = YES;
     disableIMessageDL = NO;
-    
+
     NSArray *daemons = @[
         @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.imagent", @"imagent", 
         @"com.apple.mediaserverd", @"mediaserverd", @"com.apple.networkd", @"networkd", 
         @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", 
         @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
     ];
-    
+
     if (matchedID) {
         if ([daemons containsObject:matchedID]) spoofUARule = NO;
         if ([matchedID isEqualToString:@"com.apple.imagent"] || [matchedID isEqualToString:@"imagent"]) {
@@ -213,6 +207,16 @@ static void loadPrefs() {
     }
 }
 
+%ctor {
+    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
+    loadPrefs();
+    if (currentProcessRestricted) {
+        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
+    }
+    
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+}
+
 %hook NSMutableURLRequest
 - (void)setValue:(NSString *)value forHTTPHeaderField:(NSString *)field {
     if (shouldSpoofUA && [field caseInsensitiveCompare:@"User-Agent"] == NSOrderedSame) {
@@ -240,7 +244,6 @@ static void loadPrefs() {
 
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
-    if (![self respondsToSelector:@selector(isAutoDownloadable)]) return %orig;
     if (applyDisableIMessageDL) {
         ADSLog(@"[MITIGATION] Blocked auto-download of an iMessage file transfer.");
         return NO;
@@ -249,7 +252,6 @@ static void loadPrefs() {
 }
 
 - (BOOL)canAutoDownload {
-    if (![self respondsToSelector:@selector(canAutoDownload)]) return %orig;
     if (applyDisableIMessageDL) {
         ADSLog(@"[MITIGATION] Denied canAutoDownload permission for iMessage transfer.");
         return NO;
@@ -267,57 +269,42 @@ static void loadPrefs() {
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    // Fast-path constraint: Only evaluate strings starting with "/u"
-    if (globalDecoyEnabled && isRootless && path && path[0] == '/' && path[1] == 'u') {
-        if (strcmp(path, "/usr/libexec/corelliumd") == 0) {
-            return orig_access("/var/jb/usr/libexec/corelliumd", amode);
-        }
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        return 0;
     }
     return orig_access(path, amode);
 }
 
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && isRootless && path && path[0] == '/' && path[1] == 'u') {
-        if (strcmp(path, "/usr/libexec/corelliumd") == 0) {
-            return orig_stat("/var/jb/usr/libexec/corelliumd", buf);
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        if (buf) {
+            memset(buf, 0, sizeof(struct stat));
+            buf->st_mode = S_IFREG | 0755;
+            buf->st_uid = 0;
+            buf->st_gid = 0;
+            buf->st_size = 34520;
         }
+        return 0;
     }
     return orig_stat(path, buf);
 }
 
 %hook NSFileManager
 - (BOOL)fileExistsAtPath:(NSString *)path {
-    if (globalDecoyEnabled && isRootless && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
-        return %orig(@"/var/jb/usr/libexec/corelliumd");
-    }
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) return YES;
     return %orig;
 }
 - (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
-    if (globalDecoyEnabled && isRootless && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
-        return %orig(@"/var/jb/usr/libexec/corelliumd", isDirectory);
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+        if (isDirectory) *isDirectory = NO;
+        return YES;
     }
     return %orig;
 }
 %end
+
 %ctor {
-    isRootless = (access("/var/jb", F_OK) == 0);
-    NSString *processName = [[NSProcessInfo processInfo] processName];
-
-    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", processName);
-    loadPrefs();
-    
-    if (currentProcessRestricted) {
-        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
-    }
-    
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-
-    // Universal bypass: POSIX hooks in apsd trigger Sandbox/PAC crash-loops
-    if (![processName isEqualToString:@"apsd"]) {
-        MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
-        MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
-    } else {
-        ADSLog(@"[MITIGATION] Bypassing POSIX hooks for apsd (Crash Prevention)");
-    }
+    MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
+    MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
 }
