@@ -300,38 +300,24 @@ int hook_stat(const char *path, struct stat *buf) {
     return %orig;
 }
 %end
-
 %ctor {
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
+    isRootless = (access("/var/jb", F_OK) == 0);
+    NSString *processName = [[NSProcessInfo processInfo] processName];
 
-    // Fast-fail noisy / unrelated background daemons to prevent UI injection + log spam
-    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight", @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
-    if ([ignored containsObject:processName]) return;
-
-    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    // Globally ignore all App Extensions to prevent sandbox read errors
-    if ([path hasSuffix:@".appex"]) return;
-
-    // 1. Load preferences FIRST to identify targets before strict path filtering
+    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", processName);
     loadPrefs();
-
-    // 2. If the process is definitively targeted by our Tiers/Rules, ALWAYS allow injection.
-    if (!currentProcessRestricted) {
-        // If not explicitly targeted, verify it is a standard UI app to prevent generic log spam
-        BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
-        BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
-        NSArray *allowedServices = @[
-            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-        ];
-        BOOL isAllowedService = [allowedServices containsObject:bundleID];
-        
-        // Terminate if it's an irrelevant background process and not targeted
-        if (!isUserApp && !isSystemOrJBApp && !isAllowedService) return;
+    
+    if (currentProcessRestricted) {
+        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
     }
+    
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    // Universal bypass: POSIX hooks in apsd trigger Sandbox/PAC crash-loops
+    if (![processName isEqualToString:@"apsd"]) {
+        MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
+        MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
+    } else {
+        ADSLog(@"[MITIGATION] Bypassing POSIX hooks for apsd (Crash Prevention)");
+    }
 }
