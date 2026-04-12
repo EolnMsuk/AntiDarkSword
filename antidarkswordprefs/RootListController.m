@@ -34,6 +34,10 @@ static inline BOOL ads_is_ios16(void) {
     return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 }
 
+static inline BOOL ads_is_ios15_plus(void) {
+    return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 15;
+}
+
 static inline UIColor *ads_color_green(void) {
     if (@available(iOS 13.0, *)) {
         return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
