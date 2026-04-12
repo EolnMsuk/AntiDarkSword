@@ -7,7 +7,6 @@
         <key>Bundles</key>
         <array>
             <string>com.apple.WebKit</string>
-            <string>com.apple.JavaScriptCore</string>
         </array>
     </dict>
 </dict>
