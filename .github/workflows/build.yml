@@ -34,13 +34,16 @@ jobs:
           VERSION=$(grep -i '^Version:' control | awk '{print $2}')
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
+      - name: Prepare Output Directory
+        run: mkdir -p output
+
       - name: Compile Rootful
         run: |
           make clean
           rm -rf packages/*
           install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1
-          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword_${{ env.VERSION }}_eolnmsuk-Rootful.deb"; done
+          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootful.deb
 
       - name: Compile Rootless
         run: |
@@ -48,13 +51,13 @@ jobs:
           rm -rf packages/*
           install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword_${{ env.VERSION }}_eolnmsuk-Rootless.deb"; done
+          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootless.deb
 
       - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: AntiDarkSword-Packages
-          path: ${{ github.workspace }}/packages/*.deb
+          path: output/*.deb
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -62,6 +65,6 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
           body: "Automated rootful and rootless builds of AntiDarkSword v${{ env.VERSION }}."
-          files: ${{ github.workspace }}/packages/*.deb
+          files: output/*.deb
           draft: false
           prerelease: false
