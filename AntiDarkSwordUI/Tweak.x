@@ -350,6 +350,9 @@ static void reloadPrefsNotification() {
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     
+    // NEW: Globally ignore all App Extensions to prevent sandbox read errors
+    if ([path hasSuffix:@".appex"]) return; 
+
     // 1. Path-based Whitelist
     BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
