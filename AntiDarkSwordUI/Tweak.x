@@ -23,135 +23,6 @@
 
 #define PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
 
-antidarkswordprefs/RootListController.m (Block Replacements)
-
-Block 1 (Add Dynamic Path Helper):
-Objective-C
-
-// FIND:
-static inline UIColor *ads_color_red(void) {
-    if (@available(iOS 13.0, *)) {
-        return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
-    }
-    return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
-}
-
-// ADD BELOW:
-static inline NSString *ads_root_path(NSString *path) {
-    return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? [NSString stringWithFormat:@"/var/jb%@", path] : path;
-}
-
-Block 2 (setDecoyEnabled:specifier:):
-Objective-C
-
-// REPLACE ENTIRE METHOD WITH:
-- (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
-    [self setPreferenceValue:value specifier:specifier];
-    
-    NSUserDefaults *defaults = ads_defaults();
-    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
-    BOOL decoyEnabled = [value boolValue];
-    
-    pid_t pid;
-    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-    
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-    waitpid(pid, NULL, 0); 
-    
-    if (masterEnabled && decoyEnabled) {
-        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-    }
-}
-
-Block 3 (setEnableProtection:specifier:):
-Objective-C
-
-// REPLACE ENTIRE METHOD WITH:
-- (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
-    [self setPreferenceValue:value specifier:specifier];
-    
-    NSUserDefaults *defaults = ads_defaults();
-    NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-    NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
-    BOOL masterEnabled = [value boolValue];
-    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
-    
-    pid_t pid;
-    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-    
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-    waitpid(pid, NULL, 0);
-    
-    if (masterEnabled && decoyEnabled) {
-        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-    }
-    
-    if (level >= 3 || customDaemons.count > 0) {
-        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-        [defaults synchronize];
-    }
-    
-    [self savePrompt];
-}
-
-Block 4 (setAutoProtectLevel:specifier:):
-Objective-C
-
-// REPLACE posix_spawn BLOCK WITHIN METHOD:
-    if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
-        [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
-        
-        if ([defaults boolForKey:@"enabled"]) {
-            pid_t pid;
-            NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-            NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-            const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-            posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-        }
-    }
-
-Block 5 (resetToDefaults):
-Objective-C
-
-// REPLACE posix_spawn BLOCKS WITHIN METHOD:
-        pid_t pid;
-        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-        NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-        
-        const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-        waitpid(pid, NULL, 0); 
-        
-        NSUserDefaults *defaults = ads_defaults();
-        [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
-        [defaults synchronize];
-        ads_post_notification();
-        
-        const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
-
-Block 6 (savePrompt):
-Objective-C
-
-// REPLACE posix_spawn BLOCKS WITHIN METHOD:
-        pid_t pid;
-        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-        NSString *killall = ads_root_path(@"/usr/bin/killall");
-        
-        if (needsReboot) {
-            const char* args[] = {"launchctl", "reboot", "userspace", NULL};
-            posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)args, NULL);
-        } else {
-            const char* args[] = {"killall", "backboardd", NULL};
-            posix_spawn(&pid, killall.UTF8String, NULL, NULL, (char* const*)args, NULL);
-        }/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
-
 // Runtime State Variables
 static BOOL prefsLoaded = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
@@ -159,7 +30,6 @@ static BOOL globalTweakEnabled = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 static BOOL shouldSpoofUA = NO;
-
 // Global Overrides
 static BOOL globalDisableJIT = NO;
 static BOOL globalDisableJIT15 = NO;
@@ -167,7 +37,6 @@ static BOOL globalDisableJS = NO;
 static BOOL globalDisableMedia = NO;
 static BOOL globalDisableRTC = NO;
 static BOOL globalDisableFileAccess = NO;
-
 // App-Specific Granular Features
 static BOOL disableJIT = NO;
 static BOOL disableJIT15 = NO;
@@ -175,7 +44,6 @@ static BOOL disableJS = NO;
 static BOOL disableMedia = NO;
 static BOOL disableRTC = NO;
 static BOOL disableFileAccess = NO;
-
 // Final Evaluated States
 static BOOL applyDisableJIT = NO;
 static BOOL applyDisableJIT15 = NO;
@@ -183,7 +51,6 @@ static BOOL applyDisableJS = NO;
 static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
 static BOOL applyDisableFileAccess = NO;
-
 // =========================================================
 // PREFERENCES PARSING HELPERS
 // =========================================================
@@ -282,7 +149,6 @@ static void loadPrefs() {
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-    
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
@@ -300,7 +166,6 @@ static void loadPrefs() {
 
         id disabledPresetRaw = prefs[@"disabledPresetRules"];
         if ([disabledPresetRaw isKindOfClass:[NSArray class]]) disabledPresetRules = disabledPresetRaw;
-        
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
@@ -370,7 +235,6 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-            
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -406,7 +270,6 @@ static void loadPrefs() {
             @"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", 
             @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-        
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = YES;
             disableRTC = YES; 
@@ -478,14 +341,11 @@ static void reloadPrefsNotification() {
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    
     // NEW: Globally ignore all App Extensions to prevent sandbox read errors
-    if ([path hasSuffix:@".appex"]) return; 
-
+    if ([path hasSuffix:@".appex"]) return;
     // 1. Path-based Whitelist
     BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
-
     // 2. Service Whitelist
     NSArray *allowedServices = @[
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
@@ -518,7 +378,6 @@ static void reloadPrefsNotification() {
 
     // Terminate if irrelevant process
     if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
-
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
@@ -539,7 +398,6 @@ static void reloadPrefsNotification() {
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
         else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
         else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
-        
         NSString *vendor = @"Apple Computer, Inc.";
         if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
             vendor = @"Google Inc.";
@@ -552,14 +410,12 @@ static void reloadPrefsNotification() {
 
         NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
         NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        
         NSString *jsSource = [NSString stringWithFormat:@"\
             Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO];
         [userContentController addUserScript:antiFingerprintScript];
     }
