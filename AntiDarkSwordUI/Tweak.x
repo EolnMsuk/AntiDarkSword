@@ -338,13 +338,13 @@ static void reloadPrefsNotification() {
 %ctor {
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
     
-    // User Apps (App Store, TrollStore, Roothide)
+    // 1. Path-based Whitelist (App Store, System, and JB Apps)
     BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
-    
-    // System Apps & JB Apps (Rootful: /Applications/ | Rootless: /var/jb/Applications/ | Roothide: .jbroot/Applications/)
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
     
+    // 2. Service Whitelist (Native WebKit Renderers)
     NSArray *allowedServices = @[
         @"com.apple.SafariViewService",
         @"com.apple.MailCompositionService",
@@ -354,12 +354,35 @@ static void reloadPrefsNotification() {
         @"com.apple.QuickLookDaemon"
     ];
     
-    if (!isUserApp && !isSystemOrJBApp && ![allowedServices containsObject:bundleID]) {
+    BOOL isAllowedService = [allowedServices containsObject:bundleID];
+
+    // 3. Manual Override Check (Custom Bundle IDs / Processes)
+    // We must check if the user specifically asked to hook this process
+    BOOL isManualOverride = NO;
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:@"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"];
+    if (prefs) {
+        // Check "Add Custom Bundle ID / Process" list
+        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
+            isManualOverride = YES;
+        }
+        
+        // Check "Hidden Applications" (AltList)
+        if (!isManualOverride) {
+            NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+            if ([prefs[prefKey] boolValue]) {
+                isManualOverride = YES;
+            }
+        }
+    }
+
+    // Final Decision: Kill if not a standard app, not a service, AND not manually added
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) {
         return; 
     }
 
     loadPrefs();
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
