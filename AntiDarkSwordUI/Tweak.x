@@ -21,7 +21,136 @@
 @property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
 @end
 
-#define PREFS_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+#define PREFS_PATH @"/var/jb/var/mobile/Library#define PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
+
+antidarkswordprefs/RootListController.m (Block Replacements)
+
+Block 1 (Add Dynamic Path Helper):
+Objective-C
+
+// FIND:
+static inline UIColor *ads_color_red(void) {
+    if (@available(iOS 13.0, *)) {
+        return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+    }
+    return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
+}
+
+// ADD BELOW:
+static inline NSString *ads_root_path(NSString *path) {
+    return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? [NSString stringWithFormat:@"/var/jb%@", path] : path;
+}
+
+Block 2 (setDecoyEnabled:specifier:):
+Objective-C
+
+// REPLACE ENTIRE METHOD WITH:
+- (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
+    [self setPreferenceValue:value specifier:specifier];
+    
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
+    BOOL decoyEnabled = [value boolValue];
+    
+    pid_t pid;
+    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
+    waitpid(pid, NULL, 0); 
+    
+    if (masterEnabled && decoyEnabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+    }
+}
+
+Block 3 (setEnableProtection:specifier:):
+Objective-C
+
+// REPLACE ENTIRE METHOD WITH:
+- (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
+    [self setPreferenceValue:value specifier:specifier];
+    
+    NSUserDefaults *defaults = ads_defaults();
+    NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
+    NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
+    BOOL masterEnabled = [value boolValue];
+    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
+    
+    pid_t pid;
+    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
+    waitpid(pid, NULL, 0);
+    
+    if (masterEnabled && decoyEnabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+    }
+    
+    if (level >= 3 || customDaemons.count > 0) {
+        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+        [defaults synchronize];
+    }
+    
+    [self savePrompt];
+}
+
+Block 4 (setAutoProtectLevel:specifier:):
+Objective-C
+
+// REPLACE posix_spawn BLOCK WITHIN METHOD:
+    if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
+        [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
+        
+        if ([defaults boolForKey:@"enabled"]) {
+            pid_t pid;
+            NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+            NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+            const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+            posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+        }
+    }
+
+Block 5 (resetToDefaults):
+Objective-C
+
+// REPLACE posix_spawn BLOCKS WITHIN METHOD:
+        pid_t pid;
+        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+        NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+        
+        const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
+        waitpid(pid, NULL, 0); 
+        
+        NSUserDefaults *defaults = ads_defaults();
+        [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
+        [defaults synchronize];
+        ads_post_notification();
+        
+        const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
+        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
+
+Block 6 (savePrompt):
+Objective-C
+
+// REPLACE posix_spawn BLOCKS WITHIN METHOD:
+        pid_t pid;
+        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+        NSString *killall = ads_root_path(@"/usr/bin/killall");
+        
+        if (needsReboot) {
+            const char* args[] = {"launchctl", "reboot", "userspace", NULL};
+            posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)args, NULL);
+        } else {
+            const char* args[] = {"killall", "backboardd", NULL};
+            posix_spawn(&pid, killall.UTF8String, NULL, NULL, (char* const*)args, NULL);
+        }/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
 
 // Runtime State Variables
 static BOOL prefsLoaded = NO;
