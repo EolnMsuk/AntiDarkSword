@@ -385,7 +385,6 @@ static inline UIColor *ads_color_red(void) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         NSUserDefaults *defaults = ads_defaults();
-        [defaults synchronize];
         
         PSSpecifier *enableGroup = [PSSpecifier preferenceSpecifierNamed:@"Rule Status" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [specs addObject:enableGroup];
@@ -452,9 +451,8 @@ static inline UIColor *ads_color_red(void) {
 
 - (id)getMasterEnable:(PSSpecifier *)specifier {
     NSUserDefaults *defaults = ads_defaults();
-    [defaults synchronize]; 
     
-    if (self.ruleType == 0) { 
+    if (self.ruleType == 0) {
         NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
         return @(![disabled containsObject:self.targetID]);
     } else if (self.ruleType == 1) { 
@@ -511,7 +509,6 @@ static inline UIColor *ads_color_red(void) {
     if ([self isGlobalOverrideActiveForFeature:featureKey]) return @YES;
 
     NSUserDefaults *defaults = ads_defaults();
-    [defaults synchronize]; 
     NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID];
     NSDictionary *rules = [defaults dictionaryForKey:dictKey];
     
@@ -947,7 +944,6 @@ static inline UIColor *ads_color_red(void) {
     if (!_specifiers) {
         NSMutableArray *specs = [[self loadSpecifiersFromPlistName:@"Root" target:self] mutableCopy];
         NSUserDefaults *defaults = ads_defaults();
-        [defaults synchronize]; 
         
         BOOL isIOS16 = ads_is_ios16();
         BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
