@@ -85,7 +85,6 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
-
     if (applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)]) configuration.preferences.javaScriptEnabled = NO;
@@ -154,10 +153,8 @@ static void loadPrefs() {
     NSArray *activeCustomDaemonIDs = @[];
     NSArray *disabledPresetRules = @[];
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-        
         globalTweakEnabled = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"enabled"] boolValue] : NO;
         globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
         globalDisableJIT = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableJIT"] boolValue] : NO;
@@ -166,14 +163,12 @@ static void loadPrefs() {
         globalDisableMedia = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableMedia"] boolValue] : NO;
         globalDisableRTC = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableRTC"] boolValue] : NO;
         globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
-        
         autoProtectLevel = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)] ? [prefs[@"autoProtectLevel"] integerValue] : 1;
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
         id disabledPresetRaw = prefs[@"disabledPresetRules"];
         if ([disabledPresetRaw isKindOfClass:[NSArray class]]) disabledPresetRules = disabledPresetRaw;
-        
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
@@ -243,7 +238,6 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-            
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -254,7 +248,6 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-
     disableMedia = NO;
     disableRTC = NO;
     BOOL spoofUARule = NO;
@@ -276,12 +269,10 @@ static void loadPrefs() {
             @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
             @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
-        
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", 
             @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = YES;
             disableRTC = YES; 
@@ -345,6 +336,7 @@ static void reloadPrefsNotification() {
 }
 
 %ctor {
+    loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
@@ -364,7 +356,6 @@ static void reloadPrefsNotification() {
         else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
         else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
         else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
-        
         NSString *vendor = @"Apple Computer, Inc.";
         if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
             vendor = @"Google Inc.";
@@ -383,7 +374,6 @@ static void reloadPrefsNotification() {
             Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
             Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
         ", safeUA, safeAppVersion, platform, vendor];
-        
         WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource 
                                                                      injectionTime:WKUserScriptInjectionTimeAtDocumentStart 
                                                                   forMainFrameOnly:NO];
@@ -400,7 +390,6 @@ static void reloadPrefsNotification() {
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
-    if (!prefsLoaded) loadPrefs();
     applyWebKitMitigations(configuration);
     
     WKWebView *webView = %orig(frame, configuration);
@@ -411,7 +400,6 @@ static void reloadPrefsNotification() {
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
-    if (!prefsLoaded) loadPrefs();
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     
