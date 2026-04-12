@@ -336,11 +336,14 @@ static void reloadPrefsNotification() {
 }
 
 %ctor {
-    NSString *path = [[NSBundle mainBundle] bundlePath];
+    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     
-    BOOL isUserApp = [path containsString:@"/Containers/Bundle/Application/"] || [path containsString:@"/containers/Bundle/Application/"];
-    BOOL isSystemApp = [path hasPrefix:@"/Applications/"];
+    // User Apps (App Store, TrollStore, Roothide)
+    BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
+    
+    // System Apps & JB Apps (Rootful: /Applications/ | Rootless: /var/jb/Applications/ | Roothide: .jbroot/Applications/)
+    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
     
     NSArray *allowedServices = @[
         @"com.apple.SafariViewService",
@@ -351,7 +354,7 @@ static void reloadPrefsNotification() {
         @"com.apple.QuickLookDaemon"
     ];
     
-    if (!isUserApp && !isSystemApp && ![allowedServices containsObject:bundleID]) {
+    if (!isUserApp && !isSystemOrJBApp && ![allowedServices containsObject:bundleID]) {
         return; 
     }
 
