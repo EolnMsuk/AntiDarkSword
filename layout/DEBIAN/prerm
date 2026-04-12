@@ -1,5 +1,10 @@
 #!/bin/sh
+PREFIX=""
+if [ -d /var/jb ]; then
+    PREFIX="/var/jb"
+fi
+
 if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    /var/jb/usr/bin/launchctl unload /var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
+    $PREFIX/usr/bin/launchctl unload $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
 fi
 exit 0
