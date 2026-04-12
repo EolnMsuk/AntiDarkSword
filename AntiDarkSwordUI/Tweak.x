@@ -336,6 +336,25 @@ static void reloadPrefsNotification() {
 }
 
 %ctor {
+    NSString *path = [[NSBundle mainBundle] bundlePath];
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    
+    BOOL isUserApp = [path containsString:@"/Containers/Bundle/Application/"] || [path containsString:@"/containers/Bundle/Application/"];
+    BOOL isSystemApp = [path hasPrefix:@"/Applications/"];
+    
+    NSArray *allowedServices = @[
+        @"com.apple.SafariViewService",
+        @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService",
+        @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService",
+        @"com.apple.QuickLookDaemon"
+    ];
+    
+    if (!isUserApp && !isSystemApp && ![allowedServices containsObject:bundleID]) {
+        return; 
+    }
+
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", [[NSProcessInfo processInfo] processName]);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
