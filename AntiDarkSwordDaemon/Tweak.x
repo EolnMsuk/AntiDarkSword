@@ -1,3 +1,4 @@
+// AntiDarkSwordDaemon/Tweak.x
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
 #include <sys/stat.h>
@@ -15,7 +16,7 @@
 - (BOOL)_needsPreviewGeneration;
 @end
 
-#define PREFdefine PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")S_PATH @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+#define PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
 
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled = NO;
@@ -169,14 +170,14 @@ static void loadPrefs() {
 
     BOOL spoofUARule = YES;
     disableIMessageDL = NO;
-
+    
     NSArray *daemons = @[
         @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.imagent", @"imagent", 
         @"com.apple.mediaserverd", @"mediaserverd", @"com.apple.networkd", @"networkd", 
         @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", 
         @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
     ];
-
+    
     if (matchedID) {
         if ([daemons containsObject:matchedID]) spoofUARule = NO;
         if ([matchedID isEqualToString:@"com.apple.imagent"] || [matchedID isEqualToString:@"imagent"]) {
@@ -205,16 +206,6 @@ static void loadPrefs() {
             shouldSpoofUA = YES;
         }
     }
-}
-
-%ctor {
-    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
-    loadPrefs();
-    if (currentProcessRestricted) {
-        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
-    }
-    
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 
 %hook NSMutableURLRequest
@@ -305,6 +296,14 @@ int hook_stat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
+    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
+    loadPrefs();
+    if (currentProcessRestricted) {
+        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
+    }
+    
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    
     MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
     MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
 }
