@@ -1,0 +1,11 @@
+#!/bin/sh
+PREFIX=""
+if [ -d /var/jb ]; then
+    PREFIX="/var/jb"
+fi
+
+chown root:wheel $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
+chmod 644 $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
+$PREFIX/usr/bin/launchctl unload $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
+$PREFIX/usr/bin/launchctl load $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
+exit 0
