@@ -349,43 +349,31 @@ static void reloadPrefsNotification() {
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    
-    // NEW: Globally ignore all App Extensions to prevent sandbox read errors
-    if ([path hasSuffix:@".appex"]) return; 
+    // Globally ignore all App Extensions to prevent sandbox read errors
+    if ([path hasSuffix:@".appex"]) return;
 
-    // 1. Path-based Whitelist
-    BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
-    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
+    // 1. Load preferences FIRST to identify targets before strict path filtering
+    loadPrefs();
 
-    // 2. Service Whitelist
-    NSArray *allowedServices = @[
-        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-    ];
-    BOOL isAllowedService = [allowedServices containsObject:bundleID];
-
-    // 3. Manual Override Check via global file read (Roothide patched path)
-    BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    if (prefs) {
-        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
-        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
-            isManualOverride = YES;
-        }
+    // 2. If the process is definitively targeted by our Tiers/Rules, ALWAYS allow injection.
+    if (!currentProcessRestricted) {
+        // If not explicitly targeted, verify it is a standard UI app to prevent generic log spam
+        BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
+        BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
+        NSArray *allowedServices = @[
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+        ];
+        BOOL isAllowedService = [allowedServices containsObject:bundleID];
         
-        if (!isManualOverride && bundleID.length > 0) {
-            NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
-            if ([prefs[prefKey] boolValue]) {
-                isManualOverride = YES;
-            } else {
-                NSDictionary *restrictedApps = prefs[@"restrictedApps"];
-                if ([restrictedApps isKindOfClass:[NSDictionary class]] && [restrictedApps[bundleID] boolValue]) {
-                    isManualOverride = YES;
-                }
-            }
-        }
+        // Terminate if it's an irrelevant background process and not targeted
+        if (!isUserApp && !isSystemOrJBApp && !isAllowedService) return;
     }
+
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+}
 
     // Terminate if irrelevant process
     if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
