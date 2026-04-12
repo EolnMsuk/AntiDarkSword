@@ -20,35 +20,51 @@ jobs:
         with:
           theos-sdks: 'https://github.com/theos/sdks'
 
-      - name: Fix AltList Path & Load Framework
-        run: |
-          echo "Fixing AltList dylib ID for rootless Dopamine..."
-          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
-          echo "Copying AltList.framework from local repository to Theos..."
-          cp -r vendor/AltList.framework $THEOS/lib/
+      - name: Copy AltList.framework to Theos
+        run: cp -r vendor/AltList.framework $THEOS/lib/
 
       - name: Fix Script Permissions
         run: |
-          echo "Applying executable permissions to maintainer scripts..."
           chmod +x layout/DEBIAN/prerm || true
+          chmod +x layout/DEBIAN/postinst || true
 
-      - name: Compile the Tweak
+      - name: Extract Tweak Version
+        id: get_version
+        run: |
+          VERSION=$(grep -i '^Version:' control | awk '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Prepare Output Directory
+        run: mkdir -p output
+
+      - name: Compile Rootful
         run: |
           make clean
+          rm -rf packages/*
+          install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1
+          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootful.deb
 
-      - name: Upload .deb as Artifact
+      - name: Compile Rootless
+        run: |
+          make clean
+          rm -rf packages/*
+          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootless.deb
+
+      - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: AntiDarkSword-Rootless
-          path: ${{ github.workspace }}/packages/*.deb
+          name: AntiDarkSword-Packages
+          path: output/*.deb
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: "AntiDarkSword Build #${{ github.run_number }}"
-          body: "Automated build of AntiDarkSword compiled directly from the latest push to the main branch."
-          files: ${{ github.workspace }}/packages/*.deb
+          name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
+          body: "Automated rootful and rootless builds of AntiDarkSword v${{ env.VERSION }}."
+          files: output/*.deb
           draft: false
           prerelease: false
