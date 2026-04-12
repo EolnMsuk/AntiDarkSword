@@ -48,6 +48,15 @@ static inline UIColor *ads_color_red(void) {
     return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
 }
 
+static inline const char *ads_jb_path(const char *path) {
+    static char buffer[1024];
+    if (access("/var/jb", F_OK) == 0) {
+        snprintf(buffer, sizeof(buffer), "/var/jb%s", path);
+        return buffer;
+    }
+    return path;
+}
+
 // ==========================================
 // Internal iOS APIs
 // ==========================================
@@ -1172,15 +1181,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL decoyEnabled = [value boolValue];
     
     pid_t pid;
-    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+    const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
     
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+    posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0); 
     
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
     }
 }
 
@@ -1194,14 +1204,16 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
     
     pid_t pid;
-    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+    const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
+    
     const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+    posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
     waitpid(pid, NULL, 0);
     
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
     }
     
     if (level >= 3 || customDaemons.count > 0) {
@@ -1323,9 +1335,10 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         if ([defaults boolForKey:@"enabled"]) {
             pid_t pid;
-            const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
+            const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+            const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
             const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
+            posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)loadArgs, NULL);
         }
     }
     
@@ -1417,9 +1430,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         
         pid_t pid;
+        const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
+        const char* plistPath = ads_jb_path("/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
         
-        const char* unloadArgs[] = {"launchctl", "unload", "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
+        const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
+        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)unloadArgs, NULL);
         waitpid(pid, NULL, 0); 
         
         NSUserDefaults *defaults = ads_defaults();
@@ -1428,7 +1443,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         ads_post_notification();
         
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)rebootArgs, NULL);
+        posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)rebootArgs, NULL);
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -1451,11 +1466,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         
         pid_t pid;
         if (needsReboot) {
+            const char* launchctlPath = ads_jb_path("/usr/bin/launchctl");
             const char* args[] = {"launchctl", "reboot", "userspace", NULL};
-            posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)args, NULL);
+            posix_spawn(&pid, launchctlPath, NULL, NULL, (char* const*)args, NULL);
         } else {
+            const char* killallPath = ads_jb_path("/usr/bin/killall");
             const char* args[] = {"killall", "backboardd", NULL};
-            posix_spawn(&pid, "/var/jb/usr/bin/killall", NULL, NULL, (char* const*)args, NULL);
+            posix_spawn(&pid, killallPath, NULL, NULL, (char* const*)args, NULL);
         }
     }]];
     [self presentViewController:alert animated:YES completion:nil];
