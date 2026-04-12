@@ -28,13 +28,19 @@ jobs:
           chmod +x layout/DEBIAN/prerm || true
           chmod +x layout/DEBIAN/postinst || true
 
+      - name: Extract Tweak Version
+        id: get_version
+        run: |
+          VERSION=$(grep -i '^Version:' control | awk '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Compile Rootful
         run: |
           make clean
           rm -rf packages/*
           install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1
-          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword-Rootful.deb"; done
+          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword_${{ env.VERSION }}_eolnmsuk-Rootful.deb"; done
 
       - name: Compile Rootless
         run: |
@@ -42,7 +48,7 @@ jobs:
           rm -rf packages/*
           install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword-Rootless.deb"; done
+          for f in packages/*.deb; do mv "$f" "packages/AntiDarkSword_${{ env.VERSION }}_eolnmsuk-Rootless.deb"; done
 
       - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
@@ -54,8 +60,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: "AntiDarkSword Build #${{ github.run_number }}"
-          body: "Automated rootful and rootless builds of AntiDarkSword."
+          name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
+          body: "Automated rootful and rootless builds of AntiDarkSword v${{ env.VERSION }}."
           files: ${{ github.workspace }}/packages/*.deb
           draft: false
           prerelease: false
