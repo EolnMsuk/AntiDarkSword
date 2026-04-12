@@ -6,7 +6,7 @@
     <string>c.eolnmsuk.corelliumdecoy</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/var/jb/usr/libexec/corelliumd</string>
+        <string>/usr/libexec/corelliumd</string>
     </array>
     <key>KeepAlive</key>
     <true/>
