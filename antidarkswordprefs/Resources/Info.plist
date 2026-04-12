@@ -9,9 +9,9 @@
     <key>CFBundleName</key>
     <string>AntiDarkSwordPrefs</string>
     <key>CFBundleShortVersionString</key>
-    <string>4.0</string>
+    <string>4.0.1</string>
     <key>CFBundleVersion</key>
-    <string>4.0</string>
+    <string>4.0.1</string>
     <key>NSPrincipalClass</key>
     <string>AntiDarkSwordPrefsRootListController</string>
 </dict>
