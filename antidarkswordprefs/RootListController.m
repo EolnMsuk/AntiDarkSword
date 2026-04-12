@@ -47,9 +47,11 @@ static inline UIColor *ads_color_red(void) {
     }
     return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
 }
+
 static inline NSString *ads_root_path(NSString *path) {
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? [NSString stringWithFormat:@"/var/jb%@", path] : path;
 }
+
 // ==========================================
 // Internal iOS APIs
 // ==========================================
@@ -1166,6 +1168,27 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 // =======================================================
 // DECOY ENABLE METHOD
 // =======================================================
+- (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
+    [self setPreferenceValue:value specifier:specifier];
+    
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
+    BOOL decoyEnabled = [value boolValue];
+    
+    pid_t pid;
+    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
+    waitpid(pid, NULL, 0); 
+    
+    if (masterEnabled && decoyEnabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+    }
+}
+
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
     [self setPreferenceValue:value specifier:specifier];
     
@@ -1186,34 +1209,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-    }
-    
-    if (level >= 3 || customDaemons.count > 0) {
-        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-        [defaults synchronize];
-    }
-    
-    [self savePrompt];
-}
-
-- (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
-    [self setPreferenceValue:value specifier:specifier];
-    
-    NSUserDefaults *defaults = ads_defaults();
-    NSInteger level = [defaults integerForKey:@"autoProtectLevel"];
-    NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
-    BOOL masterEnabled = [value boolValue];
-    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
-    
-    pid_t pid;
-    const char* plistPath = "/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist";
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath, NULL};
-    posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)unloadArgs, NULL);
-    waitpid(pid, NULL, 0);
-    
-    if (masterEnabled && decoyEnabled) {
-        const char* loadArgs[] = {"launchctl", "load", plistPath, NULL};
-        posix_spawn(&pid, "/var/jb/usr/bin/launchctl", NULL, NULL, (char* const*)loadArgs, NULL);
     }
     
     if (level >= 3 || customDaemons.count > 0) {
@@ -1330,7 +1325,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     
-    // posix_spawn BLOCK WITHIN METHOD:
     if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
         [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
         
@@ -1430,7 +1424,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         
-    //  posix_spawn BLOCKS WITHIN METHOD:
         pid_t pid;
         NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
         NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
@@ -1466,7 +1459,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
         
-        // posix_spawn BLOCKS WITHIN METHOD:
         pid_t pid;
         NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
         NSString *killall = ads_root_path(@"/usr/bin/killall");
