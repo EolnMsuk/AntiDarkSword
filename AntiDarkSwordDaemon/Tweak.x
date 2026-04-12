@@ -269,7 +269,7 @@ static void loadPrefs() {
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (globalDecoyEnabled && path && (strcmp(path, "/usr/libexec/corelliumd") == 0 || strcmp(path, "/var/jb/usr/libexec/corelliumd") == 0)) {
         return 0;
     }
     return orig_access(path, amode);
@@ -277,7 +277,7 @@ int hook_access(const char *path, int amode) {
 
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (globalDecoyEnabled && path && (strcmp(path, "/usr/libexec/corelliumd") == 0 || strcmp(path, "/var/jb/usr/libexec/corelliumd") == 0)) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
             buf->st_mode = S_IFREG | 0755;
@@ -292,11 +292,11 @@ int hook_stat(const char *path, struct stat *buf) {
 
 %hook NSFileManager
 - (BOOL)fileExistsAtPath:(NSString *)path {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) return YES;
+    if (globalDecoyEnabled && ([path isEqualToString:@"/usr/libexec/corelliumd"] || [path isEqualToString:@"/var/jb/usr/libexec/corelliumd"])) return YES;
     return %orig;
 }
 - (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+    if (globalDecoyEnabled && ([path isEqualToString:@"/usr/libexec/corelliumd"] || [path isEqualToString:@"/var/jb/usr/libexec/corelliumd"])) {
         if (isDirectory) *isDirectory = NO;
         return YES;
     }
