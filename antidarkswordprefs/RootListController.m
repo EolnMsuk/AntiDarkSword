@@ -71,6 +71,8 @@ static inline UIColor *ads_color_red(void) {
 @end
 
 @interface AntiDarkSwordPrefsRootListController : PSListController
+@property (nonatomic, strong) NSArray *cachedDisabledPresetRules;
+@property (nonatomic, strong) NSArray *cachedActiveCustomDaemons;
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
 - (NSString *)displayNameForTargetID:(NSString *)targetID;
@@ -206,6 +208,8 @@ static inline UIColor *ads_color_red(void) {
 
 @interface AntiDarkSwordAltListController : ATLApplicationListMultiSelectionController
 @property (nonatomic, strong) NSArray *cachedPresetApps;
+@property (nonatomic, strong) NSDictionary *cachedRestrictedApps;
+@property (nonatomic, strong) NSDictionary *cachedRestrictedAppsLegacy;
 @end
 
 @implementation AntiDarkSwordAltListController
@@ -220,6 +224,9 @@ static inline UIColor *ads_color_red(void) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    NSUserDefaults *defaults = ads_defaults();
+    self.cachedRestrictedAppsLegacy = [defaults dictionaryForKey:@"restrictedApps"] ?: @{};
+    self.cachedRestrictedApps = [defaults dictionaryRepresentation];
     [self reloadSpecifiers];
 }
 
@@ -234,7 +241,6 @@ static inline UIColor *ads_color_red(void) {
     }
     
     if (bundleID) {
-        NSUserDefaults *defaults = ads_defaults();
         NSArray *presetApps = self.cachedPresetApps ?: @[];
         
         if ([cell respondsToSelector:@selector(control)]) {
@@ -248,11 +254,11 @@ static inline UIColor *ads_color_red(void) {
         
         BOOL isManualRuleActive = NO;
         NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
-        if ([defaults objectForKey:prefKey]) {
-            isManualRuleActive = [defaults boolForKey:prefKey];
+        
+        if (self.cachedRestrictedApps[prefKey] != nil) {
+            isManualRuleActive = [self.cachedRestrictedApps[prefKey] boolValue];
         } else {
-            NSDictionary *apps = [defaults dictionaryForKey:@"restrictedApps"];
-            isManualRuleActive = [apps[bundleID] boolValue];
+            isManualRuleActive = [self.cachedRestrictedAppsLegacy[bundleID] boolValue];
         }
 
         if ([presetApps containsObject:bundleID]) {
@@ -579,6 +585,14 @@ static inline UIColor *ads_color_red(void) {
 // ==========================================
 @implementation AntiDarkSwordPrefsRootListController
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    NSUserDefaults *defaults = ads_defaults();
+    self.cachedDisabledPresetRules = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+    self.cachedActiveCustomDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
+    [self reloadSpecifiers];
+}
+
 - (BOOL)isTargetInstalled:(NSString *)targetID {
     NSArray *coreServices = @[
         @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd", 
@@ -839,11 +853,6 @@ static inline UIColor *ads_color_red(void) {
     return items;
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    [self reloadSpecifiers];
-}
-
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
     PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
@@ -873,11 +882,9 @@ static inline UIColor *ads_color_red(void) {
         NSInteger ruleType = [ruleTypeObj integerValue];
         BOOL isEnabled = YES;
 
-        NSUserDefaults *defaults = ads_defaults();
-
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
-                NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+                NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
                 NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
                 for (NSString *d in daemons) {
@@ -888,11 +895,11 @@ static inline UIColor *ads_color_red(void) {
                 }
                 isEnabled = anyActive;
             } else {
-                NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+                NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
                 isEnabled = ![disabled containsObject:targetID];
             }
         } else if (ruleType == 2) {
-            NSArray *active = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
+            NSArray *active = self.cachedActiveCustomDaemons ?: @[];
             isEnabled = [active containsObject:targetID];
         }
 
