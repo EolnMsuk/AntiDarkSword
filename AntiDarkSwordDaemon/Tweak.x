@@ -310,15 +310,12 @@ int hook_stat(const char *path, struct stat *buf) {
 
 %ctor {
     NSString *processName = [[NSProcessInfo processInfo] processName];
-    NSInteger osVersion = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
     
-    // Bypasses low-level POSIX hooks inside apsd on iOS 16+ to prevent PAC/Sandbox crash-loops.
-    BOOL isApsdOnIOS16Plus = ([processName isEqualToString:@"apsd"] && osVersion >= 16);
-    
-    if (!isApsdOnIOS16Plus) {
+    // Universal bypass: POSIX hooks in apsd trigger Sandbox/PAC crash-loops
+    if (![processName isEqualToString:@"apsd"]) {
         MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
         MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
     } else {
-        ADSLog(@"[MITIGATION] Bypassing POSIX hooks for apsd on iOS 16+ (Crash Prevention)");
+        ADSLog(@"[MITIGATION] Bypassing POSIX hooks for apsd (Crash Prevention)");
     }
 }
