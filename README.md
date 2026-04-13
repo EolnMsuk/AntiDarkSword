@@ -28,23 +28,28 @@ The tweak detects native security restrictions based on the iOS version:
 
 ## 📱 Compatibility & Dependencies
 
-* **iOS Versions:** 15.0 – 17.0
-* **Architecture:** arm64 / arm64e 
-* **Supported Jailbreaks:**
-  * **Rootless:** iOS 14.5 – 17.0
-  * **Rootful:** iOS 14.5 - 16.X
-* **Dependencies:** `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`.
+* `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`.
+
+| Jailbreak | Type | Supported iOS |
+|---|---|---|
+| **Dopamine** | Rootless | 15.0 – 16.6.1 |
+| **Dopamine 2** | Roothide | 15.0 – 16.6.1 |
+| **Palera1n** | Rootless | 15.0 – 17.x |
+| **Palera1n** | Rootful | 15.0 – 16.x |
+| **checkra1n** | Rootful | 14.5 – 14.8.1 |
+| **meowbrek2** | Rootless | 15.0 – 15.8.3 |
+| **NekoJB** | Rootless | 15.0 – 15.8.3 |
+| **Taurine** | Rootful | 14.5 – 14.8.1 |
+| **unc0ver** | Rootful | 14.5 – 14.8 |
+| **XinaA15** | Hybrid (Rootful) | 15.0 – 15.1.1 |
 
 ## 🛠️ Installation
 
-1. Add this Sileo repo + search / install "AntiDarkSword": `https://f0rd0w.github.io/`
-2. Or go to latest [release](https://github.com/EolnMsuk/AntiDarkSword/releases) and grab the rootless `...arm64.deb` or rootful `...arm.deb`.
-3. Install via Sileo, Zebra, or Filza from the Files.app/Downloads
+1. Add this Sileo repo: `https://f0rd0w.github.io/`
+2. Or get the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases) rootless `...arm64.deb` or rootful `...arm.deb`.
 
 
 ## ⚙️ Configuration
-
-Configure mitigations via the native **Settings** app. 
 
 > [!WARNING]  
 > Remove protected apps from Roothide's Blacklist / Choicy to ensure the tweak can successfully inject. Level 3 restricts critical background daemons; lower the tier if system instability occurs.
