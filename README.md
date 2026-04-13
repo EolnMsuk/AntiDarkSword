@@ -12,13 +12,12 @@ The tweak detects native security restrictions based on the iOS version:
 
 ## ✨ Features
 
-* **WebKit Hardening:** Forcibly disables the JIT compiler, inline media auto-playback, Picture-in-Picture, WebGL, WebRTC (peer connections), and local file access in targeted `WKWebView` instances.
+* **WebKit Hardening:** Disable / Enable JIT compiler, media auto-playback, Picture-in-Picture, WebGL, WebRTC, and local file access.
 * **iMessage Mitigation:** Blocks automatic attachment downloading and previews within IMCore and ChatKit.
 * **Corellium Honeypot:** Spoofs a research environment using low-level file hooks and a dummy background process, causing advanced payloads to abort delivery.
-* **User Agent Spoofing:** Spoofs the `WKWebView` Custom User Agent to bypass fingerprinting. Includes presets for iOS 18.1, Android Chrome, Windows Edge, macOS.
-* **Granular Controls:** Assign app-specific mitigation rules. 
-* **Custom Targeting:** Manually assign rules to custom bundle IDs or background daemons.
-* **Global Mitigations:** System-wide kill-switches that indiscriminately apply mitigations to all processes, use with extreme caution.
+* **User Agent Spoofing:** Spoofs the WKWebView User Agent iOS to bypass payload fingerprinting.
+* **Granular Controls:** Manually assign custom process / daemon / app-specific mitigation rules. 
+* **Global Mitigations:** System-wide controls that indiscriminately apply mitigations to all processes, use with extreme caution.
 * **Zero-Crash Architecture:** Web mitigations are isolated from system tasks, preventing hardware DSP deadlocks and memory limit crashes.
 
 ## 🛑 Mitigated Exploits
