@@ -43,7 +43,7 @@ jobs:
           rm -rf packages/*
           install_name_tool -id /Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1
-          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootful.deb
+          mv packages/*.deb output/com.eoln.antidarksword_${{ env.VERSION }}_iphoneos-arm.deb
 
       - name: Compile Rootless
         run: |
@@ -51,7 +51,7 @@ jobs:
           rm -rf packages/*
           install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList vendor/AltList.framework/AltList
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-          mv packages/*.deb output/AntiDarkSword_${{ env.VERSION }}_Rootless.deb
+          mv packages/*.deb output/com.eoln.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
 
       - name: Upload .deb Artifacts
         uses: actions/upload-artifact@v4
