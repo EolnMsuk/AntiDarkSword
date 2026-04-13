@@ -32,16 +32,14 @@ The tweak detects native security restrictions based on the iOS version:
 
 | Jailbreak | Type | Supported iOS |
 |---|---|---|
-| **Dopamine** | Rootless | 15.0 – 16.6.1 |
-| **Dopamine 2** | Roothide | 15.0 – 16.6.1 |
-| **Palera1n** | Rootless | 15.0 – 17.x |
-| **Palera1n** | Rootful | 15.0 – 16.x |
-| **checkra1n** | Rootful | 14.5 – 14.8.1 |
+| **Dopamine (2)** | Rootless/hide | 15.0 – 16.6.1 |
+| **Palera1n** | Rootless/ful | 15.0 – 17.x |
 | **meowbrek2** | Rootless | 15.0 – 15.8.3 |
 | **NekoJB** | Rootless | 15.0 – 15.8.3 |
+| **XinaA15** | Hybrid | 15.0 – 15.1.1 |
+| **checkra1n** | Rootful | 14.5 – 14.8.1 |
 | **Taurine** | Rootful | 14.5 – 14.8.1 |
 | **unc0ver** | Rootful | 14.5 – 14.8 |
-| **XinaA15** | Hybrid (Rootful) | 15.0 – 15.1.1 |
 
 ## 🛠️ Installation
 
