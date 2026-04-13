@@ -37,7 +37,6 @@ The tweak detects native security restrictions based on the iOS version:
 
 ## 🛠️ Installation
 
-**Installation:**
 1. Add this Sileo repo + search / install "AntiDarkSword": `https://f0rd0w.github.io/`
 2. Or go to latest [release](https://github.com/EolnMsuk/AntiDarkSword/releases) and grab the rootless `...arm64.deb` or rootful `...arm.deb`.
 3. Install via Sileo, Zebra, or Filza from the Files.app/Downloads
