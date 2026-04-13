@@ -28,7 +28,7 @@ The tweak detects native security restrictions based on the iOS version:
 
 ## 📱 Compatibility & Dependencies
 
-* `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`.
+`mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
 
 | Jailbreak | Type | Supported iOS |
 |---|---|---|
