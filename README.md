@@ -99,9 +99,12 @@ Level 3
 │   ├── Disable WebGL & WebRTC: ON
 │   └── Disable Media Auto-Play: ON 
 │
-└── ⚙️ System Daemons (imagent, apsd, identityservicesd)
-    ├── WebKit Mitigations: BYPASSED
-    └── System Hooking: ON (Disables zero-click payload parsing)
+├── ⚙️ System Daemons (imagent, apsd, identityservicesd)
+│   ├── WebKit Mitigations: BYPASSED
+│   └── System Hooking: ON (Disables zero-click payload parsing)
+│
+└── 🛡️ Environment Spoofing
+    └── Corellium Honeypot: ON (Spoofs research device hardware & file paths)
 ```
 
 -----
