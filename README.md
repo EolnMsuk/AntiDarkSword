@@ -37,8 +37,8 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 
 ## 🛠️ Installation
 
-1. Add this Sileo repo: `https://f0rd0w.github.io/`
-2. Or manually install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases) rootless `arm64.deb` or rootful `arm.deb`.
+1. Add this Sileo repo: https://f0rd0w.github.io/
+2. Or manually install the latest [release](https://github.com/EolnMsuk/AntiDarkSword/releases) rootless `arm64.deb` or rootful `arm.deb`.
 
 
 ## ⚙️ Configuration
