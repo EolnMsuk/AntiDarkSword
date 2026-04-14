@@ -1,8 +1,8 @@
-[<img width="1249" height="918" alt="readmeORIG" src="https://github.com/user-attachments/assets/2634bd49-f315-4035-a446-3ef48ffdd134" />](https://tinyurl.com/AntiDarkSword)
-
 # AntiDarkSword ⚔️ (Rootless / Rootful)
 
 AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken devices against WebKit and iMessage-based exploits (DarkSword & Coruna). It mitigates / spoofs vectors used in 1-click and 0-click attacks while isolating background daemons.
+
+[<img width="1249" height="918" alt="readmeORIG" src="https://github.com/user-attachments/assets/2634bd49-f315-4035-a446-3ef48ffdd134" />](https://tinyurl.com/AntiDarkSword)
 
 ## ✨ Features
 
