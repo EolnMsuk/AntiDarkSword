@@ -51,6 +51,62 @@ static BOOL applyDisableJS = NO;
 static BOOL applyDisableMedia = NO;
 static BOOL applyDisableRTC = NO;
 static BOOL applyDisableFileAccess = NO;
+
+// =========================================================
+// HELPERS
+// =========================================================
+
+// Returns a properly JSON-encoded string literal (including surrounding double quotes)
+// suitable for embedding directly in JavaScript source.
+static NSString *adsJSONStringLiteral(NSString *str) {
+    if (!str) return @"\"\"";
+    NSData *data = [NSJSONSerialization dataWithJSONObject:str options:0 error:nil];
+    if (!data) return @"\"\"";
+    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+}
+
+// Injects the UA-spoofing navigator property overrides into a WKUserContentController.
+// Safe to call at configuration time (before WKWebView init) or when a UCC is replaced.
+static void injectUAScript(WKUserContentController *ucc) {
+    if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
+
+    ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
+
+    NSString *jsonUA = adsJSONStringLiteral(customUAString);
+
+    NSString *platform = @"\"iPhone\"";
+    if ([customUAString containsString:@"iPad"])       platform = @"\"iPad\"";
+    else if ([customUAString containsString:@"Macintosh"]) platform = @"\"MacIntel\"";
+    else if ([customUAString containsString:@"Windows"])   platform = @"\"Win32\"";
+    else if ([customUAString containsString:@"Android"])   platform = @"\"Linux aarch64\"";
+
+    NSString *vendor = @"\"Apple Computer, Inc.\"";
+    if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
+        vendor = @"\"Google Inc.\"";
+    }
+
+    NSString *appVersion = customUAString;
+    if ([customUAString hasPrefix:@"Mozilla/"]) appVersion = [customUAString substringFromIndex:8];
+    NSString *jsonAppVersion = adsJSONStringLiteral(appVersion);
+
+    // IIFE with Object.defineProperty — configurable:true allows re-definition if needed.
+    NSString *jsSource = [NSString stringWithFormat:
+        @"(function(){"
+         "var d=Object.defineProperty,n=navigator;"
+         "d(n,'userAgent',  {get:function(){return %@},configurable:true});"
+         "d(n,'appVersion', {get:function(){return %@},configurable:true});"
+         "d(n,'platform',   {get:function(){return %@},configurable:true});"
+         "d(n,'vendor',     {get:function(){return %@},configurable:true});"
+         "})();",
+        jsonUA, jsonAppVersion, platform, vendor];
+
+    WKUserScript *script = [[WKUserScript alloc]
+        initWithSource:jsSource
+         injectionTime:WKUserScriptInjectionTimeAtDocumentStart
+      forMainFrameOnly:NO];
+    [ucc addUserScript:script];
+}
+
 // =========================================================
 // PREFERENCES PARSING HELPERS
 // =========================================================
@@ -122,8 +178,12 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
     
-    if (shouldSpoofUA && !configuration.userContentController) {
-        configuration.userContentController = [[WKUserContentController alloc] init];
+    // Inject UA spoof script directly into the configuration's UCC.
+    // WKWebViewConfiguration always has a non-nil userContentController, so accessing
+    // it here (before WKWebView init) is safe and guarantees the script is present at
+    // document-start without depending on the app calling setUserContentController:.
+    if (shouldSpoofUA) {
+        injectUAScript(configuration.userContentController);
     }
 }
 
@@ -341,7 +401,7 @@ static void reloadPrefsNotification() {
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    // NEW: Globally ignore all App Extensions to prevent sandbox read errors
+    // Globally ignore all App Extensions to prevent sandbox read errors
     if ([path hasSuffix:@".appex"]) return;
     // 1. Path-based Whitelist
     BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
@@ -389,35 +449,12 @@ static void reloadPrefsNotification() {
 
 %hook WKWebViewConfiguration
 
+// Called when an app explicitly replaces the UCC after WKWebView creation.
+// Re-inject the UA script into the incoming controller so it's not lost.
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
-    if (shouldSpoofUA) {
-        ADSLog(@"[MITIGATION] Spoofing WKWebView User-Agent to: %@", customUAString);
-        NSString *platform = @"iPhone";
-        if ([customUAString containsString:@"iPad"]) platform = @"iPad";
-        else if ([customUAString containsString:@"Macintosh"]) platform = @"MacIntel";
-        else if ([customUAString containsString:@"Windows"]) platform = @"Win32";
-        else if ([customUAString containsString:@"Android"]) platform = @"Linux aarch64";
-        NSString *vendor = @"Apple Computer, Inc.";
-        if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"]) {
-            vendor = @"Google Inc.";
-        }
-
-        NSString *appVersion = customUAString;
-        if ([customUAString hasPrefix:@"Mozilla/"]) {
-            appVersion = [customUAString substringFromIndex:8];
-        }
-
-        NSString *safeUA = [customUAString stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        NSString *safeAppVersion = [appVersion stringByReplacingOccurrencesOfString:@"'" withString:@"\\'"];
-        NSString *jsSource = [NSString stringWithFormat:@"\
-            Object.defineProperty(navigator, 'userAgent', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'appVersion', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'platform', { get: () => '%@' });\n\
-            Object.defineProperty(navigator, 'vendor', { get: () => '%@' });\n\
-        ", safeUA, safeAppVersion, platform, vendor];
-        WKUserScript *antiFingerprintScript = [[WKUserScript alloc] initWithSource:jsSource injectionTime:WKUserScriptInjectionTimeAtDocumentStart forMainFrameOnly:NO];
-        [userContentController addUserScript:antiFingerprintScript];
+    if (shouldSpoofUA && userContentController) {
+        injectUAScript(userContentController);
     }
 }
 
@@ -432,7 +469,9 @@ static void reloadPrefsNotification() {
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
     applyWebKitMitigations(configuration);
     WKWebView *webView = %orig(frame, configuration);
-    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) webView.customUserAgent = customUAString;
+    if (webView && shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+        webView.customUserAgent = customUAString;
+    }
     return webView;
 }
 
@@ -440,7 +479,9 @@ static void reloadPrefsNotification() {
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     applyWebKitMitigations(webView.configuration);
-    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) webView.customUserAgent = customUAString;
+    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)]) {
+        webView.customUserAgent = customUAString;
+    }
     return webView;
 }
 
