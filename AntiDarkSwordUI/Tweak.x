@@ -244,10 +244,24 @@ static void loadPrefs() {
         ];
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
-            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", 
-            @"com.hammerandchisel.discord", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", 
-            @"com.duckduckgo.mobile.ios"
+            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"com.toyopagroup.picaboo", 
+            @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios", 
+            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios", @"pinterest", 
+            @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", 
+            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit", @"com.google.ios.youtube", 
+            @"tv.twitch", @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza", @"com.squareup.cash", 
+            @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", @"com.robinhood.release.Robinhood", 
+            @"com.vilcsak.bitcoin2", @"com.sixdays.trust", @"io.metamask.MetaMask", @"app.phantom.phantom", 
+            @"com.chase", @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", @"com.citi.citimobile", 
+            @"com.capitalone.enterprisemobilebanking", @"com.americanexpress.amelia", @"com.fidelity.iphone", 
+            @"com.schwab.mobile", @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", 
+            @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", 
+            @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", 
+            @"com.1debit.ChimeProdApp"
         ];
+        NSArray *tier3 = @[]; 
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
@@ -256,6 +270,7 @@ static void loadPrefs() {
             NSString *targetMatch = nil;
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
+            else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
             
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
@@ -281,15 +296,33 @@ static void loadPrefs() {
         disableJIT15 = !isIOS16OrGreater;
         disableJS = !isIOS16OrGreater;
 
-        NSArray *msgAndMail = @[@"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", @"com.google.Gmail"];
-        NSArray *browsers = @[@"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.duckduckgo.mobile.ios"];
+        NSArray *msgAndMail = @[
+            @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.google.Gmail", 
+            @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail", 
+            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", 
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
+        ];
+        NSArray *browsers = @[
+            @"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", 
+            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
+        ];
         
         if ([msgAndMail containsObject:matchedID]) {
-            disableMedia = YES; disableRTC = YES; disableFileAccess = YES; 
+            disableMedia = YES;
+            disableRTC = YES; 
+            disableFileAccess = YES; 
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
-            spoofUARule = YES;
-            if (autoProtectLevel >= 3) { disableRTC = YES; disableMedia = YES; }
+            if ([matchedID isEqualToString:@"com.apple.mobilesafari"] || [matchedID isEqualToString:@"com.apple.SafariViewService"]) {
+                spoofUARule = YES;
+            } else {
+                spoofUARule = (autoProtectLevel >= 2);
+            }
+            if (autoProtectLevel >= 3) { 
+                disableRTC = YES;
+                disableMedia = YES;
+            }
         } else if (![matchedID containsString:@"daemon"] && ![matchedID hasPrefix:@"com.apple."]) {
             spoofUARule = (autoProtectLevel >= 2);
         }
@@ -321,6 +354,8 @@ static void loadPrefs() {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) shouldSpoofUA = YES;
         else if (currentProcessRestricted && spoofUARule && customUAString && customUAString.length > 0) shouldSpoofUA = YES;
     }
+
+    // Logging restored!
     if (currentProcessRestricted) {
         ADSLog(@"[STATUS] Protection is ACTIVE for this process. JS:%d JIT:%d Media:%d RTC:%d", applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC);
     } else {
