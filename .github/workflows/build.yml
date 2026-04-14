@@ -66,5 +66,5 @@ jobs:
           name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
           body: "Automated rootful and rootless builds of AntiDarkSword v${{ env.VERSION }}."
           files: output/*.deb
-          draft: false
+          draft: true
           prerelease: false
