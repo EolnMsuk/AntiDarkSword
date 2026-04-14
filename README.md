@@ -8,9 +8,9 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 
 * **JIT Compiler:** Disable JIT via `lockdownModeEnabled` + `isAutoDownloadable` or (iOS 15) `_WKProcessPoolConfiguration` + `JITEnabled`).
 * **WebKit Hardening:** Disable media auto-playback, Picture-in-Picture, WebGL, WebRTC, and local file access.
-* **iMessage Mitigation:** Blocks automatic attachment downloading and previews within IMCore and ChatKit.
-* **Corellium Honeypot:** Spoofs a research environment using low-level file hooks and a dummy background process, causing advanced payloads to abort delivery.
-* **User Agent Spoofing:** Spoofs the WKWebView User Agent iOS to bypass payload fingerprinting.
+* **iMessage Mitigation:** Block automatic attachment downloading and previews within IMCore and ChatKit.
+* **Corellium Honeypot:** Spoof a research environment using low-level file hooks and a dummy background process, causing advanced payloads to abort delivery.
+* **User Agent Spoofing:** Spoof the WKWebView User Agent iOS to bypass payload fingerprinting.
 * **Granular Controls:** Manually assign custom process / daemon / app-specific mitigation rules. 
 * **Global Mitigations:** System-wide controls that indiscriminately apply mitigations to all processes, use with extreme caution.
 
