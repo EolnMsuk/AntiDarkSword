@@ -148,7 +148,7 @@ static void loadPrefs() {
             @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", 
             @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
         ];
-        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"networkd", @"apsd", @"identityservicesd"];
+        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"networkd", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
