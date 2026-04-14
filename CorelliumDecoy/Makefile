@@ -5,6 +5,7 @@ TOOL_NAME = corelliumd
 corelliumd_FILES = main.m
 corelliumd_CFLAGS = -fobjc-arc
 corelliumd_INSTALL_PATH = /usr/libexec
+corelliumd_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/tool.mk
 
