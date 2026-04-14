@@ -166,10 +166,10 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
-    
     BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)]) ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
-    globalDecoyEnabled = (globalTweakEnabled && decoyPref && currentProcessRestricted);
-
+    
+    globalDecoyEnabled = (globalTweakEnabled && decoyPref); 
+    
     BOOL spoofUARule = YES;
     disableIMessageDL = NO;
     
