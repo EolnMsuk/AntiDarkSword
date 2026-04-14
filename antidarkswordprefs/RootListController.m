@@ -163,10 +163,10 @@ static inline NSString *ads_root_path(NSString *path) {
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
 
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled while on Level 3." forKey:@"footerText"];
+        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+        NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
@@ -320,7 +320,7 @@ static inline NSString *ads_root_path(NSString *path) {
     if (!targetID) return NO;
     NSArray *daemons = @[
         @"com.apple.imagent", @"imagent",
-        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", @"IMDPersistenceAgent"
+        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd"
     ];
     if ([daemons containsObject:targetID]) return YES;
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
@@ -383,7 +383,7 @@ static inline NSString *ads_root_path(NSString *path) {
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [featGroup setProperty:@"Options that don't apply, or currently enforced by Global Rules, are locked." forKey:@"footerText"];
+        [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
         [specs addObject:featGroup];
         
         NSArray *features = @[
@@ -603,7 +603,7 @@ static inline NSString *ads_root_path(NSString *path) {
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService", 
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-        @"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"
+        @"imagent", @"apsd", @"identityservicesd"
     ];
     
     if ([coreServices containsObject:targetID]) return YES;
@@ -703,7 +703,7 @@ static inline NSString *ads_root_path(NSString *path) {
             @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            @"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"
+            @"imagent", @"apsd", @"identityservicesd"
         ];
         
         if (![daemons containsObject:targetID]) {
@@ -759,7 +759,7 @@ static inline NSString *ads_root_path(NSString *path) {
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
-    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"]];
+    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd"]];
 
     for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
@@ -846,11 +846,7 @@ static inline NSString *ads_root_path(NSString *path) {
 
     NSArray *tier2JB = @[ @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza" ];
     
-    // CHANGED: Daemons group ONLY added if level is 3
-    if (level >= 3) {
-        [items addObject:@"DAEMONS_GROUP"];
-    }
-    
+    if (level >= 3) [items addObject:@"DAEMONS_GROUP"];
     [items addObjectsFromArray:tier1];
     
     if (level >= 2) {
@@ -893,7 +889,7 @@ static inline NSString *ads_root_path(NSString *path) {
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
-                NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+                NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
                 for (NSString *d in daemons) {
                     if (![disabled containsObject:d]) {
@@ -992,13 +988,11 @@ static inline NSString *ads_root_path(NSString *path) {
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) {
                 s.detailControllerClass = [AntiDarkSwordAltListController class];
             }
-            
-            // CHANGED: Fixed footer text to accurately reflect Level 3 daemon protections
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
-                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple apps (Safari, Messages, Mail, Notes, Wallet, etc).";
+                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Protects core background daemons against 0-clicks and disables WebRTC/Media Auto-Play across all protected browsers.\n\n⚠️ Warning: Restricts critical background daemons. Lower the level if you have issues.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown.\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
             
@@ -1217,7 +1211,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
     }
     
-    // CHANGED: Correctly flag reboot if touching master switch while on Level 3
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
@@ -1328,8 +1321,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [defaults setObject:value forKey:@"autoProtectLevel"];
     if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:YES];
     
-    // CHANGED: Correctly flag reboot if crossing the Level 3 threshold in either direction
-    if ((oldLevel < 3 && newLevel >= 3) || (oldLevel >= 3 && newLevel < 3)) {
+    if (oldLevel >= 3 || newLevel >= 3) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     }
     
