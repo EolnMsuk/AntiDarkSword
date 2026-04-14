@@ -317,6 +317,16 @@ int hook_lstat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    BOOL masterEnabled = NO;
+    if (prefs && [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]) {
+        masterEnabled = [prefs[@"enabled"] boolValue];
+    }
+    if (!masterEnabled) {
+        ADSLog(@"[INIT] Daemon tweak is globally disabled. Exiting early.");
+        return; 
+    }
+
     %init; // MUST BE CALLED TO ACTIVATE ALL %hook BLOCKS
     
     isRootlessJB = (access("/var/jb", F_OK) == 0);
