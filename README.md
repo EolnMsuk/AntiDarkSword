@@ -46,7 +46,9 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 ## ⚙️ Configuration
 
 > [!WARNING]  
-> Remove protected apps from Roothide's Blacklist / Choicy to ensure the tweak can successfully inject. Level 3 restricts critical background daemons; lower the tier if system instability occurs.
+> Remove protected apps from Roothide's Blacklist / Choicy to ensure the tweak can successfully inject.
+>
+> Level 3 restricts critical background daemons; lower the level if you have any issues.
 
 ```text
 Level 1
