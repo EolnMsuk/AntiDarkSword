@@ -32,9 +32,6 @@ jobs:
       - name: Prepare Output Directory
         run: mkdir -p output
 
-      # AltList.framework is copied and its install name is set immediately before each
-      # compile. Doing both steps together guarantees the THEOS copy that the linker
-      # uses has the correct embedded runtime path for that build variant.
       - name: Compile Rootful
         run: |
           make clean
