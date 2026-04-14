@@ -29,7 +29,6 @@ static BOOL globalDisableIMessageDL = NO;
 static BOOL disableIMessageDL = NO;
 static BOOL applyDisableIMessageDL = NO;
 
-// Pure C check = Safe for %ctor
 static BOOL isRootlessJB = NO;
 
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
@@ -122,31 +121,41 @@ static void loadPrefs() {
     }
 
     if (!isTargetRestricted && globalTweakEnabled) {
+        // Tier 1: always active at any level.
+        // Includes all processes this dylib injects into (per plist) plus common app targets.
+        // iMessage/push daemons are tier1 — they are the primary attack surface regardless of level.
         NSArray *tier1 = @[
-            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.mobilecal", 
-            @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
+            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.mobilecal",
+            @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks",
             @"com.apple.Maps", @"com.apple.weather", @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", 
-            @"com.apple.QuickLookDaemon"
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
+            @"com.apple.QuickLookDaemon",
+            // iMessage / push daemons: always-active targets
+            @"imagent", @"com.apple.imagent",
+            @"IMDPersistenceAgent",
+            @"identityservicesd", @"com.apple.identityservicesd",
+            @"apsd", @"com.apple.apsd"
         ];
+        // Tier 2: level 2+
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
-            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"com.toyopagroup.picaboo", 
-            @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
-            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios", 
-            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios", @"pinterest", 
-            @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", 
-            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit", @"com.google.ios.youtube", 
+            @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"com.toyopagroup.picaboo",
+            @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios",
+            @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios", @"pinterest",
+            @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram",
+            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit", @"com.google.ios.youtube",
             @"tv.twitch", @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza", @"com.squareup.cash", 
-            @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", 
-            @"com.sixdays.trust", @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", @"com.bankofamerica.BofAMobileBanking", 
-            @"com.wellsfargo.net.mobilebanking", @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", 
-            @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", @"com.etrade.mobilepro.iphone", 
-            @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", 
+            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza", @"com.squareup.cash",
+            @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2",
+            @"com.sixdays.trust", @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", @"com.bankofamerica.BofAMobileBanking",
+            @"com.wellsfargo.net.mobilebanking", @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
+            @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", @"com.etrade.mobilepro.iphone",
+            @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone",
             @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
         ];
-        NSArray *tier3 = @[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+        // Tier 3: level 3+ (reserved for future optional targets)
+        NSArray *tier3 = @[];
         
         for (int i = 0; i < 2; i++) {
             NSString *target = targetsToCheck[i];
@@ -166,23 +175,30 @@ static void loadPrefs() {
     }
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
+    
     BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)]) ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
-    
-    globalDecoyEnabled = (globalTweakEnabled && decoyPref); 
-    
+    // Corellium file hooks must be active in any injected process when the pref is on —
+    // not gated on currentProcessRestricted, since exploit chains check the file path
+    // regardless of whether the host process is in the restricted list.
+    globalDecoyEnabled = (globalTweakEnabled && decoyPref);
+
     BOOL spoofUARule = YES;
     disableIMessageDL = NO;
     
+    // These are daemon/system process names where UA spoofing should not apply.
     NSArray *daemons = @[
-        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.imagent", @"imagent", 
-        @"com.apple.mediaserverd", @"mediaserverd", @"com.apple.networkd", @"networkd", 
-        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", 
+        @"com.apple.appstored", @"com.apple.itunesstored", @"com.apple.imagent", @"imagent",
+        @"IMDPersistenceAgent",
+        @"com.apple.mediaserverd", @"mediaserverd",
+        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd",
         @"com.apple.nsurlsessiond", @"com.apple.cfnetwork"
     ];
     
     if (matchedID) {
         if ([daemons containsObject:matchedID]) spoofUARule = NO;
-        if ([matchedID isEqualToString:@"com.apple.imagent"] || [matchedID isEqualToString:@"imagent"]) {
+        // Block iMessage auto-download in imagent and IMDPersistenceAgent
+        if ([matchedID isEqualToString:@"imagent"] || [matchedID isEqualToString:@"com.apple.imagent"] ||
+            [matchedID isEqualToString:@"IMDPersistenceAgent"]) {
             disableIMessageDL = YES;
         }
     } else if (processName) {
@@ -250,7 +266,7 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center, void *
 
 - (BOOL)canAutoDownload {
     if (applyDisableIMessageDL) {
-        ADSLog(@"[MITIGATION] Denied canAutoDownload permission for iMessage transfer.");
+        ADSLog(@"[MITIGATION] Denied canAutoDownload for iMessage transfer.");
         return NO;
     }
     return %orig;
@@ -263,6 +279,11 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center, void *
     return %orig;
 }
 %end
+
+// Corellium file path spoofing — rootless only.
+// On rootful the binary is a real file at /usr/libexec/corelliumd; no spoofing needed.
+// On rootless the binary lives under the jbroot prefix; spoof the canonical path so
+// exploit chains checking /usr/libexec/corelliumd find a "real" file and abort.
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
@@ -315,35 +336,25 @@ int hook_lstat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    BOOL masterEnabled = NO;
-    if (prefs && [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]) {
-        masterEnabled = [prefs[@"enabled"] boolValue];
-    }
-    if (!masterEnabled) {
-        ADSLog(@"[INIT] Daemon tweak is globally disabled. Exiting early.");
-        return; 
-    }
+    %init;
 
-    %init; // MUST BE CALLED TO ACTIVATE ALL %hook BLOCKS
-    
     isRootlessJB = (access("/var/jb", F_OK) == 0);
 
-    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into daemon/process: %@", [[NSProcessInfo processInfo] processName]);
+    ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into: %@", [[NSProcessInfo processInfo] processName]);
     loadPrefs();
-    
+
     if (currentProcessRestricted) {
-        ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
+        ADSLog(@"[STATUS] Daemon protection ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
     }
-    
+
     CFNotificationCenterAddObserver(
         CFNotificationCenterGetDarwinNotifyCenter(), NULL,
         (CFNotificationCallback)reloadDaemonPrefsNotification,
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
         NULL, CFNotificationSuspensionBehaviorCoalesce
     );
-    
+
     MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
-    MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
-    MSHookFunction((void *)lstat, (void *)hook_lstat, (void **)&orig_lstat);
+    MSHookFunction((void *)stat,   (void *)hook_stat,   (void **)&orig_stat);
+    MSHookFunction((void *)lstat,  (void *)hook_lstat,  (void **)&orig_lstat);
 }
