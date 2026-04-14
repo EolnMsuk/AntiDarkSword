@@ -13,7 +13,6 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 * **User Agent Spoofing:** Spoofs the WKWebView User Agent iOS to bypass payload fingerprinting.
 * **Granular Controls:** Manually assign custom process / daemon / app-specific mitigation rules. 
 * **Global Mitigations:** System-wide controls that indiscriminately apply mitigations to all processes, use with extreme caution.
-* **Zero-Crash Architecture:** Web mitigations are isolated from system tasks, preventing hardware DSP deadlocks and memory limit crashes.
 
 ## 🛑 Mitigated Exploits
 
