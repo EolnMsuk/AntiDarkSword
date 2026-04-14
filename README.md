@@ -22,7 +22,7 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 * **iMessage 0-Clicks:** BLASTPASS (PassKit attachments).
 * **CVEs Patched:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856.
 
-## 📱 Compatibility & Dependencies
+## 📱 Dependencies
 
 `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
 
