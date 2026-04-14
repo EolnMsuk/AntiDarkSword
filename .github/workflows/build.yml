@@ -68,3 +68,4 @@ jobs:
           files: output/*.deb
           draft: true
           prerelease: false
+          make_latest: false
