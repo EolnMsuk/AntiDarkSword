@@ -383,7 +383,7 @@ static inline NSString *ads_root_path(NSString *path) {
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"];
+        [featGroup setProperty:@"Options that don't apply, or currently enforced by Global Rules, are locked." forKey:@"footerText"];
         [specs addObject:featGroup];
         
         NSArray *features = @[
