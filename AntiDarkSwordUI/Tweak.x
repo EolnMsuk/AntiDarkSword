@@ -59,10 +59,22 @@ static BOOL applyDisableFileAccess = NO;
 // Returns a properly JSON-encoded string literal (including surrounding double quotes)
 // suitable for embedding directly in JavaScript source.
 static NSString *adsJSONStringLiteral(NSString *str) {
-    if (!str) return @"\"\"";
-    NSData *data = [NSJSONSerialization dataWithJSONObject:str options:0 error:nil];
+    if (!str || str.length == 0) return @"\"\"";
+    
+    // Wrap the string in an array to prevent NSInvalidArgumentException
+    NSArray *wrapper = @[str];
+    NSData *data = [NSJSONSerialization dataWithJSONObject:wrapper options:0 error:nil];
+    
     if (!data) return @"\"\"";
-    return [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    
+    NSString *jsonArrayString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    
+    // The output is '["encoded string"]'. Strip the brackets to get just '"encoded string"'.
+    if (jsonArrayString.length >= 2) {
+        return [jsonArrayString substringWithRange:NSMakeRange(1, jsonArrayString.length - 2)];
+    }
+    
+    return @"\"\"";
 }
 
 // Injects the UA-spoofing navigator property overrides into a WKUserContentController.
