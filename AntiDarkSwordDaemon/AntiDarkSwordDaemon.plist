@@ -7,16 +7,9 @@
         <key>Executables</key>
         <array>
             <string>imagent</string>
+            <string>IMDPersistenceAgent</string>
             <string>identityservicesd</string>
             <string>apsd</string>
-            <string>IMDPersistenceAgent</string>
-        </array>
-        <key>Bundles</key>
-        <array>
-            <string>com.apple.MobileSMS</string>
-            <string>com.apple.chatkit</string>
-            <string>com.apple.iMessageAppsViewService</string>
-            <string>com.apple.ActivityMessagesApp</string>
         </array>
     </dict>
 </dict>
