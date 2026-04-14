@@ -367,45 +367,6 @@ int hook_lstat_ui(const char *path, struct stat *buf) {
 }
 %end
 
-%ctor {
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
-    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight", @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
-    if ([ignored containsObject:processName]) return;
-
-    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    if ([path hasSuffix:@".appex"]) return;
-
-    BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
-    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
-    NSArray *allowedServices = @[@"com.apple.SafariViewService", @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"];
-    BOOL isAllowedService = [allowedServices containsObject:bundleID];
-
-    BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    if (prefs) {
-        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
-        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) isManualOverride = YES;
-        if (!isManualOverride && bundleID.length > 0) {
-            if ([prefs[[NSString stringWithFormat:@"restrictedApps-%@", bundleID]] boolValue]) isManualOverride = YES;
-        }
-    }
-
-    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
-
-    // MISSING INITS ADDED HERE
-    %init;
-    isRootlessJB = (access("/var/jb", F_OK) == 0);
-    
-    MSHookFunction((void *)access, (void *)hook_access_ui, (void **)&orig_access_ui);
-    MSHookFunction((void *)stat, (void *)hook_stat_ui, (void **)&orig_stat_ui);
-    MSHookFunction((void *)lstat, (void *)hook_lstat_ui, (void **)&orig_lstat_ui);
-
-    loadPrefs();
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
-}
-
 // =========================================================
 // WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
 // =========================================================
@@ -506,3 +467,45 @@ int hook_lstat_ui(const char *path, struct stat *buf) {
     return %orig;
 }
 %end
+
+// =========================================================
+// %ctor MUST ALWAYS BE AT THE VERY BOTTOM OF THE FILE
+// =========================================================
+%ctor {
+    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
+    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight", @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
+    if ([ignored containsObject:processName]) return;
+
+    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
+    if ([path hasSuffix:@".appex"]) return;
+
+    BOOL isUserApp = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
+    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
+    NSArray *allowedServices = @[@"com.apple.SafariViewService", @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"];
+    BOOL isAllowedService = [allowedServices containsObject:bundleID];
+
+    BOOL isManualOverride = NO;
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    if (prefs) {
+        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) isManualOverride = YES;
+        if (!isManualOverride && bundleID.length > 0) {
+            if ([prefs[[NSString stringWithFormat:@"restrictedApps-%@", bundleID]] boolValue]) isManualOverride = YES;
+        }
+    }
+
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
+
+    // Logos reads Top-to-Bottom. %init belongs down here so hooks are parsed first!
+    %init;
+    isRootlessJB = (access("/var/jb", F_OK) == 0);
+    
+    MSHookFunction((void *)access, (void *)hook_access_ui, (void **)&orig_access_ui);
+    MSHookFunction((void *)stat, (void *)hook_stat_ui, (void **)&orig_stat_ui);
+    MSHookFunction((void *)lstat, (void *)hook_lstat_ui, (void **)&orig_lstat_ui);
+
+    loadPrefs();
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into process: %@", processName);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)reloadPrefsNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+}
