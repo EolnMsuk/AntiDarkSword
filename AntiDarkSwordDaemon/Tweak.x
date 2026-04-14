@@ -127,9 +127,7 @@ static void loadPrefs() {
             @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks", 
             @"com.apple.Maps", @"com.apple.weather", @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", 
-            @"com.apple.QuickLookDaemon", 
-            // FIXED: Moved daemons to Tier 1 and added Persistence Agent
-            @"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"
+            @"com.apple.QuickLookDaemon"
         ];
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail",
