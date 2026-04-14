@@ -29,6 +29,17 @@ static BOOL globalDisableIMessageDL = NO;
 static BOOL disableIMessageDL = NO;
 static BOOL applyDisableIMessageDL = NO;
 
+// Cached at first call; /var/jb presence indicates rootless/roothide.
+static BOOL isRootless(void) {
+    static BOOL _checked = NO;
+    static BOOL _result  = NO;
+    if (!_checked) {
+        _result  = [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
+        _checked = YES;
+    }
+    return _result;
+}
+
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
     id restrictedAppsRaw = prefs[@"restrictedApps"];
     if ([restrictedAppsRaw isKindOfClass:[NSDictionary class]]) {
@@ -164,9 +175,11 @@ static void loadPrefs() {
     
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
     
-    // LIMITATION ENFORCEMENT: Only apply decoy hooks if process is restricted
+    // Decoy file-path hooks activate whenever the master toggle and decoy pref are on,
+    // regardless of whether this specific process is a restricted target. A payload scanner
+    // may run in any process; the POSIX hooks must always intercept if the feature is on.
     BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)]) ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
-    globalDecoyEnabled = (globalTweakEnabled && decoyPref && currentProcessRestricted);
+    globalDecoyEnabled = (globalTweakEnabled && decoyPref);
 
     BOOL spoofUARule = YES;
     disableIMessageDL = NO;
@@ -206,6 +219,16 @@ static void loadPrefs() {
             shouldSpoofUA = YES;
         }
     }
+}
+
+// Proper CFNotificationCallback wrapper — loadPrefs() takes no arguments and
+// cannot be cast directly to the 5-argument CFNotificationCallback signature.
+static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unused,
+                                          void *observer __unused,
+                                          CFStringRef name __unused,
+                                          const void *object __unused,
+                                          CFDictionaryRef userInfo __unused) {
+    loadPrefs();
 }
 
 %hook NSMutableURLRequest
@@ -258,9 +281,19 @@ static void loadPrefs() {
 }
 %end
 
+// =========================================================
+// CORELLIUM ENVIRONMENT SPOOFING — POSIX HOOKS
+//
+// On rootful: corelliumd genuinely lives at /usr/libexec/corelliumd.
+//   The OS returns truthful results; no spoofing needed.
+// On rootless/roothide: corelliumd lives at /var/jb/usr/libexec/corelliumd.
+//   /usr/libexec/corelliumd does not exist; hooks fake it for payload scanners
+//   that check the native (rootful) Corellium binary path.
+// =========================================================
+
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (globalDecoyEnabled && isRootless() && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         return 0;
     }
     return orig_access(path, amode);
@@ -268,12 +301,12 @@ int hook_access(const char *path, int amode) {
 
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (globalDecoyEnabled && isRootless() && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
             buf->st_mode = S_IFREG | 0755;
-            buf->st_uid = 0;
-            buf->st_gid = 0;
+            buf->st_uid  = 0;
+            buf->st_gid  = 0;
             buf->st_size = 34520;
         }
         return 0;
@@ -281,13 +314,29 @@ int hook_stat(const char *path, struct stat *buf) {
     return orig_stat(path, buf);
 }
 
+// lstat is commonly used by payload scanners to avoid following symlinks.
+static int (*orig_lstat)(const char *path, struct stat *buf);
+int hook_lstat(const char *path, struct stat *buf) {
+    if (globalDecoyEnabled && isRootless() && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        if (buf) {
+            memset(buf, 0, sizeof(struct stat));
+            buf->st_mode = S_IFREG | 0755;
+            buf->st_uid  = 0;
+            buf->st_gid  = 0;
+            buf->st_size = 34520;
+        }
+        return 0;
+    }
+    return orig_lstat(path, buf);
+}
+
 %hook NSFileManager
 - (BOOL)fileExistsAtPath:(NSString *)path {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) return YES;
+    if (globalDecoyEnabled && isRootless() && [path isEqualToString:@"/usr/libexec/corelliumd"]) return YES;
     return %orig;
 }
 - (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+    if (globalDecoyEnabled && isRootless() && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
         if (isDirectory) *isDirectory = NO;
         return YES;
     }
@@ -302,8 +351,14 @@ int hook_stat(const char *path, struct stat *buf) {
         ADSLog(@"[STATUS] Daemon protection is ACTIVE. iMessageDL blocked: %d", applyDisableIMessageDL);
     }
     
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPrefs, CFSTR("com.eolnmsuk.antidarkswordprefs/saved"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+    CFNotificationCenterAddObserver(
+        CFNotificationCenterGetDarwinNotifyCenter(), NULL,
+        reloadDaemonPrefsNotification,
+        CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
+        NULL, CFNotificationSuspensionBehaviorCoalesce
+    );
     
     MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
-    MSHookFunction((void *)stat, (void *)hook_stat, (void **)&orig_stat);
+    MSHookFunction((void *)stat,   (void *)hook_stat,   (void **)&orig_stat);
+    MSHookFunction((void *)lstat,  (void *)hook_lstat,  (void **)&orig_lstat);
 }
