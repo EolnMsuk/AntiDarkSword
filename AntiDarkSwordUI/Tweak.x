@@ -537,7 +537,15 @@ int hook_lstat_ui(const char *path, struct stat *buf) {
 
     if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
 
-    // Logos reads Top-to-Bottom. %init belongs down here so hooks are parsed first!
+    BOOL masterEnabled = NO;
+    if (prefs && [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]) {
+        masterEnabled = [prefs[@"enabled"] boolValue];
+    }
+    if (!masterEnabled) {
+        ADSLog(@"[INIT] Tweak is globally disabled. Exiting early to save memory.");
+        return; 
+    }
+
     %init;
     isRootlessJB = (access("/var/jb", F_OK) == 0);
     
