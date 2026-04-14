@@ -1,23 +1,43 @@
 {
-    "minVersion": "0.1",
-    "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
-    "tintColor": "#2CB1BE",
-    "class": "DepictionTabView",
-    "tabs": [
+  "minVersion": "0.1",
+  "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
+  "tintColor": "#2CB1BE",
+  "class": "DepictionTabView",
+  "tabs": [
+    {
+      "tabname": "Details",
+      "class": "DepictionStackView",
+      "views": [
         {
-            "tabname": "Details",
-            "class": "DepictionStackView",
-            "views": [
-                {
-                    "class": "DepictionHeaderView",
-                    "title": "AntiDarkSword",
-                    "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png"
-                },
-                {
-                    "class": "DepictionMarkdownView",
-                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation."
-                }
-            ]
+          "class": "DepictionHeaderView",
+          "title": "AntiDarkSword",
+          "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png"
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "**AntiDarkSword** hardens jailbroken iOS devices against zero-click attacks, spyware, and WebKit exploits.\n\n• Blocks iMessage auto-download & preview-based payloads  \n• Disables risky WebKit features (WebGL, WebRTC, file access)  \n• Restricts background daemons used in exploit chains  \n• Spoofs environment & User-Agent to break payload targeting  \n\nSupports rootless and rootful setups with adjustable system-wide protection levels."
         }
-    ]
+      ]
+    },
+    {
+      "tabname": "Changelog",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "## Version 1.0.0\n• Initial release\n\n## Version 1.0.1\n• Minor fixes and improvements"
+        }
+      ]
+    },
+    {
+      "tabname": "Links",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "[GitHub Repository](https://github.com/EolnMsuk/AntiDarkSword)\n\nReport issues or contribute on GitHub."
+        }
+      ]
+    }
+  ]
 }
