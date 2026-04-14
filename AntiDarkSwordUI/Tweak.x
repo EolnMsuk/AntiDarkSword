@@ -454,46 +454,6 @@ static void reloadPrefsNotification(void) {
 }
 
 // =========================================================
-// CONSTRUCTOR
-// The UIKit plist filter causes this dylib to load into every UIKit process.
-// %init installs all %hook blocks once; they are dormant (call %orig) in
-// processes where no mitigations are configured. POSIX hooks are always
-// installed so the Corellium decoy responds to file checks in any process
-// an exploit may run in (browser, mail, etc.) — not just the daemon targets.
-// =========================================================
-%ctor {
-    // Skip App Extensions: they run in a tighter sandbox that can cause
-    // spurious read errors when accessing the prefs plist across containers.
-    NSString *bundlePath = [[NSBundle mainBundle] bundlePath] ?: @"";
-    if ([bundlePath hasSuffix:@".appex"]) return;
-
-    isRootlessJB = (access("/var/jb", F_OK) == 0);
-
-    // Install all Logos %hook blocks. Hooks are gated by apply* flags set in
-    // loadPrefs(), so they are effectively dormant in unrestricted processes.
-    %init;
-
-    loadPrefs();
-
-    CFNotificationCenterAddObserver(
-        CFNotificationCenterGetDarwinNotifyCenter(), NULL,
-        (CFNotificationCallback)reloadPrefsNotification,
-        CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
-        NULL, CFNotificationSuspensionBehaviorCoalesce
-    );
-
-    // Install POSIX file hooks unconditionally. The hook functions check
-    // globalDecoyEnabled && isRootlessJB at runtime, so they are no-ops
-    // on rootful or when the decoy pref is disabled.
-    MSHookFunction((void *)access, (void *)hook_access_ui, (void **)&orig_access_ui);
-    MSHookFunction((void *)stat,   (void *)hook_stat_ui,   (void **)&orig_stat_ui);
-    MSHookFunction((void *)lstat,  (void *)hook_lstat_ui,  (void **)&orig_lstat_ui);
-
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@ (restricted:%d decoy:%d)",
-           [[NSProcessInfo processInfo] processName], (int)currentProcessRestricted, (int)globalDecoyEnabled);
-}
-
-// =========================================================
 // WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
 // =========================================================
 
@@ -639,3 +599,43 @@ static void reloadPrefsNotification(void) {
     return %orig;
 }
 %end
+
+// =========================================================
+// CONSTRUCTOR
+// The UIKit plist filter causes this dylib to load into every UIKit process.
+// %init installs all %hook blocks once; they are dormant (call %orig) in
+// processes where no mitigations are configured. POSIX hooks are always
+// installed so the Corellium decoy responds to file checks in any process
+// an exploit may run in (browser, mail, etc.) — not just the daemon targets.
+// =========================================================
+%ctor {
+    // Skip App Extensions: they run in a tighter sandbox that can cause
+    // spurious read errors when accessing the prefs plist across containers.
+    NSString *bundlePath = [[NSBundle mainBundle] bundlePath] ?: @"";
+    if ([bundlePath hasSuffix:@".appex"]) return;
+
+    isRootlessJB = (access("/var/jb", F_OK) == 0);
+
+    // Install all Logos %hook blocks. Hooks are gated by apply* flags set in
+    // loadPrefs(), so they are effectively dormant in unrestricted processes.
+    %init;
+
+    loadPrefs();
+
+    CFNotificationCenterAddObserver(
+        CFNotificationCenterGetDarwinNotifyCenter(), NULL,
+        (CFNotificationCallback)reloadPrefsNotification,
+        CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
+        NULL, CFNotificationSuspensionBehaviorCoalesce
+    );
+
+    // Install POSIX file hooks unconditionally. The hook functions check
+    // globalDecoyEnabled && isRootlessJB at runtime, so they are no-ops
+    // on rootful or when the decoy pref is disabled.
+    MSHookFunction((void *)access, (void *)hook_access_ui, (void **)&orig_access_ui);
+    MSHookFunction((void *)stat,   (void *)hook_stat_ui,   (void **)&orig_stat_ui);
+    MSHookFunction((void *)lstat,  (void *)hook_lstat_ui,  (void **)&orig_lstat_ui);
+
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@ (restricted:%d decoy:%d)",
+           [[NSProcessInfo processInfo] processName], (int)currentProcessRestricted, (int)globalDecoyEnabled);
+}
