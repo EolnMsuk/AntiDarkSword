@@ -1,18 +1,14 @@
-[<img width="1249" height="918" alt="readmeORIG" src="https://github.com/user-attachments/assets/2634bd49-f315-4035-a446-3ef48ffdd134" />](https://tinyurl.com/AntiDarkSword)
-
 # AntiDarkSword ⚔️ (Rootless / Rootful)
 
 AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken devices against WebKit and iMessage-based exploits (DarkSword & Coruna). It mitigates / spoofs vectors used in 1-click and 0-click attacks while isolating background daemons.
 
-## 🔍 Core Mechanisms
-
-The tweak detects native security restrictions based on the iOS version:
-* **iOS 16+:** Disables the JIT compiler by hooking native WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) logic gates.
-* **iOS 15.x:** Disables the JIT compiler via undocumented WebKit `_WKProcessPoolConfiguration` APIs (`JITEnabled`), bridging the gap for devices lacking native Lockdown Mode.
+[<img width="1249" height="918" alt="readmeORIG" src="https://github.com/user-attachments/assets/2634bd49-f315-4035-a446-3ef48ffdd134" />](https://tinyurl.com/AntiDarkSword)
 
 ## ✨ Features
 
-* **WebKit Hardening:** Disable / Enable JIT compiler, media auto-playback, Picture-in-Picture, WebGL, WebRTC, and local file access.
+* **iOS 16+:** Disable / Enable the JIT compiler by hooking native WebKit (`lockdownModeEnabled`) and ChatKit (`isAutoDownloadable`) logic gates.
+* **iOS 15.x:** Disable / Enable the JIT compiler via undocumented WebKit `_WKProcessPoolConfiguration` APIs (`JITEnabled`), bridging the gap for devices lacking native Lockdown Mode.
+* **WebKit Hardening:** Disable / Enable media auto-playback, Picture-in-Picture, WebGL, WebRTC, and local file access.
 * **iMessage Mitigation:** Blocks automatic attachment downloading and previews within IMCore and ChatKit.
 * **Corellium Honeypot:** Spoofs a research environment using low-level file hooks and a dummy background process, causing advanced payloads to abort delivery.
 * **User Agent Spoofing:** Spoofs the WKWebView User Agent iOS to bypass payload fingerprinting.
