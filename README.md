@@ -40,7 +40,7 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 **Jailbroken**
 1. Add this Sileo repo: https://f0rd0w.github.io/
 2. Or manually install the [Latest-Release](https://github.com/EolnMsuk/AntiDarkSword/releases) (rootless `arm64.deb`) (rootful `arm.deb`).
-3. Configure the level of protection in Settings > AntiDarkSword >
+3. Configure your level of protection in Settings > AntiDarkSword >
 
 **TrollStore**
 1. Download [TrollFools](https://github.com/Lessica/TrollFools/releases), install with [TrollStore](https://github.com/opa334/TrollStore/releases)
