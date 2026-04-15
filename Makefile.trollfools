@@ -13,6 +13,13 @@
 ARCHS ?= arm64 arm64e
 TARGET ?= iphone:clang:16.5:14.5
 
+# BSD make (macOS) exports -f into MAKEFLAGS, so every sub-make Theos spawns
+# for AntiDarkSwordTF/ inherits "-f Makefile.trollfools" and fails because that
+# file doesn't exist inside the subproject directory.
+# Clearing MAKEFLAGS here stops the flag from propagating any further.
+unexport MAKEFLAGS
+MAKEFLAGS :=
+
 include $(THEOS)/makefiles/common.mk
 
 SUBPROJECTS += AntiDarkSwordTF
