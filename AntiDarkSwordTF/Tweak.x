@@ -575,6 +575,8 @@ static BOOL ads_live_value_for_key(NSString *key) {
 @property (nonatomic, strong) NSMutableDictionary   *pendingPrefs;   // full prefs working copy
 @property (nonatomic, copy)   NSString              *bundleID;
 @property (nonatomic, strong) NSArray<NSDictionary *> *rows;
+// YES while "Block JavaScript" is ON — keeps the JIT row locked and forced-on.
+@property (nonatomic)         BOOL                    jsLocked;
 @end
 
 @implementation ADSTFSettingsViewController
@@ -593,6 +595,10 @@ static BOOL ads_live_value_for_key(NSString *key) {
     self.pendingRules      = [existing isKindOfClass:[NSDictionary class]]
                              ? [existing mutableCopy]
                              : [NSMutableDictionary dictionary];
+
+    // Mirror the current JS state so the JIT row opens in the right locked/unlocked state.
+    id savedJS     = self.pendingRules[@"disableJS"];
+    self.jsLocked  = savedJS ? [savedJS boolValue] : ads_live_value_for_key(@"disableJS");
     return self;
 }
 
@@ -800,9 +806,12 @@ static BOOL ads_live_value_for_key(NSString *key) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ads_cell"];
     }
 
-    NSDictionary *row     = self.rows[(NSUInteger)indexPath.row];
-    NSString     *key     = row[@"key"];
-    BOOL          rowEnabled = [row[@"enabled"] boolValue];
+    NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
+    NSString     *key = row[@"key"];
+
+    // A row is interactive if the iOS API exists AND it isn't locked by JS being on.
+    BOOL isJITRow    = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
+    BOOL rowEnabled  = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
 
     cell.textLabel.text            = row[@"title"];
     cell.textLabel.font            = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -851,9 +860,37 @@ static BOOL ads_live_value_for_key(NSString *key) {
     if (sender.tag == NSIntegerMax) {
         // Master toggle
         self.pendingPrefs[@"enabled"] = @(sender.on);
-    } else {
-        NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
-        self.pendingRules[key] = @(sender.on);
+        return;
+    }
+
+    NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
+    self.pendingRules[key] = @(sender.on);
+
+    // When JS is toggled, cascade to the JIT row:
+    //   JS ON  → lock JIT on (JIT is meaningless without JS; force it enabled, grey it out)
+    //   JS OFF → unlock JIT and turn it off (let the user decide independently)
+    if ([key isEqualToString:@"disableJS"]) {
+        self.jsLocked = sender.on;
+
+        // Find the JIT row regardless of which key name it uses.
+        NSUInteger jitIdx = NSNotFound;
+        for (NSUInteger i = 0; i < self.rows.count; i++) {
+            NSString *k = self.rows[i][@"key"];
+            if ([k isEqualToString:@"disableJIT"] || [k isEqualToString:@"disableJIT15"]) {
+                jitIdx = i;
+                break;
+            }
+        }
+
+        if (jitIdx != NSNotFound) {
+            NSString *jitKey       = self.rows[jitIdx][@"key"];
+            // Force JIT ON when JS is disabled; turn it OFF when JS is re-enabled.
+            self.pendingRules[jitKey] = @(sender.on);
+
+            NSIndexPath *jitPath = [NSIndexPath indexPathForRow:(NSInteger)jitIdx inSection:0];
+            [self.tableView reloadRowsAtIndexPaths:@[jitPath]
+                                  withRowAnimation:UITableViewRowAnimationNone];
+        }
     }
 }
 
