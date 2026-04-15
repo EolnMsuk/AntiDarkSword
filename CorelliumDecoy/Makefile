@@ -2,10 +2,12 @@ TARGET ?= iphone:clang:16.5:14.5
 include $(THEOS)/makefiles/common.mk
 
 TOOL_NAME = corelliumd
-corelliumd_FILES = main.m
-corelliumd_CFLAGS = -fobjc-arc
+corelliumd_FILES        = main.m
+corelliumd_CFLAGS       = -fobjc-arc
 corelliumd_INSTALL_PATH = /usr/libexec
-corelliumd_CODESIGN_FLAGS = -Sentitlements.plist
+# Required for rootless: grants platform-application so jetsam/sandbox
+# does not kill the process.  Also applied on rootful for consistency.
+corelliumd_CODESIGN_FLAGS = --entitlements entitlements.plist
 
 include $(THEOS_MAKE_PATH)/tool.mk
 

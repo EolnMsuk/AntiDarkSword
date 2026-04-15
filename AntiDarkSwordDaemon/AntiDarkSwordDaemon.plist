@@ -7,10 +7,9 @@
         <key>Executables</key>
         <array>
             <string>imagent</string>
-            <string>IMDPersistenceAgent</string>
-            <string>IMTransferAgent</string>
             <string>identityservicesd</string>
             <string>apsd</string>
+            <string>IMDPersistenceAgent</string>
         </array>
     </dict>
 </dict>
