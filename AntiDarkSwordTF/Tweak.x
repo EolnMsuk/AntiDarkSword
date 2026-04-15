@@ -478,9 +478,11 @@ static BOOL ads_gesture_installed = NO;
 // Returns the current key window across UIWindowScene (iOS 13+) and legacy API.
 static UIWindow *ads_key_window(void) {
     if (@available(iOS 13, *)) {
-        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in windowScene.windows) {
                     if (window.isKeyWindow) return window;
                 }
             }
@@ -887,17 +889,17 @@ static BOOL ads_live_value_for_key(NSString *key) {
         self.jsLocked = sender.on;
 
         // Find the JIT row regardless of which key name it uses.
-        NSUInteger jitIdx = NSNotFound;
+        NSInteger jitIdx = -1;
         for (NSUInteger i = 0; i < self.rows.count; i++) {
             NSString *k = self.rows[i][@"key"];
             if ([k isEqualToString:@"disableJIT"] || [k isEqualToString:@"disableJIT15"]) {
-                jitIdx = i;
+                jitIdx = (NSInteger)i;
                 break;
             }
         }
 
-        if (jitIdx != NSNotFound) {
-            NSString *jitKey       = self.rows[jitIdx][@"key"];
+        if (jitIdx >= 0) {
+            NSString *jitKey       = self.rows[(NSUInteger)jitIdx][@"key"];
             // Force JIT ON when JS is disabled; turn it OFF when JS is re-enabled.
             self.pendingRules[jitKey] = @(sender.on);
 
