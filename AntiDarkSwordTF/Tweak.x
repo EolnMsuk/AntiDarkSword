@@ -568,17 +568,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     return NO;
 }
 
-// Returns the current live value for a key so the UI reflects actual state.
-static BOOL ads_live_value_for_key(NSString *key) {
-    if ([key isEqualToString:@"disableJIT"])        return applyDisableJIT;
-    if ([key isEqualToString:@"disableJIT15"])      return applyDisableJIT15;
-    if ([key isEqualToString:@"disableJS"])         return applyDisableJS;
-    if ([key isEqualToString:@"disableMedia"])      return applyDisableMedia;
-    if ([key isEqualToString:@"disableRTC"])        return applyDisableRTC;
-    if ([key isEqualToString:@"disableFileAccess"]) return applyDisableFileAccess;
-    if ([key isEqualToString:@"spoofUA"])           return shouldSpoofUA;
-    return NO;
-}
 
 // ---- Settings view controller ----
 
