@@ -4,8 +4,10 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -50,19 +52,35 @@ jobs:
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           mv packages/*.deb output/com.eoln.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
 
-      - name: Upload .deb Artifacts
+      - name: Compile TrollFools Dylib
+        run: |
+          make -f Makefile.trollfools clean
+          make -f Makefile.trollfools FINALPACKAGE=1
+          DYLIB=$(find .theos/obj -name "AntiDarkSword.dylib" | head -1)
+          cp "$DYLIB" output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib
+
+      - name: Upload All Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: AntiDarkSword-Packages
-          path: output/*.deb
+          path: output/*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
-          body: "Automated rootful and rootless builds of AntiDarkSword v${{ env.VERSION }}."
-          files: output/*.deb
+          body: |
+            Automated builds of AntiDarkSword v${{ env.VERSION }}.
+
+            | File | For |
+            |---|---|
+            | `*_iphoneos-arm.deb` | Rootful jailbreaks (checkra1n, Taurine, unc0ver) |
+            | `*_iphoneos-arm64.deb` | Rootless jailbreaks (Dopamine, palera1n, meowbrek2) |
+            | `*_TrollFools.dylib` | TrollStore / TrollFools (no jailbreak required) |
+
+            **TrollFools install:** Open TrollFools → pick your app → tap **+** → select the `.dylib`
+          files: output/*
           draft: true
           prerelease: false
           make_latest: false
