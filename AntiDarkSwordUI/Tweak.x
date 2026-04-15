@@ -464,7 +464,11 @@ static void loadPrefs() {
     }
 }
 
-static void reloadPrefsNotification() {
+static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
+                                    void *observer __unused,
+                                    CFStringRef name __unused,
+                                    const void *object __unused,
+                                    CFDictionaryRef userInfo __unused) {
     prefsLoaded = NO;
     loadPrefs();
 }

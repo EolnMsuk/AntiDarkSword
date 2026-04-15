@@ -281,7 +281,11 @@ static void loadPrefs() {
            (int)applyDisableFileAccess, (int)shouldSpoofUA);
 }
 
-static void reloadPrefsNotification(void) {
+static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
+                                    void *observer __unused,
+                                    CFStringRef name __unused,
+                                    const void *object __unused,
+                                    CFDictionaryRef userInfo __unused) {
     prefsLoaded = NO;
     loadPrefs();
 }

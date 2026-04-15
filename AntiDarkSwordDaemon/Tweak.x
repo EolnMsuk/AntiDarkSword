@@ -263,9 +263,11 @@ int hook_lstat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
-    %init;
-
+    // isRootlessJB must be set before %init so that the NSFileManager hook
+    // has the correct value the instant it becomes active.
     isRootlessJB = (access("/var/jb", F_OK) == 0);
+
+    %init;
 
     ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into: %@",
            [[NSProcessInfo processInfo] processName]);
