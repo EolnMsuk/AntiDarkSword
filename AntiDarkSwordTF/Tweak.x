@@ -38,21 +38,6 @@
 @end
 
 // =========================================================
-// PRIVATE INTERFACES — iMessage transfer / preview blocking
-// NOTE: These classes live in IMCore and ChatKit respectively.
-//       If the injected app doesn't load those frameworks the
-//       hooks simply never fire — safe to include unconditionally.
-// =========================================================
-@interface IMFileTransfer : NSObject
-- (BOOL)isAutoDownloadable;
-- (BOOL)canAutoDownload;
-@end
-
-@interface CKAttachmentMessagePartChatItem : NSObject
-- (BOOL)_needsPreviewGeneration;
-@end
-
-// =========================================================
 // PREFERENCES
 // Shares the same domain as the jailbreak tweak so settings
 // written by the prefs bundle (if also installed) are honoured
@@ -75,7 +60,6 @@ static _Atomic BOOL applyDisableJS         = NO;
 static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
-static _Atomic BOOL applyDisableIMessageDL = NO;
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
 static NSString *customUAString = nil;
@@ -230,8 +214,7 @@ static void loadPrefs() {
 
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
-            applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
-            applyDisableIMessageDL = NO;
+            applyDisableMedia = applyDisableRTC = applyDisableFileAccess = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
         return;
     }
@@ -257,14 +240,6 @@ static void loadPrefs() {
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      YES);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
     applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", YES);
-
-    // iMessage download blocking — default ON only in iMessage-capable processes.
-    NSArray *iMsgApps = @[
-        @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
-        @"com.apple.ActivityMessagesApp"
-    ];
-    BOOL inIMsgApp = [iMsgApps containsObject:bundleID];
-    applyDisableIMessageDL = ads_read_bool(rules, prefs, @"disableIMessageDL", @"globalDisableIMessageDL", inIMsgApp);
 
     // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
@@ -300,10 +275,10 @@ static void loadPrefs() {
     shouldSpoofUA = (globalUA || uaRule) && customUAString.length > 0;
 
     ADSLog(@"[STATUS] TrollFools protection ACTIVE in %@. "
-           "JIT:%d Media:%d RTC:%d FileAccess:%d iMsgDL:%d UA:%d",
+           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d",
            bundleID,
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
-           (int)applyDisableFileAccess, (int)applyDisableIMessageDL, (int)shouldSpoofUA);
+           (int)applyDisableFileAccess, (int)shouldSpoofUA);
 }
 
 static void reloadPrefsNotification(void) {
@@ -482,36 +457,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 %end
 
 // =========================================================
-// iMESSAGE MITIGATIONS
-// These fire only when the injected app loads IMCore / ChatKit.
-// =========================================================
-
-%hook IMFileTransfer
-- (BOOL)isAutoDownloadable {
-    if (applyDisableIMessageDL) {
-        ADSLog(@"[MITIGATION] Blocked auto-download of iMessage file transfer.");
-        return NO;
-    }
-    return %orig;
-}
-
-- (BOOL)canAutoDownload {
-    if (applyDisableIMessageDL) {
-        ADSLog(@"[MITIGATION] Denied canAutoDownload for iMessage transfer.");
-        return NO;
-    }
-    return %orig;
-}
-%end
-
-%hook CKAttachmentMessagePartChatItem
-- (BOOL)_needsPreviewGeneration {
-    if (applyDisableIMessageDL) return NO;
-    return %orig;
-}
-%end
-
-// =========================================================
 // LEGACY UIWebView NEUTRALIZATION
 // =========================================================
 
@@ -554,38 +499,59 @@ static UIViewController *ads_top_vc(UIViewController *root) {
 }
 
 // ---- Row model ----
-// Each entry drives one table row (title, pref key, default value).
+// Each entry drives one table row.  The "enabled" key controls whether the row
+// is interactive — grayed-out rows are shown but not actionable because the
+// underlying API doesn't exist on this iOS version.
 static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
-    BOOL ios16 = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+    NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
     NSMutableArray *rows = [NSMutableArray array];
 
-    if (ios16) {
-        [rows addObject:@{@"title": @"Block JIT / Lockdown Mode",
-                          @"detail": @"Enables WebKit lockdown (iOS 16+)",
-                          @"key": @"disableJIT"}];
+    // 1. Spoof User Agent — works on all versions.
+    [rows addObject:@{@"title":   @"Spoof User Agent",
+                      @"detail":  @"Masks the real browser fingerprint",
+                      @"key":     @"spoofUA",
+                      @"enabled": @YES}];
+
+    // 2. Block JIT — mechanism differs by iOS version:
+    //      iOS 16+  → WKWebpagePreferences lockdownModeEnabled  (reliable)
+    //      iOS 15   → _WKProcessPoolConfiguration.JITEnabled    (private API, best-effort)
+    //      iOS 14-  → neither API is available; show grayed row so the user
+    //                 knows the option exists but can't be enabled here.
+    if (major >= 16) {
+        [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
+                          @"detail":  @"Enables WebKit lockdown mode (iOS 16+)",
+                          @"key":     @"disableJIT",
+                          @"enabled": @YES}];
+    } else if (major >= 15) {
+        [rows addObject:@{@"title":   @"Block JIT",
+                          @"detail":  @"Disables JIT via pool config (iOS 15)",
+                          @"key":     @"disableJIT15",
+                          @"enabled": @YES}];
     } else {
-        [rows addObject:@{@"title": @"Block JIT",
-                          @"detail": @"Disables JIT compilation (iOS 15)",
-                          @"key": @"disableJIT15"}];
+        [rows addObject:@{@"title":   @"Block JIT",
+                          @"detail":  @"Not available on iOS 14 and below",
+                          @"key":     @"disableJIT15",
+                          @"enabled": @NO}];
     }
-    [rows addObject:@{@"title": @"Block JavaScript",
-                      @"detail": @"Prevents JS execution in WebViews",
-                      @"key": @"disableJS"}];
-    [rows addObject:@{@"title": @"Block Media Autoplay",
-                      @"detail": @"Stops drive-by audio/video loading",
-                      @"key": @"disableMedia"}];
-    [rows addObject:@{@"title": @"Block WebGL / WebRTC",
-                      @"detail": @"Disables GPU and peer-connection APIs",
-                      @"key": @"disableRTC"}];
-    [rows addObject:@{@"title": @"Block file:// Access",
-                      @"detail": @"Prevents local file exfiltration",
-                      @"key": @"disableFileAccess"}];
-    [rows addObject:@{@"title": @"Block iMessage Downloads",
-                      @"detail": @"Stops automatic attachment fetching",
-                      @"key": @"disableIMessageDL"}];
-    [rows addObject:@{@"title": @"Spoof User Agent",
-                      @"detail": @"Masks the real browser fingerprint",
-                      @"key": @"spoofUA"}];
+
+    // 3–6. Features that work on all supported iOS versions.
+    [rows addObject:@{@"title":   @"Block JavaScript",
+                      @"detail":  @"Prevents JS execution in WebViews",
+                      @"key":     @"disableJS",
+                      @"enabled": @YES}];
+    [rows addObject:@{@"title":   @"Block Media Autoplay",
+                      @"detail":  @"Stops drive-by audio/video loading",
+                      @"key":     @"disableMedia",
+                      @"enabled": @YES}];
+    [rows addObject:@{@"title":   @"Block WebGL / WebRTC",
+                      @"detail":  @"Disables GPU and peer-connection APIs",
+                      @"key":     @"disableRTC",
+                      @"enabled": @YES}];
+    [rows addObject:@{@"title":   @"Block file:// Access",
+                      @"detail":  @"Prevents local file exfiltration",
+                      @"key":     @"disableFileAccess",
+                      @"enabled": @YES}];
+
     return rows;
 }
 
@@ -597,7 +563,6 @@ static BOOL ads_live_value_for_key(NSString *key) {
     if ([key isEqualToString:@"disableMedia"])      return applyDisableMedia;
     if ([key isEqualToString:@"disableRTC"])        return applyDisableRTC;
     if ([key isEqualToString:@"disableFileAccess"]) return applyDisableFileAccess;
-    if ([key isEqualToString:@"disableIMessageDL"]) return applyDisableIMessageDL;
     if ([key isEqualToString:@"spoofUA"])           return shouldSpoofUA;
     return NO;
 }
@@ -835,28 +800,39 @@ static BOOL ads_live_value_for_key(NSString *key) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ads_cell"];
     }
 
-    NSDictionary *row   = self.rows[(NSUInteger)indexPath.row];
-    NSString     *key   = row[@"key"];
+    NSDictionary *row     = self.rows[(NSUInteger)indexPath.row];
+    NSString     *key     = row[@"key"];
+    BOOL          rowEnabled = [row[@"enabled"] boolValue];
 
-    cell.textLabel.text           = row[@"title"];
-    cell.textLabel.textColor      = [UIColor whiteColor];
-    cell.textLabel.font           = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    cell.detailTextLabel.text     = row[@"detail"];
-    cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.48 alpha:1];
-    cell.detailTextLabel.font     = [UIFont systemFontOfSize:11];
-    cell.backgroundColor          = [UIColor colorWithWhite:0.13 alpha:1];
-    cell.selectionStyle           = UITableViewCellSelectionStyleNone;
+    cell.textLabel.text            = row[@"title"];
+    cell.textLabel.font            = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    cell.detailTextLabel.text      = row[@"detail"];
+    cell.detailTextLabel.font      = [UIFont systemFontOfSize:11];
+    cell.backgroundColor           = [UIColor colorWithWhite:0.13 alpha:1];
+    cell.selectionStyle            = UITableViewCellSelectionStyleNone;
+
+    if (rowEnabled) {
+        cell.textLabel.textColor        = [UIColor whiteColor];
+        cell.detailTextLabel.textColor  = [UIColor colorWithWhite:0.48 alpha:1];
+        cell.userInteractionEnabled     = YES;
+    } else {
+        // Gray out rows whose underlying API is not available on this iOS version.
+        cell.textLabel.textColor        = [UIColor colorWithWhite:0.35 alpha:1];
+        cell.detailTextLabel.textColor  = [UIColor colorWithWhite:0.30 alpha:1];
+        cell.userInteractionEnabled     = NO;
+    }
 
     UISwitch *sw;
     if ([cell.accessoryView isKindOfClass:[UISwitch class]]) {
         sw = (UISwitch *)cell.accessoryView;
     } else {
         sw = [[UISwitch alloc] init];
-        sw.onTintColor = [UIColor systemBlueColor];
         [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = sw;
     }
-    sw.tag = indexPath.row;
+    sw.tag     = indexPath.row;
+    sw.enabled = rowEnabled;
+    sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
 
     // Saved override takes priority; fall back to live state.
     id saved = self.pendingRules[key];
