@@ -7,7 +7,7 @@ corelliumd_CFLAGS       = -fobjc-arc
 corelliumd_INSTALL_PATH = /usr/libexec
 # Required for rootless: grants platform-application so jetsam/sandbox
 # does not kill the process.  Also applied on rootful for consistency.
-corelliumd_CODESIGN_FLAGS = --entitlements entitlements.plist
+corelliumd_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/tool.mk
 
