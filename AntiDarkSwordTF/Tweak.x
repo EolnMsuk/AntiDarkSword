@@ -941,24 +941,51 @@ static void ads_show_settings_overlay(void) {
     [top presentViewController:vc animated:YES completion:nil];
 }
 
-static void ads_install_settings_gesture(void) {
-    if (ads_gesture_installed) return;
+// Persistent singleton target for the gesture recognizer.
+// UITapGestureRecognizer holds a weak reference to its target, so the target
+// must be kept alive independently — NSBlockOperation was being deallocated
+// immediately, which is why the gesture never fired.
+@interface ADSTFGestureHandler : NSObject
++ (instancetype)shared;
+- (void)handleTap:(UITapGestureRecognizer *)sender;
+@end
 
-    UIWindow *win = ads_key_window();
-    if (!win) return;
+@implementation ADSTFGestureHandler
++ (instancetype)shared {
+    static ADSTFGestureHandler *instance;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ instance = [[self alloc] init]; });
+    return instance;
+}
+- (void)handleTap:(UITapGestureRecognizer *)sender {
+    if (sender.state != UIGestureRecognizerStateEnded) return;
+    ads_show_settings_overlay();
+}
+@end
+
+static void ads_install_settings_gesture_on_window(UIWindow *win) {
+    if (!win || ads_gesture_installed) return;
 
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
-        initWithTarget:[NSBlockOperation blockOperationWithBlock:^{ ads_show_settings_overlay(); }]
-                action:@selector(main)];
+        initWithTarget:[ADSTFGestureHandler shared]
+                action:@selector(handleTap:)];
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
-    // Allow other gestures to coexist so we don't swallow normal interactions.
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
 
     ads_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed on %@.", win);
 }
+
+// Hook UIWindow so we catch the main window the moment it becomes key,
+// regardless of how fast the app starts up.
+%hook UIWindow
+- (void)makeKeyAndVisible {
+    %orig;
+    ads_install_settings_gesture_on_window(self);
+}
+%end
 
 // =========================================================
 // CONSTRUCTOR
@@ -980,13 +1007,7 @@ static void ads_install_settings_gesture(void) {
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
         NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-    // Install the three-finger double-tap gesture once the app's UI is live.
-    // UIApplicationDidBecomeActiveNotification fires after the window is ready.
-    [[NSNotificationCenter defaultCenter]
-        addObserverForName:UIApplicationDidBecomeActiveNotification
-                    object:nil
-                     queue:[NSOperationQueue mainQueue]
-                usingBlock:^(NSNotification *note) {
-        ads_install_settings_gesture();
-    }];
+    // Gesture is installed via %hook UIWindow makeKeyAndVisible — no additional
+    // setup needed here. The hook fires on the main window before any user
+    // interaction can happen, so the gesture is always ready in time.
 }
