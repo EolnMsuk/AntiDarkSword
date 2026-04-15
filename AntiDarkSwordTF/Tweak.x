@@ -439,6 +439,18 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     %orig;
 }
 
+- (void)callAsyncJavaScript:(NSString *)functionBody arguments:(NSDictionary<NSString *, id> *)arguments inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
+    if (applyDisableJS) {
+        if (completionHandler) {
+            NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1
+                                           userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
+            completionHandler(nil, err);
+        }
+        return;
+    }
+    %orig;
+}
+
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
     if (shouldSpoofUA) %orig(customUAString);
     else %orig;

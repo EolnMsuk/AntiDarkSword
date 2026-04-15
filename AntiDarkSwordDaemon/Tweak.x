@@ -218,10 +218,11 @@ int hook_stat(const char *path, struct stat *buf) {
         path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
-            buf->st_mode = S_IFREG | 0755;
-            buf->st_uid  = 0;
-            buf->st_gid  = 0;
-            buf->st_size = 34520;
+            buf->st_mode  = S_IFREG | 0755;
+            buf->st_nlink = 1;
+            buf->st_uid   = 0;
+            buf->st_gid   = 0;
+            buf->st_size  = 34520;
         }
         return 0;
     }
@@ -234,10 +235,11 @@ int hook_lstat(const char *path, struct stat *buf) {
         path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
-            buf->st_mode = S_IFREG | 0755;
-            buf->st_uid  = 0;
-            buf->st_gid  = 0;
-            buf->st_size = 34520;
+            buf->st_mode  = S_IFREG | 0755;
+            buf->st_nlink = 1;
+            buf->st_uid   = 0;
+            buf->st_gid   = 0;
+            buf->st_size  = 34520;
         }
         return 0;
     }
