@@ -3,6 +3,7 @@
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
+#include <unistd.h>
 
 #import "../ADSLogging.h"
 
@@ -36,15 +37,29 @@
 - (BOOL)_needsPreviewGeneration;
 @end
 
-#define PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
+// Set once in %ctor; used by ads_prefs_path() at all subsequent call sites.
+static BOOL isRootlessJB = NO;
+
+// Returns the correct prefs path for the active jailbreak type.
+// Relies on isRootlessJB being set in %ctor before first use.
+static NSString *ads_prefs_path(void) {
+    return isRootlessJB
+        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+}
 
 // Runtime State Variables
-static BOOL prefsLoaded            = NO;
+// prefsLoaded gates re-entrant calls; atomic so reloadPrefsNotification is safe
+// from any thread the Darwin notification center may use.
+static _Atomic BOOL prefsLoaded            = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString    = @"";
-static BOOL shouldSpoofUA          = NO;
+// shouldSpoofUA and all apply* variables are read directly by hooks which can
+// fire on threads other than the one running loadPrefs(); _Atomic eliminates
+// the data race without requiring a full lock.
+static _Atomic BOOL shouldSpoofUA          = NO;
 // Global Overrides
 static BOOL globalDisableJIT       = NO;
 static BOOL globalDisableJIT15     = NO;
@@ -62,13 +77,13 @@ static BOOL disableRTC             = NO;
 static BOOL disableFileAccess      = NO;
 static BOOL disableIMessageDL      = NO;
 // Final Evaluated States
-static BOOL applyDisableJIT        = NO;
-static BOOL applyDisableJIT15      = NO;
-static BOOL applyDisableJS         = NO;
-static BOOL applyDisableMedia      = NO;
-static BOOL applyDisableRTC        = NO;
-static BOOL applyDisableFileAccess = NO;
-static BOOL applyDisableIMessageDL = NO;
+static _Atomic BOOL applyDisableJIT        = NO;
+static _Atomic BOOL applyDisableJIT15      = NO;
+static _Atomic BOOL applyDisableJS         = NO;
+static _Atomic BOOL applyDisableMedia      = NO;
+static _Atomic BOOL applyDisableRTC        = NO;
+static _Atomic BOOL applyDisableFileAccess = NO;
+static _Atomic BOOL applyDisableIMessageDL = NO;
 
 // =========================================================
 // HELPERS
@@ -215,8 +230,9 @@ static void loadPrefs() {
     prefsLoaded = YES;
 
     NSDictionary *prefs = nil;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    NSString *prefsFilePath = ads_prefs_path();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
     }
 
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
@@ -610,6 +626,9 @@ static void reloadPrefsNotification() {
 %end
 
 %ctor {
+    // Set rootless flag first — ads_prefs_path() and loadPrefs() both depend on it.
+    isRootlessJB = (access("/var/jb", F_OK) == 0);
+
     NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
 
@@ -636,7 +655,7 @@ static void reloadPrefsNotification() {
 
     // 3. Manual override check (Roothide patched path)
     BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     if (prefs) {
         NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
