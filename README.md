@@ -37,9 +37,15 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 
 ## 🛠️ Installation
 
+**Jailbroken**
 1. Add this Sileo repo: https://f0rd0w.github.io/
 2. Or manually install the [Latest-Release](https://github.com/EolnMsuk/AntiDarkSword/releases) (rootless `arm64.deb`) (rootful `arm.deb`)
 
+**TrollStore**
+1. Download [TrollFools](https://github.com/Lessica/TrollFools/releases), install with [TrollStore](https://github.com/opa334/TrollStore/releases) 
+2. Download the `AntiDarkSword.dylib` from [Latest-Release](https://github.com/EolnMsuk/AntiDarkSword/releases) 
+3. Open TrollFools and select any 3rd party app to inject then select the dylib you just downloaded.
+4. Activate protection toggles by double tapping with 3 fingers on screen of injected app (while open).
 
 ## ⚙️ Configuration
 
