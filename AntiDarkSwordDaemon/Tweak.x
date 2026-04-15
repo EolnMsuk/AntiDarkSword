@@ -15,7 +15,16 @@
 - (BOOL)canAutoDownload;
 @end
 
-#define PREFS_PATH ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist" : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist")
+// Pure C check — safe for %ctor
+static BOOL isRootlessJB = NO;
+
+// Returns the correct prefs path for the active jailbreak type.
+// Relies on isRootlessJB being set in %ctor before first use.
+static NSString *ads_prefs_path(void) {
+    return isRootlessJB
+        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+}
 
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled              = NO;
@@ -23,9 +32,6 @@ static BOOL globalDisableIMessageDL         = NO;
 static BOOL globalDecoyEnabled              = NO;
 static BOOL disableIMessageDL               = NO;
 static BOOL applyDisableIMessageDL          = NO;
-
-// Pure C check — safe for %ctor
-static BOOL isRootlessJB = NO;
 
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
     id restrictedAppsRaw = prefs[@"restrictedApps"];
@@ -53,8 +59,9 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 
 static void loadPrefs() {
     NSDictionary *prefs = nil;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:PREFS_PATH]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    NSString *prefsFilePath = ads_prefs_path();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
     }
 
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
