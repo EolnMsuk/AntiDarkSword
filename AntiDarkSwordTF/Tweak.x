@@ -205,9 +205,9 @@ static void loadPrefs() {
     // Read from whichever storage backend has data (system plist → CFPrefs → NSUserDefaults suite).
     NSDictionary *prefs = ads_read_prefs();
 
-    // Master enable — default ON so the dylib is protective immediately after injection.
-    // A user who wants it off can toggle it in the three-finger overlay.
-    BOOL masterEnabled = YES;
+    // Master enable — default OFF so the dylib is dormant until the user
+    // opts in via the three-finger overlay.
+    BOOL masterEnabled = NO;
     id enabledVal = prefs[@"enabled"];
     if (enabledVal && [enabledVal respondsToSelector:@selector(boolValue)])
         masterEnabled = [enabledVal boolValue];
@@ -227,19 +227,19 @@ static void loadPrefs() {
     NSDictionary *rules = ([prefs isKindOfClass:[NSDictionary class]]) ? prefs[dictKey] : nil;
     if (![rules isKindOfClass:[NSDictionary class]]) rules = nil;
 
-    // Safe defaults for TrollFools:
-    //   JIT / lockdown mode  → ON  (blocks JIT-based exploits, low app breakage)
-    //   Media autoplay       → ON  (blocks drive-by media exploit delivery)
-    //   Local file access    → ON  (blocks file:// exfiltration)
-    //   iMessage DL          → ON  only when injected into an iMessage-capable app
-    //   WebGL / WebRTC       → OFF by default (breaks video-call apps; user can enable)
-    //   JavaScript           → OFF by default (breaks most apps; user can enable)
+    // Defaults when no prefs have been saved yet (first use after injection):
+    //   UA spoof  → ON   (non-breaking, immediate privacy benefit)
+    //   JIT       → ON   (low breakage, meaningful exploit-surface reduction)
+    //   JS        → OFF  (breaks most apps; user must opt in)
+    //   Media     → OFF  (user must opt in)
+    //   WebRTC    → OFF  (breaks video/audio calls; user must opt in)
+    //   File acc. → OFF  (user must opt in)
     applyDisableJIT        = isIOS16  ? ads_read_bool(rules, prefs, @"disableJIT",        @"globalDisableJIT",        YES) : NO;
     applyDisableJIT15      = !isIOS16 ? ads_read_bool(rules, prefs, @"disableJIT15",      @"globalDisableJIT15",      YES) : NO;
     applyDisableJS         =            ads_read_bool(rules, prefs, @"disableJS",         @"globalDisableJS",         NO);
-    applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      YES);
+    applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
-    applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", YES);
+    applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", NO);
 
     // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
@@ -555,6 +555,17 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     return rows;
 }
 
+// Returns the intended out-of-the-box default for each toggle.
+// Used by the overlay when no saved value exists for a key yet.
+// Must stay in sync with the hardcoded defaults in loadPrefs().
+static BOOL ads_default_value_for_key(NSString *key) {
+    if ([key isEqualToString:@"spoofUA"])           return YES;
+    if ([key isEqualToString:@"disableJIT"])        return YES;
+    if ([key isEqualToString:@"disableJIT15"])      return YES;
+    // JS, media, RTC, file access all off — user opts in explicitly.
+    return NO;
+}
+
 // Returns the current live value for a key so the UI reflects actual state.
 static BOOL ads_live_value_for_key(NSString *key) {
     if ([key isEqualToString:@"disableJIT"])        return applyDisableJIT;
@@ -598,7 +609,7 @@ static BOOL ads_live_value_for_key(NSString *key) {
 
     // Mirror the current JS state so the JIT row opens in the right locked/unlocked state.
     id savedJS     = self.pendingRules[@"disableJS"];
-    self.jsLocked  = savedJS ? [savedJS boolValue] : ads_live_value_for_key(@"disableJS");
+    self.jsLocked  = savedJS ? [savedJS boolValue] : ads_default_value_for_key(@"disableJS");
     return self;
 }
 
@@ -673,7 +684,7 @@ static BOOL ads_live_value_for_key(NSString *key) {
     masterSwitch.onTintColor        = [UIColor systemGreenColor];
     masterSwitch.tag                = NSIntegerMax; // sentinel for master switch
     id masterVal                    = self.pendingPrefs[@"enabled"];
-    masterSwitch.on                 = masterVal ? [masterVal boolValue] : YES;
+    masterSwitch.on                 = masterVal ? [masterVal boolValue] : NO;
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
 
@@ -843,9 +854,12 @@ static BOOL ads_live_value_for_key(NSString *key) {
     sw.enabled = rowEnabled;
     sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
 
-    // Saved override takes priority; fall back to live state.
+    // Saved value takes priority; fall back to intended out-of-the-box default.
+    // (Live state is not used here — if master is off all live values are NO,
+    //  which would make the overlay look blank even though JIT and UA are
+    //  intended to be pre-enabled on first use.)
     id saved = self.pendingRules[key];
-    sw.on = saved ? [saved boolValue] : ads_live_value_for_key(key);
+    sw.on = saved ? [saved boolValue] : ads_default_value_for_key(key);
 
     return cell;
 }
