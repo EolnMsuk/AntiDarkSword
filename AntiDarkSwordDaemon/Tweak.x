@@ -27,11 +27,11 @@ static NSString *ads_prefs_path(void) {
 }
 
 static _Atomic BOOL currentProcessRestricted = NO;
-static BOOL globalTweakEnabled              = NO;
-static BOOL globalDisableIMessageDL         = NO;
-static BOOL globalDecoyEnabled              = NO;
-static BOOL disableIMessageDL               = NO;
-static BOOL applyDisableIMessageDL          = NO;
+static _Atomic BOOL globalTweakEnabled       = NO;
+static _Atomic BOOL globalDisableIMessageDL  = NO;
+static _Atomic BOOL globalDecoyEnabled       = NO;
+static _Atomic BOOL disableIMessageDL        = NO;
+static _Atomic BOOL applyDisableIMessageDL   = NO;
 
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
     id restrictedAppsRaw = prefs[@"restrictedApps"];
@@ -110,46 +110,10 @@ static void loadPrefs() {
         }
     }
 
-    // Auto-protection tier matching
+    // Auto-protection tier matching — only tier3 daemon IDs are ever present in
+    // processes the daemon plist injects into. Tier1/2 UIKit app IDs are handled
+    // exclusively by AntiDarkSwordUI and have no role here.
     if (!isTargetRestricted && globalTweakEnabled) {
-        // Tier 1 & 2 — UIKit apps.  Listed here only so that user-added custom entries that happen
-        // to match a preset ID are still handled correctly; the daemon plist will never inject into
-        // these processes under normal use.
-        NSArray *tier1 = @[
-            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-            @"com.apple.mobilecal", @"com.apple.mobilenotes", @"com.apple.iBooks",
-            @"com.apple.news", @"com.apple.podcasts", @"com.apple.stocks",
-            @"com.apple.Maps", @"com.apple.weather", @"com.apple.SafariViewService",
-            @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService",
-            @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService",
-            @"com.apple.QuickLookDaemon"
-        ];
-        NSArray *tier2 = @[
-            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
-            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
-            @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
-            @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
-            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser",
-            @"com.duckduckgo.mobile.ios", @"pinterest", @"com.tumblr.tumblr",
-            @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram",
-            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit",
-            @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini",
-            @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-            @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
-            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
-            @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
-            @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
-            @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
-            @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile",
-            @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile",
-            @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone",
-            @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
-            @"com.ally.auto", @"com.navyfederal.navyfederal.mydata"
-        ];
-        // Tier 3 — system daemons targeted for zero-click blocking and Corellium spoofing.
-        // These are the only processes the daemon plist actually injects into.
         NSArray *tier3 = @[
             @"com.apple.imagent",             @"imagent",
             @"com.apple.apsd",                @"apsd",
@@ -161,14 +125,10 @@ static void loadPrefs() {
             NSString *target = targetsToCheck[i];
             if (!target) continue;
 
-            NSString *targetMatch = nil;
-            if ([tier1 containsObject:target]) targetMatch = target;
-            else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
-            else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-
-            if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
+            if (autoProtectLevel >= 3 && [tier3 containsObject:target] &&
+                ![disabledPresetRules containsObject:target]) {
                 isTargetRestricted = YES;
-                matchedID = targetMatch;
+                matchedID = target;
                 break;
             }
         }

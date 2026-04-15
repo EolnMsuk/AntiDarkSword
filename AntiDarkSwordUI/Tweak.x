@@ -4,6 +4,7 @@
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 #import "../ADSLogging.h"
 
@@ -226,8 +227,10 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 static void loadPrefs() {
-    if (prefsLoaded) return;
-    prefsLoaded = YES;
+    // Atomic compare-and-swap: only the first caller proceeds; re-entrant or concurrent
+    // callers return immediately. reloadPrefsNotification resets the flag before calling.
+    BOOL expected = NO;
+    if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
     NSString *prefsFilePath = ads_prefs_path();
@@ -376,14 +379,16 @@ static void loadPrefs() {
         disableJIT15 = !isIOS16OrGreater;
         disableJS    = !isIOS16OrGreater;
 
-        // iMessage-capable UI processes — block media, RTC, file access, and message DL
+        // iMessage-capable UI processes — block media, RTC, file access, and message DL.
+        // com.apple.Passbook is included for BLASTPASS (PassKit attachment) mitigation.
         NSArray *msgAndMail = @[
             @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
             @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
-            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord",
-            @"com.apple.Passbook"
+            @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
+            @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
         NSArray *iMessageUIApps = @[
             @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
@@ -578,7 +583,16 @@ static void reloadPrefsNotification() {
 %end
 
 %hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (applyDisableJS) return NULL;
+    if (applyDisableJS) {
+        // Populate the exception so callers that inspect it receive a meaningful error
+        // rather than a NULL exception with a NULL return value (undefined behaviour).
+        if (ctx && exception) {
+            JSStringRef msg = JSStringCreateWithUTF8CString("Script execution blocked by AntiDarkSword");
+            *exception = JSValueMakeString(ctx, msg);
+            JSStringRelease(msg);
+        }
+        return NULL;
+    }
     return %orig(ctx, script, thisObject, sourceURL, startingLineNumber, exception);
 }
 
@@ -653,9 +667,21 @@ static void reloadPrefsNotification() {
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
-    // 3. Manual override check (Roothide patched path)
+    // 3. Manual override check — try the on-disk plist first, then fall back to
+    //    CFPreferences so that Roothide installs and fresh installs where the plist
+    //    has not been flushed to disk yet are handled correctly.
     BOOL isManualOverride = NO;
     NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (!prefs) {
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keyList) {
+            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+            CFRelease(keyList);
+        }
+    }
     if (prefs) {
         NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
         if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {

@@ -17,6 +17,28 @@
 #define ADS_PREFS_SUITE @"com.eolnmsuk.antidarkswordprefs"
 #define ADS_NOTIF_SAVED CFSTR("com.eolnmsuk.antidarkswordprefs/saved")
 
+// Sentinel value used to represent the system-daemon group entry in preset-rules lists.
+static NSString * const kADSDaemonsGroupSentinel = @"DAEMONS_GROUP";
+
+// Canonical list of apps that handle rich messaging content and warrant media/RTC/file-access
+// blocking. com.apple.Passbook is included for BLASTPASS (PassKit attachment) mitigation.
+static NSArray *ads_msg_and_mail_apps(void) {
+    static NSArray *list;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        list = @[
+            @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
+            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
+            @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
+            @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
+        ];
+    });
+    return list;
+}
+
 static inline NSUserDefaults *ads_defaults(void) {
     static NSUserDefaults *sharedDefaults = nil;
     static dispatch_once_t onceToken;
@@ -94,11 +116,10 @@ static inline NSString *ads_root_path(NSString *path) {
 
 - (UIImage *)resizeIcon:(UIImage *)image toSize:(CGSize)size {
     if (!image) return nil;
-    UIGraphicsBeginImageContextWithOptions(size, NO, [UIScreen mainScreen].scale);
-    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    UIImage *resizedImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return resizedImage;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+        [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
+    }];
 }
 
 - (NSArray *)specifiers {
@@ -320,6 +341,7 @@ static inline NSString *ads_root_path(NSString *path) {
 
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
+    // Explicit allowlist of known daemon IDs.
     NSArray *daemons = @[
         @"com.apple.imagent", @"imagent",
         @"com.apple.apsd", @"apsd",
@@ -327,9 +349,12 @@ static inline NSString *ads_root_path(NSString *path) {
         @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"
     ];
     if ([daemons containsObject:targetID]) return YES;
+    // A bare process name (no dots, not the known app-style ID "pinterest") is a daemon/process name.
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
+    // Bundle IDs that explicitly contain "daemon" are daemon processes.
     if ([targetID containsString:@"daemon"]) return YES;
-    if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) return YES;
+    // Note: we intentionally do NOT use a hasSuffix:@"d" heuristic here — it produces
+    // false positives (e.g. any bundle ID that simply ends in the letter "d").
     return NO;
 }
 
@@ -523,14 +548,7 @@ static inline NSString *ads_root_path(NSString *path) {
             return (level >= 2) ? @YES : @NO; 
         }
         
-        NSArray *msgAndMail = @[
-            @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
-            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
-            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
-            @"com.facebook.Messenger", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", 
-            @"com.apple.Passbook"
-        ];
+        NSArray *msgAndMail = ads_msg_and_mail_apps();
         
         if ([msgAndMail containsObject:self.targetID]) return @YES;
         
@@ -740,13 +758,12 @@ static inline NSString *ads_root_path(NSString *path) {
     
     if (icon) {
         CGSize newSize = CGSizeMake(23, 23);
-        UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
-        [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
-        UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
-        UIGraphicsEndImageContext();
-        return resizedIcon;
+        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:newSize];
+        return [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+            [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+        }];
     }
-    
+
     return nil;
 }
 
@@ -762,19 +779,11 @@ static inline NSString *ads_root_path(NSString *path) {
         @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
     ];
     
-    NSArray *msgAndMail = @[
-        @"com.apple.MobileSMS", @"com.apple.mobilemail", @"com.apple.MailCompositionService", 
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
-        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", 
-        @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", 
-        @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", 
-        @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", 
-        @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
-    ];
+    NSArray *msgAndMail = ads_msg_and_mail_apps();
 
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
-    [expandedTargets removeObject:@"DAEMONS_GROUP"];
+    [expandedTargets removeObject:kADSDaemonsGroupSentinel];
     [expandedTargets addObjectsFromArray:@[
         @"com.apple.imagent", @"imagent",
         @"apsd", @"identityservicesd",
@@ -866,7 +875,7 @@ static inline NSString *ads_root_path(NSString *path) {
 
     NSArray *tier2JB = @[ @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza" ];
     
-    if (level >= 3) [items addObject:@"DAEMONS_GROUP"];
+    if (level >= 3) [items addObject:kADSDaemonsGroupSentinel];
     [items addObjectsFromArray:tier1];
     
     if (level >= 2) {
@@ -907,7 +916,7 @@ static inline NSString *ads_root_path(NSString *path) {
         BOOL isEnabled = YES;
 
         if (ruleType == 0) {
-            if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
+            if ([targetID isEqualToString:kADSDaemonsGroupSentinel]) {
                 NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
                 NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
                 BOOL anyActive = NO;
@@ -1042,9 +1051,9 @@ static inline NSString *ads_root_path(NSString *path) {
             
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
-                if ([item isEqualToString:@"DAEMONS_GROUP"]) {
+                if ([item isEqualToString:kADSDaemonsGroupSentinel]) {
                     PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:@"Restrict System Daemons" target:self set:nil get:nil detail:[AntiDarkSwordDaemonListController class] cell:PSLinkCell edit:nil];
-                    [spec setProperty:@"DAEMONS_GROUP" forKey:@"targetID"];
+                    [spec setProperty:kADSDaemonsGroupSentinel forKey:@"targetID"];
                     [spec setProperty:@(0) forKey:@"ruleType"];
                     
                     UIImage *icon = nil;
@@ -1054,10 +1063,10 @@ static inline NSString *ads_root_path(NSString *path) {
                     }
                     if (icon) {
                         CGSize newSize = CGSizeMake(23, 23);
-                        UIGraphicsBeginImageContextWithOptions(newSize, NO, [UIScreen mainScreen].scale);
-                        [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
-                        UIImage *resizedIcon = UIGraphicsGetImageFromCurrentImageContext();
-                        UIGraphicsEndImageContext();
+                        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:newSize];
+                        UIImage *resizedIcon = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) {
+                            [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+                        }];
                         [spec setProperty:resizedIcon forKey:@"iconImage"];
                     }
                     [specs insertObject:spec atIndex:insertIndexAuto++];
@@ -1200,13 +1209,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
     
     const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-    waitpid(pid, NULL, 0); 
-    
+    if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
+        waitpid(pid, NULL, 0);
+
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-        waitpid(pid, NULL, 0);
+        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
+            waitpid(pid, NULL, 0);
     }
 }
 
@@ -1224,15 +1233,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
     
     const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-    waitpid(pid, NULL, 0);
-    
+    if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
+        waitpid(pid, NULL, 0);
+
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-        waitpid(pid, NULL, 0);
+        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
+            waitpid(pid, NULL, 0);
     }
-    
+
     if (level >= 3 || customDaemons.count > 0) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
         [defaults synchronize];
@@ -1360,15 +1369,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
             NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
             const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-            posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
-            waitpid(pid, NULL, 0);
+            if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
+                waitpid(pid, NULL, 0);
         }
     }
-    
+
     [defaults synchronize];
     [self flagSaveRequirement];
     ads_post_notification();
-    
+
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
         [self reloadSpecifiers];
@@ -1457,16 +1466,17 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
         
         const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-        posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL);
-        waitpid(pid, NULL, 0); 
-        
+        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
+            waitpid(pid, NULL, 0);
+
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
         ads_post_notification();
-        
+
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
+        // No waitpid — the reboot kills this process.
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -1494,9 +1504,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (needsReboot) {
             const char* args[] = {"launchctl", "reboot", "userspace", NULL};
             posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)args, NULL);
+            // No waitpid — the reboot kills this process.
         } else {
             const char* args[] = {"killall", "backboardd", NULL};
-            posix_spawn(&pid, killall.UTF8String, NULL, NULL, (char* const*)args, NULL);
+            if (posix_spawn(&pid, killall.UTF8String, NULL, NULL, (char* const*)args, NULL) == 0)
+                waitpid(pid, NULL, 0);
         }
     }]];
     [self presentViewController:alert animated:YES completion:nil];
