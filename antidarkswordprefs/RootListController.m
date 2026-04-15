@@ -52,6 +52,12 @@ static inline NSString *ads_root_path(NSString *path) {
     return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? [NSString stringWithFormat:@"/var/jb%@", path] : path;
 }
 
+// Canonical list of all preset system daemons targeted by AntiDarkSwordDaemon.
+// Keep this in sync with AntiDarkSwordDaemon.plist and Tweak.x.
+static inline NSArray *ads_preset_daemons(void) {
+    return @[@"imagent", @"IMDPersistenceAgent", @"IMTransferAgent", @"apsd", @"identityservicesd"];
+}
+
 // ==========================================
 // Internal iOS APIs
 // ==========================================
@@ -163,12 +169,19 @@ static inline NSString *ads_root_path(NSString *path) {
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
 
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
+        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. Highly recommended to leave all enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
+        // Keep in sync with ads_preset_daemons() and AntiDarkSwordDaemon.plist.
+        NSArray *daemons = ads_preset_daemons();
         for (NSString *daemon in daemons) {
-            PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+            PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon]
+                target:self
+                set:@selector(setDaemonEnabled:specifier:)
+                get:@selector(getDaemonEnabled:)
+                detail:nil
+                cell:PSSwitchCell
+                edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
             [specs addObject:spec];
         }
@@ -180,7 +193,8 @@ static inline NSString *ads_root_path(NSString *path) {
 - (id)getDaemonEnabled:(PSSpecifier *)spec {
     NSUserDefaults *defaults = ads_defaults();
     NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-    return @(![disabled containsObject:[spec propertyForKey:@"targetID"]]);
+    NSString *targetID = [spec propertyForKey:@"targetID"];
+    return @(![disabled containsObject:targetID]);
 }
 
 - (void)setDaemonEnabled:(id)value specifier:(PSSpecifier *)spec {
@@ -190,10 +204,14 @@ static inline NSString *ads_root_path(NSString *path) {
 
     if ([value boolValue]) {
         [disabled removeObject:targetID];
+        // imagent canonical bundle ID alias
         if ([targetID isEqualToString:@"imagent"]) [disabled removeObject:@"com.apple.imagent"];
     } else {
         if (![disabled containsObject:targetID]) [disabled addObject:targetID];
-        if ([targetID isEqualToString:@"imagent"] && ![disabled containsObject:@"com.apple.imagent"]) [disabled addObject:@"com.apple.imagent"];
+        // Disable the bundle ID alias too so the daemon Tweak.x ruleDisabled check catches both forms.
+        if ([targetID isEqualToString:@"imagent"] && ![disabled containsObject:@"com.apple.imagent"]) {
+            [disabled addObject:@"com.apple.imagent"];
+        }
     }
 
     [defaults setObject:disabled forKey:@"disabledPresetRules"];
@@ -318,11 +336,10 @@ static inline NSString *ads_root_path(NSString *path) {
 
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
-    NSArray *daemons = @[
-        @"com.apple.imagent", @"imagent",
-        @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd"
-    ];
-    if ([daemons containsObject:targetID]) return YES;
+    if ([ads_preset_daemons() containsObject:targetID]) return YES;
+    if ([targetID isEqualToString:@"com.apple.imagent"]          ||
+        [targetID isEqualToString:@"com.apple.apsd"]             ||
+        [targetID isEqualToString:@"com.apple.identityservicesd"]) return YES;
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES;
     if ([targetID containsString:@"daemon"]) return YES;
     if ([targetID hasPrefix:@"com.apple."] && [targetID hasSuffix:@"d"]) return YES;
@@ -598,15 +615,15 @@ static inline NSString *ads_root_path(NSString *path) {
 }
 
 - (BOOL)isTargetInstalled:(NSString *)targetID {
+    // System processes and preset daemons are always "installed".
     NSArray *coreServices = @[
         @"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd", 
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService", 
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", 
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-        @"imagent", @"apsd", @"identityservicesd"
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
     ];
-    
     if ([coreServices containsObject:targetID]) return YES;
+    if ([ads_preset_daemons() containsObject:targetID]) return YES;
     if (![targetID containsString:@"."] && ![targetID isEqualToString:@"pinterest"]) return YES; 
 
     @try {
@@ -635,6 +652,11 @@ static inline NSString *ads_root_path(NSString *path) {
 
 - (NSString *)displayNameForTargetID:(NSString *)targetID {
     NSDictionary *knownNames = @{
+        @"imagent":            @"imagent (iMessage)",
+        @"IMDPersistenceAgent":@"IMDPersistenceAgent",
+        @"IMTransferAgent":    @"IMTransferAgent (Attachments)",
+        @"apsd":               @"apsd (Push Notifications)",
+        @"identityservicesd":  @"identityservicesd",
         @"com.google.Gmail": @"Gmail", @"com.microsoft.Office.Outlook": @"Outlook",
         @"com.tinyspeck.chatlyio": @"Slack", @"com.microsoft.skype.teams": @"Microsoft Teams",
         @"com.google.chrome.ios": @"Chrome", @"com.brave.ios.browser": @"Brave",
@@ -706,7 +728,7 @@ static inline NSString *ads_root_path(NSString *path) {
             @"imagent", @"apsd", @"identityservicesd"
         ];
         
-        if (![daemons containsObject:targetID]) {
+        if (![daemons containsObject:targetID] && ![ads_preset_daemons() containsObject:targetID]) {
             @try {
                 if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
                     icon = [UIImage _applicationIconImageForBundleIdentifier:targetID format:29 scale:[UIScreen mainScreen].scale];
@@ -759,7 +781,8 @@ static inline NSString *ads_root_path(NSString *path) {
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
     [expandedTargets removeObject:@"DAEMONS_GROUP"];
-    [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"apsd", @"identityservicesd"]];
+    [expandedTargets addObjectsFromArray:ads_preset_daemons()];
+    [expandedTargets addObject:@"com.apple.imagent"];
 
     for (NSString *targetID in expandedTargets) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", targetID];
@@ -889,9 +912,8 @@ static inline NSString *ads_root_path(NSString *path) {
         if (ruleType == 0) {
             if ([targetID isEqualToString:@"DAEMONS_GROUP"]) {
                 NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
-                NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd"];
                 BOOL anyActive = NO;
-                for (NSString *d in daemons) {
+                for (NSString *d in ads_preset_daemons()) {
                     if (![disabled containsObject:d]) {
                         anyActive = YES;
                         break;
