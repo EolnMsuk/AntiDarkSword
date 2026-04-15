@@ -448,61 +448,6 @@ static void reloadPrefsNotification() {
     loadPrefs();
 }
 
-%ctor {
-    NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
-
-    // Fast-fail noisy / unrelated background daemons
-    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight",
-                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
-    if ([ignored containsObject:processName]) return;
-
-    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    // Globally ignore all App Extensions to prevent sandbox read errors
-    if ([path hasSuffix:@".appex"]) return;
-
-    // 1. Path-based whitelist
-    BOOL isUserApp      = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
-    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
-
-    // 2. Service whitelist
-    NSArray *allowedServices = @[
-        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-    ];
-    BOOL isAllowedService = [allowedServices containsObject:bundleID];
-
-    // 3. Manual override check (Roothide patched path)
-    BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
-    if (prefs) {
-        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
-        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
-            isManualOverride = YES;
-        }
-        if (!isManualOverride && bundleID.length > 0) {
-            NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
-            if ([prefs[prefKey] boolValue]) {
-                isManualOverride = YES;
-            } else {
-                NSDictionary *restrictedApps = prefs[@"restrictedApps"];
-                if ([restrictedApps isKindOfClass:[NSDictionary class]] && [restrictedApps[bundleID] boolValue])
-                    isManualOverride = YES;
-            }
-        }
-    }
-
-    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
-
-    loadPrefs();
-    ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
-        (CFNotificationCallback)reloadPrefsNotification,
-        CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
-        NULL, CFNotificationSuspensionBehaviorCoalesce);
-}
-
 // =========================================================
 // WEBKIT EXPLOIT MITIGATIONS & ANTI-FINGERPRINTING
 // =========================================================
@@ -663,3 +608,58 @@ static void reloadPrefsNotification() {
     return %orig;
 }
 %end
+
+%ctor {
+    NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
+
+    // Fast-fail noisy / unrelated background daemons
+    NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight",
+                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
+    if ([ignored containsObject:processName]) return;
+
+    NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
+    // Globally ignore all App Extensions to prevent sandbox read errors
+    if ([path hasSuffix:@".appex"]) return;
+
+    // 1. Path-based whitelist
+    BOOL isUserApp      = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
+    BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
+
+    // 2. Service whitelist
+    NSArray *allowedServices = @[
+        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+    ];
+    BOOL isAllowedService = [allowedServices containsObject:bundleID];
+
+    // 3. Manual override check (Roothide patched path)
+    BOOL isManualOverride = NO;
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:PREFS_PATH];
+    if (prefs) {
+        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+        if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName]) {
+            isManualOverride = YES;
+        }
+        if (!isManualOverride && bundleID.length > 0) {
+            NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
+            if ([prefs[prefKey] boolValue]) {
+                isManualOverride = YES;
+            } else {
+                NSDictionary *restrictedApps = prefs[@"restrictedApps"];
+                if ([restrictedApps isKindOfClass:[NSDictionary class]] && [restrictedApps[bundleID] boolValue])
+                    isManualOverride = YES;
+            }
+        }
+    }
+
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
+
+    loadPrefs();
+    ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
+        (CFNotificationCallback)reloadPrefsNotification,
+        CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
+        NULL, CFNotificationSuspensionBehaviorCoalesce);
+}
