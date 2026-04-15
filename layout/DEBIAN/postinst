@@ -4,8 +4,34 @@ if [ -d /var/jb ]; then
     PREFIX="/var/jb"
 fi
 
-chown root:wheel $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-chmod 644 $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-$PREFIX/usr/bin/launchctl unload $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
-$PREFIX/usr/bin/launchctl load $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
+PLIST_PATH="$PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"
+PREFS_PATH="$PREFIX/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+LAUNCHCTL="$PREFIX/usr/bin/launchctl"
+PLISTBUDDY="$PREFIX/usr/libexec/PlistBuddy"
+
+chown root:wheel "$PLIST_PATH"
+chmod 644 "$PLIST_PATH"
+
+# Always unload first to prevent duplicate entries on upgrade.
+"$LAUNCHCTL" unload "$PLIST_PATH" 2>/dev/null || true
+
+# Only load if both the master toggle and decoy toggle are enabled in prefs.
+MASTER_ENABLED=false
+DECOY_ENABLED=false
+
+if [ -f "$PREFS_PATH" ] && [ -x "$PLISTBUDDY" ]; then
+    VAL_MASTER=$("$PLISTBUDDY" -c "Print :enabled" "$PREFS_PATH" 2>/dev/null)
+    VAL_DECOY=$("$PLISTBUDDY" -c "Print :corelliumDecoyEnabled" "$PREFS_PATH" 2>/dev/null)
+    [ "$VAL_MASTER" = "true" ] && MASTER_ENABLED=true
+    [ "$VAL_DECOY" = "true" ]  && DECOY_ENABLED=true
+else
+    # Fresh install — no prefs exist yet, do not auto-load.
+    MASTER_ENABLED=false
+    DECOY_ENABLED=false
+fi
+
+if [ "$MASTER_ENABLED" = "true" ] && [ "$DECOY_ENABLED" = "true" ]; then
+    "$LAUNCHCTL" load "$PLIST_PATH" 2>/dev/null || true
+fi
+
 exit 0
