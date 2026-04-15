@@ -562,11 +562,16 @@ static inline NSString *ads_root_path(NSString *path) {
     if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16 = ads_is_ios16();
         if ([value boolValue]) {
+            // Disabling JS implies disabling JIT for maximum mitigation coverage.
             if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
                 rules[@"disableJIT"] = @YES;
             } else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
                 rules[@"disableJIT15"] = @YES;
             }
+        } else {
+            // JS re-enabled — clear the JIT flag that was auto-set when JS was disabled.
+            rules[@"disableJIT"]   = @NO;
+            rules[@"disableJIT15"] = @NO;
         }
         
         [defaults setObject:rules forKey:dictKey];
@@ -1201,6 +1206,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+        waitpid(pid, NULL, 0);
     }
 }
 
@@ -1224,6 +1230,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (masterEnabled && decoyEnabled) {
         const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+        waitpid(pid, NULL, 0);
     }
     
     if (level >= 3 || customDaemons.count > 0) {
@@ -1259,10 +1266,8 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     [self flagSaveRequirement];
     
     if ([key isEqualToString:@"selectedUAPreset"]) {
-        if (![defaults boolForKey:@"enabled"]) {
-            [defaults setBool:YES forKey:@"enabled"];
-            [defaults synchronize];
-        }
+        // Reload UI to show/hide the custom UA text field — do not auto-enable
+        // the master switch; the user's enabled/disabled choice is intentional.
         _specifiers = nil;
         [self reloadSpecifiers];
     }
@@ -1300,6 +1305,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         [self setPreferenceValue:value specifier:specifier];
+        // globalDisableJS turned off — clear the JIT flag that was auto-set when it was enabled.
+        if ([key isEqualToString:@"globalDisableJS"]) {
+            NSUserDefaults *defaults = ads_defaults();
+            [defaults setBool:NO forKey:@"globalDisableJIT"];
+            [defaults setBool:NO forKey:@"globalDisableJIT15"];
+            [defaults synchronize];
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
             self->_specifiers = nil;
             [self reloadSpecifiers];
@@ -1349,6 +1361,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
             const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
             posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL);
+            waitpid(pid, NULL, 0);
         }
     }
     
