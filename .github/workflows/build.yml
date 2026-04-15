@@ -54,12 +54,13 @@ jobs:
 
       - name: Compile TrollFools Dylib
         run: |
-          # MAKEFLAGS= prevents BSD make from propagating "-f Makefile.trollfools"
-          # into sub-makes spawned by Theos, which would fail inside subproject dirs.
-          MAKEFLAGS= make -f Makefile.trollfools clean
-          MAKEFLAGS= make -f Makefile.trollfools FINALPACKAGE=1
+          # Build directly inside the subproject directory so no "-f" flag
+          # is ever present in MAKEFLAGS for any make invocation.
+          cd AntiDarkSwordTF
+          make clean ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:14.5"
+          make FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:14.5"
           DYLIB=$(find .theos/obj -name "AntiDarkSword.dylib" | head -1)
-          cp "$DYLIB" output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib
+          cp "$DYLIB" ../output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib
 
       - name: Upload All Artifacts
         uses: actions/upload-artifact@v4
