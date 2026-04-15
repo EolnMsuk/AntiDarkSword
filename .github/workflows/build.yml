@@ -41,7 +41,7 @@ jobs:
           cp -r vendor/AltList.framework $THEOS/lib/
           install_name_tool -id /Library/Frameworks/AltList.framework/AltList $THEOS/lib/AltList.framework/AltList
           make package FINALPACKAGE=1
-          mv packages/*.deb output/com.eoln.antidarksword_${{ env.VERSION }}_iphoneos-arm.deb
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm.deb
 
       - name: Compile Rootless
         run: |
@@ -50,7 +50,7 @@ jobs:
           cp -r vendor/AltList.framework $THEOS/lib/
           install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList $THEOS/lib/AltList.framework/AltList
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
-          mv packages/*.deb output/com.eoln.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
 
       - name: Compile TrollFools Dylib
         run: |
