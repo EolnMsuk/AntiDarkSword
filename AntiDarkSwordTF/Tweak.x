@@ -718,7 +718,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
     
     UILabel *masterLabel            = [[UILabel alloc] init];
     masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text                = @"Protection Enabled";
+    masterLabel.text                = @"Enable Protection";
     masterLabel.font                = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor           = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
