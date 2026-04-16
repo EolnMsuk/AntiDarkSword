@@ -13,7 +13,7 @@ Injected per-app. All mitigations apply only inside the app you injected into.
 | Mitigation | Default | Notes |
 |---|---|---|
 | **Spoof User Agent** | ON | Masks browser fingerprint used by DarkSword & Coruna to profile targets |
-| **Block JIT** | ON | iOS 16+ uses `lockdownModeEnabled`; iOS 15 uses `_WKProcessPoolConfiguration.JITEnabled` |
+| **Block JIT** | ON | iOS 16+: sets `lockdownModeEnabled = YES` **and** `_WKProcessPoolConfiguration.JITEnabled = NO` (dual-path). iOS 15: `JITEnabled = NO` only |
 | **Block JavaScript** | OFF | Breaks most apps — opt in explicitly. Enabling JS block auto-enables JIT block |
 | **Block Media Autoplay** | OFF | Stops drive-by audio/video loading inside WebViews |
 | **Block WebGL & WebRTC** | OFF | Disables GPU and peer-connection APIs used by some exploit kits |
@@ -27,11 +27,11 @@ The dylib is sandboxed to the injected app and has no system-level access. These
 
 | Feature | Jailbreak | TrollFools |
 |---|---|---|
-| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | ✅ | ❌ — daemon injection requires jailbreak |
+| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | ✅ | ❌ — TrollFools cannot inject into system daemons; `IMFileTransfer` hooks are intentionally absent from this build |
 | Corellium Honeypot (file-path spoofing + `corelliumd` process) | ✅ | ❌ — needs POSIX hook installation and LaunchDaemon |
 | System-wide auto-protection tiers (Level 1/2/3) | ✅ | ❌ — no PreferenceLoader; settings are per-app in-overlay |
 | Settings.app preferences UI | ✅ | ❌ — replaced by in-app three-finger double-tap overlay |
-| MobileSubstrate / ElleKit | ✅ | ❌ — not used; hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
+| MobileSubstrate / ElleKit | required | ❌ — not used; hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
 | Protects all apps at once | ✅ | ❌ — you inject per-app via TrollFools |
 
 ---
@@ -64,7 +64,7 @@ There is no Settings.app UI for the TrollFools build. Settings are configured in
 **Double-tap with three fingers** anywhere on screen → the AntiDarkSword overlay appears.
 
 The overlay shows:
-- **Protection Enabled** master toggle (defaults OFF — tap to activate)
+- **Enable Protection** master toggle (defaults OFF — tap to activate). The row background is **green** when protection is ON and **red** when OFF, making the active state immediately obvious at a glance.
 - Per-feature toggles for UA spoof, JIT, JS, media, WebRTC, and file access
 - **Save & Restart** — writes settings and prompts to restart the app so WebKit picks up the new configuration
 

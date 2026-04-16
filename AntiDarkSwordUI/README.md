@@ -23,10 +23,14 @@ App Extensions (`.appex` bundles) and known noisy background processes (`cfprefs
 
 Prevents the WebKit JavaScript engine from using the Just-In-Time compiler, which is the execution primitive that most browser exploits rely on.
 
-- **iOS 16+**: Sets `WKWebpagePreferences.lockdownModeEnabled = YES` — the same mechanism the system uses for Lockdown Mode.
-- **iOS 15**: Sets `_WKProcessPoolConfiguration.JITEnabled = NO` via the private process pool configuration API.
+- **iOS 16+**: Sets `WKWebpagePreferences.lockdownModeEnabled = YES` (the same mechanism the system uses for Lockdown Mode) **and** additionally sets `_WKProcessPoolConfiguration.JITEnabled = NO` via the private process pool API. Both mechanisms are applied together for maximum coverage — lockdown mode is the primary path; the pool config is a belt-and-suspenders fallback.
+- **iOS 15**: Sets `_WKProcessPoolConfiguration.JITEnabled = NO` via the private process pool configuration API only (lockdown mode is not available).
 
 Both paths are applied via `WKWebViewConfiguration` at the moment a `WKWebView` is initialized, so they take effect before any page loads.
+
+Two additional setter hooks prevent an exploit (or the host app) from re-enabling JIT after the tweak has disabled it:
+- `WKWebpagePreferences -setLockdownModeEnabled:` — if `applyDisableJIT` is set and the caller tries to pass `NO`, the call is silently dropped.
+- `_WKProcessPoolConfiguration -setJITEnabled:` — if either `applyDisableJIT` or `applyDisableJIT15` is set and the caller tries to pass `YES`, the call is silently dropped.
 
 ### JavaScript Blocking
 

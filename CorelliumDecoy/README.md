@@ -101,6 +101,17 @@ The file-path hooks in `AntiDarkSwordDaemon` are installed unconditionally (so l
 
 If any condition is false the hooks call through to the real `access`/`stat`/`lstat` with zero overhead.
 
+### Why all four daemons must be active
+
+The `currentProcessRestricted` flag is evaluated per-process — each daemon independently computes whether it is active. The POSIX hooks intercept filesystem calls only from within a daemon where the tweak is running. This means:
+
+- An exploit that calls `access("/usr/libexec/corelliumd")` from within **`imagent`** will only see the spoofed result if `imagent` has the tweak active.
+- Having only `apsd` enabled but `imagent` disabled means calls from `imagent` context are **not** intercepted.
+
+Because zero-click iMessage exploits typically execute inside `imagent` or `IMDPersistenceAgent`, disabling any daemon reduces spoofing coverage for payloads delivered through that vector.
+
+**For this reason, toggling the Corellium Honeypot ON in the Settings UI automatically re-enables all four daemons** (`imagent`, `apsd`, `identityservicesd`, `IMDPersistenceAgent`) and grays out their individual toggle switches while the honeypot remains active. This ensures complete coverage regardless of which daemon a payload targets.
+
 ---
 
 ## What payloads actually see
