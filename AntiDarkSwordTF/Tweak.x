@@ -38,27 +38,12 @@
 @end
 
 // =========================================================
-// PRIVATE INTERFACES — iMessage transfer / preview blocking
-// NOTE: IMCore and ChatKit are weak-linked (-Wl,-weak_framework) so the dylib
-//       loads safely in apps that don't bundle them. Hooks only fire when
-//       TrollFools places the dylib inside MobileSMS (or another iMessage
-//       UI process), where both frameworks are actually loaded.
-// =========================================================
-@interface IMFileTransfer : NSObject
-- (BOOL)isAutoDownloadable;
-- (BOOL)canAutoDownload;
-@end
-
-@interface CKAttachmentMessagePartChatItem : NSObject
-- (BOOL)_needsPreviewGeneration;
-@end
-
-// =========================================================
 // PREFERENCES
 // Shares the same domain as the jailbreak tweak so settings
 // written by the prefs bundle (if also installed) are honoured
 // here without any extra plumbing.
 // =========================================================
+
 static BOOL isRootlessJB = NO;
 
 static NSString *ads_prefs_path(void) {
@@ -76,7 +61,7 @@ static _Atomic BOOL applyDisableJS           = NO;
 static _Atomic BOOL applyDisableMedia        = NO;
 static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
-static _Atomic BOOL applyDisableIMessageDL   = NO;
+
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
 static NSString *customUAString = nil;
@@ -122,6 +107,7 @@ static void injectUAScript(WKUserContentController *ucc) {
                       [customUAString containsString:@"iPad"]   ||
                       [customUAString containsString:@"Android"];
     NSString *uadMobile   = isMobileUA ? @"true" : @"false";
+
     NSString *uadPlatform = @"\"iOS\"";
     if ([customUAString containsString:@"Macintosh"])    uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"]) uadPlatform = @"\"Windows\"";
@@ -150,7 +136,7 @@ static void injectUAScript(WKUserContentController *ucc) {
 // =========================================================
 // PREFERENCES I/O
 // On a non-jailbroken TrollStore device the injected app is sandboxed and
-// cannot write to /var/mobile/Library/Preferences/.  We try that path first
+// cannot write to /var/mobile/Library/Preferences/. We try that path first
 // (works for jailbroken users), then fall back to NSUserDefaults with a suite
 // name, which always succeeds because it writes to the app's own container.
 // =========================================================
@@ -188,7 +174,7 @@ static void ads_write_prefs(NSDictionary *prefs) {
     NSString *path = ads_prefs_path();
     NSString *dir  = [path stringByDeletingLastPathComponent];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
-                                withIntermediateDirectories:YES
+                              withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
     if ([prefs writeToFile:path atomically:YES]) return;
@@ -196,10 +182,12 @@ static void ads_write_prefs(NSDictionary *prefs) {
     // 2. Sandboxed fallback: NSUserDefaults suite in the app's own container.
     //    Wipes then rewrites so deleted keys don't linger.
     NSUserDefaults *ud = [[NSUserDefaults alloc] initWithSuiteName:kADSTFSuite];
+    
     // Remove any keys not in the new dict (handles deletions / master disable).
     for (NSString *existing in [[ud dictionaryRepresentation] allKeys]) {
         if (!prefs[existing]) [ud removeObjectForKey:existing];
     }
+    
     [prefs enumerateKeysAndObjectsUsingBlock:^(NSString *key, id obj, BOOL *stop) {
         [ud setObject:obj forKey:key];
     }];
@@ -241,17 +229,16 @@ static void loadPrefs() {
     id enabledVal = prefs[@"enabled"];
     if (enabledVal && [enabledVal respondsToSelector:@selector(boolValue)])
         masterEnabled = [enabledVal boolValue];
-
+        
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
-            applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
-            applyDisableIMessageDL = NO;
+            applyDisableMedia = applyDisableRTC = applyDisableFileAccess = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
         return;
     }
 
     BOOL isIOS16 = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-
+    
     // Per-app rules from TargetRules_<bundleID> take priority over global keys.
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *dictKey  = [NSString stringWithFormat:@"TargetRules_%@", bundleID];
@@ -271,16 +258,12 @@ static void loadPrefs() {
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
     applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", NO);
-    // iMessage auto-download blocking: only meaningful in MobileSMS and related
-    // iMessage UI processes. Default ON so protection is active immediately when
-    // the dylib is injected into one of those apps.
-    applyDisableIMessageDL =            ads_read_bool(rules, prefs, @"disableIMessageDL", @"globalDisableIMessageDL", YES);
 
     // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
                            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
                            "Version/18.0 Mobile/15E148 Safari/604.1";
-
+                           
     id presetRaw = prefs[@"selectedUAPreset"];
     NSString *selectedUA = [presetRaw isKindOfClass:[NSString class]] ? presetRaw : nil;
     if (!selectedUA || [selectedUA isEqualToString:@"NONE"]) selectedUA = defaultUA;
@@ -301,19 +284,19 @@ static void loadPrefs() {
     id globalUAVal = prefs[@"globalUASpoofingEnabled"];
     if (globalUAVal && [globalUAVal respondsToSelector:@selector(boolValue)])
         globalUA = [globalUAVal boolValue];
-
+        
     BOOL uaRule = YES; // TrollFools default
     id uaRuleVal = rules[@"spoofUA"];
     if (uaRuleVal && [uaRuleVal respondsToSelector:@selector(boolValue)])
         uaRule = [uaRuleVal boolValue];
-
+        
     shouldSpoofUA = (globalUA || uaRule) && customUAString.length > 0;
 
     ADSLog(@"[STATUS] TrollFools protection ACTIVE in %@. "
-           "JIT:%d Media:%d RTC:%d FileAccess:%d iMsgDL:%d UA:%d",
+           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d",
            bundleID,
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
-           (int)applyDisableFileAccess, (int)applyDisableIMessageDL, (int)shouldSpoofUA);
+           (int)applyDisableFileAccess, (int)shouldSpoofUA);
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -331,7 +314,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
-
+    
     if (applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)])
             configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
@@ -426,6 +409,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     }
     if (shouldSpoofUA) {
         if ([self respondsToSelector:@selector(setCustomUserAgent:)]) self.customUserAgent = customUAString;
+        
         if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
             NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
             if (existingUA && ![existingUA isEqualToString:customUAString]) {
@@ -447,6 +431,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     }
     if (shouldSpoofUA && [self respondsToSelector:@selector(setCustomUserAgent:)])
         self.customUserAgent = customUAString;
+        
     return %orig;
 }
 
@@ -532,37 +517,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 %end
 
 // =========================================================
-// iMESSAGE UI-LAYER MITIGATIONS
-// Active when TrollFools places the dylib in MobileSMS or a related
-// iMessage UI process. IMCore and ChatKit are weak-linked so the dylib
-// loads safely in apps that don't bundle them — hooks simply won't fire.
-// =========================================================
-
-%hook IMFileTransfer
-- (BOOL)isAutoDownloadable {
-    if (applyDisableIMessageDL) {
-        ADSLog(@"[MITIGATION] Blocked auto-download of iMessage file transfer (TF layer).");
-        return NO;
-    }
-    return %orig;
-}
-- (BOOL)canAutoDownload {
-    if (applyDisableIMessageDL) {
-        ADSLog(@"[MITIGATION] Denied canAutoDownload for iMessage transfer (TF layer).");
-        return NO;
-    }
-    return %orig;
-}
-%end
-
-%hook CKAttachmentMessagePartChatItem
-- (BOOL)_needsPreviewGeneration {
-    if (applyDisableIMessageDL) return NO;
-    return %orig;
-}
-%end
-
-// =========================================================
 // IN-APP SETTINGS OVERLAY
 // Three-finger double-tap on any screen → modal settings panel
 // where the user can toggle per-app protections and save.
@@ -596,19 +550,19 @@ static UIViewController *ads_top_vc(UIViewController *root) {
 }
 
 // ---- Row model ----
-// Each entry drives one table row.  The "enabled" key controls whether the row
+// Each entry drives one table row. The "enabled" key controls whether the row
 // is interactive — grayed-out rows are shown but not actionable because the
 // underlying API doesn't exist on this iOS version.
 static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
     NSMutableArray *rows = [NSMutableArray array];
-
+    
     // 1. Spoof User Agent — works on all versions.
     [rows addObject:@{@"title":   @"Spoof User Agent",
                       @"detail":  @"Masks the real browser fingerprint",
                       @"key":     @"spoofUA",
                       @"enabled": @YES}];
-
+                      
     // 2. Block JIT — mechanism differs by iOS version:
     //      iOS 16+  → WKWebpagePreferences lockdownModeEnabled  (reliable)
     //      iOS 15   → _WKProcessPoolConfiguration.JITEnabled    (private API, best-effort)
@@ -636,34 +590,21 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
                       @"detail":  @"Prevents JS execution in WebViews",
                       @"key":     @"disableJS",
                       @"enabled": @YES}];
+                      
     [rows addObject:@{@"title":   @"Block Media Autoplay",
                       @"detail":  @"Stops drive-by audio/video loading",
                       @"key":     @"disableMedia",
                       @"enabled": @YES}];
+                      
     [rows addObject:@{@"title":   @"Block WebGL / WebRTC",
                       @"detail":  @"Disables GPU and peer-connection APIs",
                       @"key":     @"disableRTC",
                       @"enabled": @YES}];
+                      
     [rows addObject:@{@"title":   @"Block file:// Access",
                       @"detail":  @"Prevents local file exfiltration",
                       @"key":     @"disableFileAccess",
                       @"enabled": @YES}];
-
-    // 7. iMessage attachment blocking — only relevant inside MobileSMS and
-    //    related iMessage UI processes. Hide the row in other apps since the
-    //    IMFileTransfer hooks won't fire there.
-    NSString *currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSArray *iMessageUIProcesses = @[
-        @"com.apple.MobileSMS",
-        @"com.apple.iMessageAppsViewService",
-        @"com.apple.ActivityMessagesApp"
-    ];
-    if ([iMessageUIProcesses containsObject:currentBundleID]) {
-        [rows addObject:@{@"title":   @"Block iMessage Auto-Download",
-                          @"detail":  @"Blocks attachment auto-download in Messages",
-                          @"key":     @"disableIMessageDL",
-                          @"enabled": @YES}];
-    }
 
     return rows;
 }
@@ -675,8 +616,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     if ([key isEqualToString:@"spoofUA"])           return YES;
     if ([key isEqualToString:@"disableJIT"])        return YES;
     if ([key isEqualToString:@"disableJIT15"])      return YES;
-    // iMessage DL blocking defaults ON — low breakage, high security value.
-    if ([key isEqualToString:@"disableIMessageDL"]) return YES;
     // JS, media, RTC, file access all off — user opts in explicitly.
     return NO;
 }
@@ -698,19 +637,20 @@ static BOOL ads_default_value_for_key(NSString *key) {
 
 - (instancetype)init {
     if (!(self = [super init])) return nil;
-
+    
     self.bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows     = ads_tf_setting_rows();
 
     NSDictionary *prefs   = ads_read_prefs();
     self.pendingPrefs      = prefs ? [prefs mutableCopy] : [NSMutableDictionary dictionary];
-
+    
     NSString *rulesKey    = [NSString stringWithFormat:@"TargetRules_%@", self.bundleID];
     NSDictionary *existing = self.pendingPrefs[rulesKey];
+    
     self.pendingRules      = [existing isKindOfClass:[NSDictionary class]]
                              ? [existing mutableCopy]
                              : [NSMutableDictionary dictionary];
-
+                             
     // Mirror the current JS state so the JIT row opens in the right locked/unlocked state.
     id savedJS     = self.pendingRules[@"disableJS"];
     self.jsLocked  = savedJS ? [savedJS boolValue] : ads_default_value_for_key(@"disableJS");
@@ -739,13 +679,14 @@ static BOOL ads_default_value_for_key(NSString *key) {
     card.backgroundColor        = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
     card.layer.cornerRadius     = 18;
     card.layer.masksToBounds    = YES;
+    
     // Subtle drop shadow on the card's parent so it punches through the blur.
     card.layer.shadowColor      = [UIColor blackColor].CGColor;
     card.layer.shadowOpacity    = 0.45;
     card.layer.shadowRadius     = 16;
     card.layer.shadowOffset     = CGSizeMake(0, 6);
     [self.view addSubview:card];
-
+    
     // --- Header ---
     UILabel *titleLabel                 = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -754,7 +695,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
     titleLabel.textColor                = [UIColor whiteColor];
     titleLabel.textAlignment            = NSTextAlignmentCenter;
     [card addSubview:titleLabel];
-
+    
     UILabel *subLabel                   = [[UILabel alloc] init];
     subLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subLabel.text                       = self.bundleID;
@@ -764,34 +705,41 @@ static BOOL ads_default_value_for_key(NSString *key) {
     subLabel.adjustsFontSizeToFitWidth  = YES;
     subLabel.minimumScaleFactor         = 0.7;
     [card addSubview:subLabel];
-
+    
     // --- Master enabled row ---
     UIView *masterRow               = [[UIView alloc] init];
     masterRow.translatesAutoresizingMaskIntoConstraints = NO;
-    masterRow.backgroundColor       = [UIColor colorWithWhite:0.17 alpha:1];
     [card addSubview:masterRow];
-
+    
     UIView *separator = [[UIView alloc] init];
     separator.translatesAutoresizingMaskIntoConstraints = NO;
     separator.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
     [masterRow addSubview:separator];
-
+    
     UILabel *masterLabel            = [[UILabel alloc] init];
     masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text                = @"Protection Enabled";
+    masterLabel.text                = @"Enable Protection";
     masterLabel.font                = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor           = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
-
+    
     UISwitch *masterSwitch          = [[UISwitch alloc] init];
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor        = [UIColor systemGreenColor];
     masterSwitch.tag                = NSIntegerMax; // sentinel for master switch
+    
     id masterVal                    = self.pendingPrefs[@"enabled"];
-    masterSwitch.on                 = masterVal ? [masterVal boolValue] : NO;
+    BOOL isMasterEnabled            = masterVal ? [masterVal boolValue] : NO;
+    masterSwitch.on                 = isMasterEnabled;
+    
+    // Set initial background color: dark green if ON, dark red if OFF
+    masterRow.backgroundColor = isMasterEnabled 
+        ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
+        : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
-
+    
     // --- Table view for per-feature toggles ---
     self.tableView                       = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -804,18 +752,18 @@ static BOOL ads_default_value_for_key(NSString *key) {
     self.tableView.bounces               = NO;
     self.tableView.tableFooterView       = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 1)];
     [card addSubview:self.tableView];
-
+    
     // --- Buttons ---
     UIView *buttonBar               = [[UIView alloc] init];
     buttonBar.translatesAutoresizingMaskIntoConstraints = NO;
     buttonBar.backgroundColor       = [UIColor colorWithWhite:0.15 alpha:1];
     [card addSubview:buttonBar];
-
+    
     UIView *btnSep                  = [[UIView alloc] init];
     btnSep.translatesAutoresizingMaskIntoConstraints = NO;
     btnSep.backgroundColor          = [UIColor colorWithWhite:0.25 alpha:1];
     [buttonBar addSubview:btnSep];
-
+    
     UIButton *cancelBtn             = [UIButton buttonWithType:UIButtonTypeSystem];
     cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
@@ -831,13 +779,13 @@ static BOOL ads_default_value_for_key(NSString *key) {
     saveBtn.titleLabel.font         = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     [saveBtn addTarget:self action:@selector(saveAndRestart) forControlEvents:UIControlEventTouchUpInside];
     [buttonBar addSubview:saveBtn];
-
+    
     // --- Divider between cancel/save ---
     UIView *btnDivider              = [[UIView alloc] init];
     btnDivider.translatesAutoresizingMaskIntoConstraints = NO;
     btnDivider.backgroundColor      = [UIColor colorWithWhite:0.28 alpha:1];
     [buttonBar addSubview:btnDivider];
-
+    
     // --- Auto Layout ---
     CGFloat rowH  = 52.0;
     CGFloat maxTH = rowH * (CGFloat)self.rows.count; // table height, scrolls if needed
@@ -864,10 +812,13 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [masterRow.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [masterRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [masterRow.heightAnchor   constraintEqualToConstant:52],
+        
         [masterLabel.leadingAnchor  constraintEqualToAnchor:masterRow.leadingAnchor constant:16],
         [masterLabel.centerYAnchor  constraintEqualToAnchor:masterRow.centerYAnchor],
+        
         [masterSwitch.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor constant:-16],
         [masterSwitch.centerYAnchor  constraintEqualToAnchor:masterRow.centerYAnchor],
+        
         // Bottom separator line on master row
         [separator.leadingAnchor  constraintEqualToAnchor:masterRow.leadingAnchor],
         [separator.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor],
@@ -875,7 +826,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [separator.heightAnchor   constraintEqualToConstant:0.5],
 
         // Table view
-        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor],
+        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
         [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
@@ -886,20 +837,24 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [buttonBar.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [buttonBar.bottomAnchor   constraintEqualToAnchor:card.bottomAnchor],
         [buttonBar.heightAnchor   constraintEqualToConstant:54],
+        
         // Top separator on button bar
         [btnSep.topAnchor    constraintEqualToAnchor:buttonBar.topAnchor],
         [btnSep.leadingAnchor constraintEqualToAnchor:buttonBar.leadingAnchor],
         [btnSep.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
         [btnSep.heightAnchor  constraintEqualToConstant:0.5],
+        
         // Cancel left, Save right, vertical divider between
         [cancelBtn.leadingAnchor  constraintEqualToAnchor:buttonBar.leadingAnchor],
         [cancelBtn.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
         [cancelBtn.bottomAnchor   constraintEqualToAnchor:buttonBar.bottomAnchor],
         [cancelBtn.widthAnchor    constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
+        
         [saveBtn.trailingAnchor   constraintEqualToAnchor:buttonBar.trailingAnchor],
         [saveBtn.topAnchor        constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
         [saveBtn.bottomAnchor     constraintEqualToAnchor:buttonBar.bottomAnchor],
         [saveBtn.widthAnchor      constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
+        
         [btnDivider.centerXAnchor constraintEqualToAnchor:buttonBar.centerXAnchor],
         [btnDivider.topAnchor     constraintEqualToAnchor:buttonBar.topAnchor constant:10],
         [btnDivider.bottomAnchor  constraintEqualToAnchor:buttonBar.bottomAnchor constant:-10],
@@ -923,7 +878,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
 
     NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
     NSString     *key = row[@"key"];
-
+    
     // A row is interactive if the iOS API exists AND it isn't locked by JS being on.
     BOOL isJITRow    = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
     BOOL rowEnabled  = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
@@ -954,6 +909,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = sw;
     }
+    
     sw.tag     = indexPath.row;
     sw.enabled = rowEnabled;
     sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
@@ -978,18 +934,25 @@ static BOOL ads_default_value_for_key(NSString *key) {
     if (sender.tag == NSIntegerMax) {
         // Master toggle
         self.pendingPrefs[@"enabled"] = @(sender.on);
+        
+        // Animate the background color change
+        [UIView animateWithDuration:0.25 animations:^{
+            sender.superview.backgroundColor = sender.on 
+                ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
+                : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        }];
         return;
     }
 
     NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
     self.pendingRules[key] = @(sender.on);
-
+    
     // When JS is toggled, cascade to the JIT row:
     //   JS ON  → lock JIT on (JIT is meaningless without JS; force it enabled, grey it out)
     //   JS OFF → unlock JIT and turn it off (let the user decide independently)
     if ([key isEqualToString:@"disableJS"]) {
         self.jsLocked = sender.on;
-
+        
         // Find the JIT row regardless of which key name it uses.
         NSInteger jitIdx = -1;
         for (NSUInteger i = 0; i < self.rows.count; i++) {
@@ -1004,7 +967,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
             NSString *jitKey       = self.rows[(NSUInteger)jitIdx][@"key"];
             // Force JIT ON when JS is disabled; turn it OFF when JS is re-enabled.
             self.pendingRules[jitKey] = @(sender.on);
-
+            
             NSIndexPath *jitPath = [NSIndexPath indexPathForRow:(NSInteger)jitIdx inSection:0];
             [self.tableView reloadRowsAtIndexPaths:@[jitPath]
                                   withRowAnimation:UITableViewRowAnimationNone];
@@ -1024,7 +987,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
     // Write TargetRules back, then flush the full plist.
     NSString *rulesKey       = [NSString stringWithFormat:@"TargetRules_%@", self.bundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-
+    
     // ads_write_prefs tries the system path first, falls back to NSUserDefaults
     // suite — the fallback always succeeds on sandboxed TrollStore devices.
     ads_write_prefs(self.pendingPrefs);
@@ -1033,7 +996,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);
-
+                                         
     [self dismissViewControllerAnimated:YES completion:^{
         UIAlertController *alert = [UIAlertController
             alertControllerWithTitle:@"Settings Saved"
@@ -1045,6 +1008,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
                                                 handler:^(UIAlertAction *a) {
             exit(0);
         }]];
+        
         [alert addAction:[UIAlertAction actionWithTitle:@"Later"
                                                   style:UIAlertActionStyleCancel
                                                 handler:nil]];
@@ -1062,7 +1026,7 @@ static void ads_show_settings_overlay(void) {
     UIWindow       *win  = ads_key_window();
     UIViewController *top = win ? ads_top_vc(win.rootViewController) : nil;
     if (!top) return;
-
+    
     // Don't stack multiple overlays
     if ([top isKindOfClass:[ADSTFSettingsViewController class]]) return;
 
@@ -1096,10 +1060,11 @@ static void ads_show_settings_overlay(void) {
 
 static void ads_install_settings_gesture_on_window(UIWindow *win) {
     if (!win || ads_gesture_installed) return;
-
+    
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSTFGestureHandler shared]
                 action:@selector(handleTap:)];
+                
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
@@ -1129,7 +1094,7 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
     ADSLog(@"[INIT] AntiDarkSword (TrollFools) loaded into: %@ (%@)",
            [[NSProcessInfo processInfo] processName],
            [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown");
-
+           
     // Listen for preference changes posted by the jailbreak prefs bundle,
     // or by any tool that writes to the same Darwin notification center.
     CFNotificationCenterAddObserver(
@@ -1137,7 +1102,7 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
         (CFNotificationCallback)reloadPrefsNotification,
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
         NULL, CFNotificationSuspensionBehaviorCoalesce);
-
+        
     // Gesture is installed via %hook UIWindow makeKeyAndVisible — no additional
     // setup needed here. The hook fires on the main window before any user
     // interaction can happen, so the gesture is always ready in time.
