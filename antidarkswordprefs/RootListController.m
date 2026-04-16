@@ -218,14 +218,19 @@ static NSDictionary *ads_daemon_alias_map(void) {
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
 
-        // Master "All Daemons" toggle
-        PSSpecifier *masterSpec = [PSSpecifier preferenceSpecifierNamed:@"All Daemons" target:self set:@selector(setAllDaemonsEnabled:specifier:) get:@selector(getAllDaemonsEnabled:) detail:nil cell:PSSwitchCell edit:nil];
-        [specs addObject:masterSpec];
+        NSUserDefaults *defaults = ads_defaults();
+        BOOL corelliumEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
+            
+            // Grey out apsd if Corellium Honeypot is enabled
+            if ([daemon isEqualToString:@"apsd"] && corelliumEnabled) {
+                [spec setProperty:@NO forKey:@"enabled"];
+            }
+            
             [specs addObject:spec];
         }
 
@@ -240,48 +245,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
         _specifiers = [specs copy];
     }
     return _specifiers;
-}
-
-- (id)getAllDaemonsEnabled:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults();
-    NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
-    NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
-    for (NSString *d in daemons) {
-        if ([disabled containsObject:d]) return @NO;
-    }
-    return @YES;
-}
-
-- (void)setAllDaemonsEnabled:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults();
-    NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
-    NSDictionary *aliasMap = ads_daemon_alias_map();
-    NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
-
-    if ([value boolValue]) {
-        for (NSString *d in daemons) {
-            [disabled removeObject:d];
-            NSString *bundleAlias = aliasMap[d];
-            if (bundleAlias) [disabled removeObject:bundleAlias];
-        }
-    } else {
-        for (NSString *d in daemons) {
-            if (![disabled containsObject:d]) [disabled addObject:d];
-            NSString *bundleAlias = aliasMap[d];
-            if (bundleAlias && ![disabled containsObject:bundleAlias]) [disabled addObject:bundleAlias];
-        }
-    }
-
-    [defaults setObject:disabled forKey:@"disabledPresetRules"];
-    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
-    [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-    [defaults synchronize];
-    ads_post_notification();
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self->_specifiers = nil;
-        [self reloadSpecifiers];
-    });
 }
 
 - (id)getDaemonEnabled:(PSSpecifier *)spec {
@@ -311,12 +274,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
     [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     [defaults synchronize];
     ads_post_notification();
-
-    // Reload so the master "All Daemons" switch reflects the new aggregate state.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        self->_specifiers = nil;
-        [self reloadSpecifiers];
-    });
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -335,6 +292,25 @@ static NSDictionary *ads_daemon_alias_map(void) {
     BOOL decoyEnabled = [value boolValue];
 
     [defaults setBool:decoyEnabled forKey:@"corelliumDecoyEnabled"];
+    
+    // Auto-enable 'apsd' when Corellium is toggled on
+    if (decoyEnabled) {
+        NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+        BOOL changed = NO;
+        if ([disabled containsObject:@"apsd"]) {
+            [disabled removeObject:@"apsd"];
+            changed = YES;
+        }
+        if ([disabled containsObject:@"com.apple.apsd"]) {
+            [disabled removeObject:@"com.apple.apsd"];
+            changed = YES;
+        }
+        if (changed) {
+            [defaults setObject:disabled forKey:@"disabledPresetRules"];
+            [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+        }
+    }
+
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults synchronize];
 
@@ -353,6 +329,12 @@ static NSDictionary *ads_daemon_alias_map(void) {
     }
 
     ads_post_notification();
+    
+    // Reload UI to reflect the greyed-out state of apsd
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
 }
 @end
 
