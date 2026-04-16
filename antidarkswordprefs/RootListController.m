@@ -71,7 +71,21 @@ static inline UIColor *ads_color_red(void) {
 }
 
 static inline NSString *ads_root_path(NSString *path) {
-    return [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"] ? [NSString stringWithFormat:@"/var/jb%@", path] : path;
+    // Roothide: jbroot() remaps paths to the correct per-process prefix.
+    // dlsym lookup is cached after the first call.
+    static void *jbrootFn = NULL;
+    static dispatch_once_t jbrootOnce;
+    dispatch_once(&jbrootOnce, ^{ jbrootFn = dlsym(RTLD_DEFAULT, "jbroot"); });
+    if (jbrootFn) {
+        typedef char *(*jbroot_fn)(const char *);
+        char *resolved = ((jbroot_fn)jbrootFn)(path.UTF8String);
+        if (resolved) return @(resolved);
+    }
+    // Rootless: /var/jb prefix.
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/"])
+        return [NSString stringWithFormat:@"/var/jb%@", path];
+    // Rootful: no prefix.
+    return path;
 }
 
 // ==========================================

@@ -38,6 +38,22 @@
 @end
 
 // =========================================================
+// PRIVATE INTERFACES — iMessage transfer / preview blocking
+// NOTE: IMCore and ChatKit are weak-linked (-Wl,-weak_framework) so the dylib
+//       loads safely in apps that don't bundle them. Hooks only fire when
+//       TrollFools places the dylib inside MobileSMS (or another iMessage
+//       UI process), where both frameworks are actually loaded.
+// =========================================================
+@interface IMFileTransfer : NSObject
+- (BOOL)isAutoDownloadable;
+- (BOOL)canAutoDownload;
+@end
+
+@interface CKAttachmentMessagePartChatItem : NSObject
+- (BOOL)_needsPreviewGeneration;
+@end
+
+// =========================================================
 // PREFERENCES
 // Shares the same domain as the jailbreak tweak so settings
 // written by the prefs bundle (if also installed) are honoured
@@ -52,14 +68,15 @@ static NSString *ads_prefs_path(void) {
 }
 
 // All mutable state is _Atomic: hooks can fire on any thread.
-static _Atomic BOOL prefsLoaded            = NO;
-static _Atomic BOOL shouldSpoofUA          = NO;
-static _Atomic BOOL applyDisableJIT        = NO;
-static _Atomic BOOL applyDisableJIT15      = NO;
-static _Atomic BOOL applyDisableJS         = NO;
-static _Atomic BOOL applyDisableMedia      = NO;
-static _Atomic BOOL applyDisableRTC        = NO;
-static _Atomic BOOL applyDisableFileAccess = NO;
+static _Atomic BOOL prefsLoaded              = NO;
+static _Atomic BOOL shouldSpoofUA            = NO;
+static _Atomic BOOL applyDisableJIT          = NO;
+static _Atomic BOOL applyDisableJIT15        = NO;
+static _Atomic BOOL applyDisableJS           = NO;
+static _Atomic BOOL applyDisableMedia        = NO;
+static _Atomic BOOL applyDisableRTC          = NO;
+static _Atomic BOOL applyDisableFileAccess   = NO;
+static _Atomic BOOL applyDisableIMessageDL   = NO;
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
 static NSString *customUAString = nil;
@@ -100,6 +117,16 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString hasPrefix:@"Mozilla/"]) appVersion = [customUAString substringFromIndex:8];
     NSString *jsonAppVersion = adsJSONStringLiteral(appVersion);
 
+    // UA Client Hints (navigator.userAgentData) — iOS 16+ Safari 16+.
+    BOOL isMobileUA = [customUAString containsString:@"iPhone"] ||
+                      [customUAString containsString:@"iPad"]   ||
+                      [customUAString containsString:@"Android"];
+    NSString *uadMobile   = isMobileUA ? @"true" : @"false";
+    NSString *uadPlatform = @"\"iOS\"";
+    if ([customUAString containsString:@"Macintosh"])    uadPlatform = @"\"macOS\"";
+    else if ([customUAString containsString:@"Windows"]) uadPlatform = @"\"Windows\"";
+    else if ([customUAString containsString:@"Android"]) uadPlatform = @"\"Android\"";
+
     NSString *jsSource = [NSString stringWithFormat:
         @"(function(){"
          "var d=Object.defineProperty,n=navigator;"
@@ -107,8 +134,11 @@ static void injectUAScript(WKUserContentController *ucc) {
          "d(n,'appVersion', {get:function(){return %@},configurable:true});"
          "d(n,'platform',   {get:function(){return %@},configurable:true});"
          "d(n,'vendor',     {get:function(){return %@},configurable:true});"
+         "try{var ud={brands:[{brand:'Safari',version:'18'}],mobile:%@,platform:%@,"
+         "getHighEntropyValues:function(h){return Promise.resolve({});}};"
+         "d(n,'userAgentData',{get:function(){return ud;},configurable:true});}catch(e){}"
          "})();",
-        jsonUA, jsonAppVersion, platform, vendor];
+        jsonUA, jsonAppVersion, platform, vendor, uadMobile, uadPlatform];
 
     WKUserScript *script = [[WKUserScript alloc]
         initWithSource:jsSource
@@ -214,7 +244,8 @@ static void loadPrefs() {
 
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
-            applyDisableMedia = applyDisableRTC = applyDisableFileAccess = NO;
+            applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
+            applyDisableIMessageDL = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
         return;
     }
@@ -240,6 +271,10 @@ static void loadPrefs() {
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
     applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", NO);
+    // iMessage auto-download blocking: only meaningful in MobileSMS and related
+    // iMessage UI processes. Default ON so protection is active immediately when
+    // the dylib is injected into one of those apps.
+    applyDisableIMessageDL =            ads_read_bool(rules, prefs, @"disableIMessageDL", @"globalDisableIMessageDL", YES);
 
     // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
@@ -275,10 +310,10 @@ static void loadPrefs() {
     shouldSpoofUA = (globalUA || uaRule) && customUAString.length > 0;
 
     ADSLog(@"[STATUS] TrollFools protection ACTIVE in %@. "
-           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d",
+           "JIT:%d Media:%d RTC:%d FileAccess:%d iMsgDL:%d UA:%d",
            bundleID,
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
-           (int)applyDisableFileAccess, (int)shouldSpoofUA);
+           (int)applyDisableFileAccess, (int)applyDisableIMessageDL, (int)shouldSpoofUA);
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -463,11 +498,24 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (applyDisableJS && allowed) return %orig(NO);
     %orig;
 }
+// Prevent apps (or exploits) from disabling lockdown mode after we've enabled it.
+- (void)setLockdownModeEnabled:(BOOL)enabled {
+    if (applyDisableJIT && !enabled) return;
+    %orig;
+}
 %end
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
     if (applyDisableJS && enabled) return %orig(NO);
+    %orig;
+}
+%end
+
+// Prevent code from re-enabling JIT after we've disabled it via the pool configuration.
+%hook _WKProcessPoolConfiguration
+- (void)setJITEnabled:(BOOL)enabled {
+    if (enabled && (applyDisableJIT || applyDisableJIT15)) return;
     %orig;
 }
 %end
@@ -479,6 +527,37 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 %hook UIWebView
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
     if (applyDisableJS) return @"";
+    return %orig;
+}
+%end
+
+// =========================================================
+// iMESSAGE UI-LAYER MITIGATIONS
+// Active when TrollFools places the dylib in MobileSMS or a related
+// iMessage UI process. IMCore and ChatKit are weak-linked so the dylib
+// loads safely in apps that don't bundle them — hooks simply won't fire.
+// =========================================================
+
+%hook IMFileTransfer
+- (BOOL)isAutoDownloadable {
+    if (applyDisableIMessageDL) {
+        ADSLog(@"[MITIGATION] Blocked auto-download of iMessage file transfer (TF layer).");
+        return NO;
+    }
+    return %orig;
+}
+- (BOOL)canAutoDownload {
+    if (applyDisableIMessageDL) {
+        ADSLog(@"[MITIGATION] Denied canAutoDownload for iMessage transfer (TF layer).");
+        return NO;
+    }
+    return %orig;
+}
+%end
+
+%hook CKAttachmentMessagePartChatItem
+- (BOOL)_needsPreviewGeneration {
+    if (applyDisableIMessageDL) return NO;
     return %orig;
 }
 %end
@@ -570,6 +649,22 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
                       @"key":     @"disableFileAccess",
                       @"enabled": @YES}];
 
+    // 7. iMessage attachment blocking — only relevant inside MobileSMS and
+    //    related iMessage UI processes. Hide the row in other apps since the
+    //    IMFileTransfer hooks won't fire there.
+    NSString *currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSArray *iMessageUIProcesses = @[
+        @"com.apple.MobileSMS",
+        @"com.apple.iMessageAppsViewService",
+        @"com.apple.ActivityMessagesApp"
+    ];
+    if ([iMessageUIProcesses containsObject:currentBundleID]) {
+        [rows addObject:@{@"title":   @"Block iMessage Auto-Download",
+                          @"detail":  @"Blocks attachment auto-download in Messages",
+                          @"key":     @"disableIMessageDL",
+                          @"enabled": @YES}];
+    }
+
     return rows;
 }
 
@@ -580,6 +675,8 @@ static BOOL ads_default_value_for_key(NSString *key) {
     if ([key isEqualToString:@"spoofUA"])           return YES;
     if ([key isEqualToString:@"disableJIT"])        return YES;
     if ([key isEqualToString:@"disableJIT15"])      return YES;
+    // iMessage DL blocking defaults ON — low breakage, high security value.
+    if ([key isEqualToString:@"disableIMessageDL"]) return YES;
     // JS, media, RTC, file access all off — user opts in explicitly.
     return NO;
 }

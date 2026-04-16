@@ -26,6 +26,7 @@ static NSString *ads_prefs_path(void) {
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
 }
 
+static _Atomic BOOL prefsLoaded             = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static _Atomic BOOL globalTweakEnabled       = NO;
 static _Atomic BOOL globalDisableIMessageDL  = NO;
@@ -58,6 +59,11 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 }
 
 static void loadPrefs() {
+    // CAS gate — same pattern as the UI tweak.
+    // reloadDaemonPrefsNotification resets prefsLoaded before calling back in.
+    BOOL expected = NO;
+    if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
+
     NSDictionary *prefs = nil;
     NSString *prefsFilePath = ads_prefs_path();
     if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
@@ -185,6 +191,7 @@ static void loadPrefs() {
 static void reloadDaemonPrefsNotification(CFNotificationCenterRef center, void *observer,
                                           CFStringRef name, const void *object,
                                           CFDictionaryRef userInfo) {
+    prefsLoaded = NO;
     loadPrefs();
 }
 
@@ -232,11 +239,15 @@ int hook_stat(const char *path, struct stat *buf) {
         path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
-            buf->st_mode  = S_IFREG | 0755;
-            buf->st_nlink = 1;
-            buf->st_uid   = 0;
-            buf->st_gid   = 0;
-            buf->st_size  = 34520;
+            buf->st_dev     = 1;          // root filesystem device
+            buf->st_ino     = 0x00c12a7f; // plausible inode
+            buf->st_mode    = S_IFREG | 0755;
+            buf->st_nlink   = 1;
+            buf->st_uid     = 0;
+            buf->st_gid     = 0;
+            buf->st_size    = 34520;
+            buf->st_blksize = 4096;
+            buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
         }
         return 0;
     }
@@ -249,11 +260,15 @@ int hook_lstat(const char *path, struct stat *buf) {
         path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         if (buf) {
             memset(buf, 0, sizeof(struct stat));
-            buf->st_mode  = S_IFREG | 0755;
-            buf->st_nlink = 1;
-            buf->st_uid   = 0;
-            buf->st_gid   = 0;
-            buf->st_size  = 34520;
+            buf->st_dev     = 1;
+            buf->st_ino     = 0x00c12a7f;
+            buf->st_mode    = S_IFREG | 0755;
+            buf->st_nlink   = 1;
+            buf->st_uid     = 0;
+            buf->st_gid     = 0;
+            buf->st_size    = 34520;
+            buf->st_blksize = 4096;
+            buf->st_blocks  = 72;
         }
         return 0;
     }

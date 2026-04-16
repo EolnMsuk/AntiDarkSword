@@ -128,6 +128,17 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString hasPrefix:@"Mozilla/"]) appVersion = [customUAString substringFromIndex:8];
     NSString *jsonAppVersion = adsJSONStringLiteral(appVersion);
 
+    // UA Client Hints (navigator.userAgentData) — iOS 16+ Safari 16+.
+    // mobile/platform follow the same UA heuristics used above.
+    BOOL isMobileUA = [customUAString containsString:@"iPhone"] ||
+                      [customUAString containsString:@"iPad"]   ||
+                      [customUAString containsString:@"Android"];
+    NSString *uadMobile   = isMobileUA ? @"true" : @"false";
+    NSString *uadPlatform = @"\"iOS\"";
+    if ([customUAString containsString:@"Macintosh"])      uadPlatform = @"\"macOS\"";
+    else if ([customUAString containsString:@"Windows"])   uadPlatform = @"\"Windows\"";
+    else if ([customUAString containsString:@"Android"])   uadPlatform = @"\"Android\"";
+
     NSString *jsSource = [NSString stringWithFormat:
         @"(function(){"
          "var d=Object.defineProperty,n=navigator;"
@@ -135,8 +146,11 @@ static void injectUAScript(WKUserContentController *ucc) {
          "d(n,'appVersion', {get:function(){return %@},configurable:true});"
          "d(n,'platform',   {get:function(){return %@},configurable:true});"
          "d(n,'vendor',     {get:function(){return %@},configurable:true});"
+         "try{var ud={brands:[{brand:'Safari',version:'18'}],mobile:%@,platform:%@,"
+         "getHighEntropyValues:function(h){return Promise.resolve({});}};"
+         "d(n,'userAgentData',{get:function(){return ud;},configurable:true});}catch(e){}"
          "})();",
-        jsonUA, jsonAppVersion, platform, vendor];
+        jsonUA, jsonAppVersion, platform, vendor, uadMobile, uadPlatform];
 
     WKUserScript *script = [[WKUserScript alloc]
         initWithSource:jsSource
@@ -589,11 +603,24 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     if (applyDisableJS && allowed) return %orig(NO);
     %orig;
 }
+// Prevent apps (or exploits) from disabling lockdown mode after we've enabled it.
+- (void)setLockdownModeEnabled:(BOOL)enabled {
+    if (applyDisableJIT && !enabled) return;
+    %orig;
+}
 %end
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
     if (applyDisableJS && enabled) return %orig(NO);
+    %orig;
+}
+%end
+
+// Prevent code from re-enabling JIT after we've disabled it via the pool configuration.
+%hook _WKProcessPoolConfiguration
+- (void)setJITEnabled:(BOOL)enabled {
+    if (enabled && (applyDisableJIT || applyDisableJIT15)) return;
     %orig;
 }
 %end
