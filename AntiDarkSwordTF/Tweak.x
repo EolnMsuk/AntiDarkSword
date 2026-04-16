@@ -709,7 +709,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     // --- Master enabled row ---
     UIView *masterRow               = [[UIView alloc] init];
     masterRow.translatesAutoresizingMaskIntoConstraints = NO;
-    masterRow.backgroundColor       = [UIColor colorWithWhite:0.17 alpha:1];
     [card addSubview:masterRow];
     
     UIView *separator = [[UIView alloc] init];
@@ -730,7 +729,14 @@ static BOOL ads_default_value_for_key(NSString *key) {
     masterSwitch.tag                = NSIntegerMax; // sentinel for master switch
     
     id masterVal                    = self.pendingPrefs[@"enabled"];
-    masterSwitch.on                 = masterVal ? [masterVal boolValue] : NO;
+    BOOL isMasterEnabled            = masterVal ? [masterVal boolValue] : NO;
+    masterSwitch.on                 = isMasterEnabled;
+    
+    // Set initial background color: dark green if ON, dark red if OFF
+    masterRow.backgroundColor = isMasterEnabled 
+        ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
+        : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
     
@@ -820,7 +826,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [separator.heightAnchor   constraintEqualToConstant:0.5],
 
         // Table view
-        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor],
+        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
         [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
@@ -928,6 +934,13 @@ static BOOL ads_default_value_for_key(NSString *key) {
     if (sender.tag == NSIntegerMax) {
         // Master toggle
         self.pendingPrefs[@"enabled"] = @(sender.on);
+        
+        // Animate the background color change
+        [UIView animateWithDuration:0.25 animations:^{
+            sender.superview.backgroundColor = sender.on 
+                ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
+                : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        }];
         return;
     }
 
