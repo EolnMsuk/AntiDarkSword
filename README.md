@@ -53,7 +53,7 @@ AntiDarkSword is an iOS security tweak that hardens vulnerable jailbroken device
 > [!WARNING]  
 > Remove protected apps from Roothide's Blacklist / Choicy to ensure the tweak can successfully inject.
 >
-> Level 3 restricts critical background daemons; lower the level if you have any issues.
+> Level 3 restricts system background daemons. Individual daemons can be toggled in Settings > AntiDarkSword > Restrict System Daemons.
 
 ```text
 Level 1
@@ -99,13 +99,11 @@ Level 3
 │
 ├── 🌐 Browsers (Safari, Chrome, Firefox, Brave, DuckDuckGo)
 │   ├── Disable WebGL & WebRTC: ON
-│   └── Disable Media Auto-Play: ON 
+│   └── Disable Media Auto-Play: ON
 │
-├── ⚙️ System Daemons (imagent, apsd, identityservicesd)
-│   ├── WebKit Mitigations: BYPASSED
-│   └── System Hooking: ON (Disables zero-click payload parsing)
-│
-└── 🛡️ Environment Spoofing
+└── ⚙️ System Daemons (imagent, apsd, identityservicesd, IMDPersistenceAgent)
+    ├── System Hooking: ON (Disables zero-click payload parsing)
+    ├── Individual daemon switches: Settings > Restrict System Daemons
     └── Corellium Honeypot: ON (Spoofs research device hardware & file paths)
 ```
 
