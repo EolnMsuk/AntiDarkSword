@@ -31,7 +31,7 @@ The dylib is sandboxed to the injected app and has no system-level access. These
 | Corellium Honeypot (file-path spoofing + `corelliumd` process) | ✅ | ❌ — needs POSIX hook installation and LaunchDaemon |
 | System-wide auto-protection tiers (Level 1/2/3) | ✅ | ❌ — no PreferenceLoader; settings are per-app in-overlay |
 | Settings.app preferences UI | ✅ | ❌ — replaced by in-app three-finger double-tap overlay |
-| MobileSubstrate / ElleKit | required | ❌ — not used; hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
+| MobileSubstrate / ElleKit | ✅ | ❌ — not used; hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
 | Protects all apps at once | ✅ | ❌ — you inject per-app via TrollFools |
 
 ---
