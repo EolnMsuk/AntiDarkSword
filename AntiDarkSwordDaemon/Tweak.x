@@ -1,6 +1,7 @@
 // AntiDarkSwordDaemon/Tweak.x
 #import <Foundation/Foundation.h>
 #import <CoreFoundation/CoreFoundation.h>
+#include <stdatomic.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <substrate.h>
