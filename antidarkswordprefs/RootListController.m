@@ -176,6 +176,22 @@ static inline NSString *ads_root_path(NSString *path) {
 @interface AntiDarkSwordDaemonListController : PSListController
 @end
 
+// Maps short process names to their com.apple.* bundle ID counterparts.
+// Used to keep both aliases in sync inside disabledPresetRules.
+static NSDictionary *ads_daemon_alias_map(void) {
+    static NSDictionary *map;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        map = @{
+            @"imagent":             @"com.apple.imagent",
+            @"IMDPersistenceAgent": @"com.apple.IMDPersistenceAgent",
+            @"apsd":                @"com.apple.apsd",
+            @"identityservicesd":   @"com.apple.identityservicesd"
+        };
+    });
+    return map;
+}
+
 @implementation AntiDarkSwordDaemonListController
 
 - (NSArray *)specifiers {
@@ -183,9 +199,14 @@ static inline NSString *ads_root_path(NSString *path) {
         NSMutableArray *specs = [NSMutableArray array];
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
 
+        // ---- System Daemons group ----
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
+
+        // Master "All Daemons" toggle
+        PSSpecifier *masterSpec = [PSSpecifier preferenceSpecifierNamed:@"All Daemons" target:self set:@selector(setAllDaemonsEnabled:specifier:) get:@selector(getAllDaemonsEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+        [specs addObject:masterSpec];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         for (NSString *daemon in daemons) {
@@ -193,9 +214,60 @@ static inline NSString *ads_root_path(NSString *path) {
             [spec setProperty:daemon forKey:@"targetID"];
             [specs addObject:spec];
         }
+
+        // ---- Corellium Honeypot group ----
+        PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [decoyGroup setProperty:@"Spoofs the Corellium environment to trigger advanced exploits (like Coruna) to self-destruct. Requires at least one system daemon to be active." forKey:@"footerText"];
+        [specs addObject:decoyGroup];
+
+        PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+        [specs addObject:decoySpec];
+
         _specifiers = [specs copy];
     }
     return _specifiers;
+}
+
+- (id)getAllDaemonsEnabled:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    NSArray *disabled = [defaults arrayForKey:@"disabledPresetRules"] ?: @[];
+    NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+    for (NSString *d in daemons) {
+        if ([disabled containsObject:d]) return @NO;
+    }
+    return @YES;
+}
+
+- (void)setAllDaemonsEnabled:(id)value specifier:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+    NSDictionary *aliasMap = ads_daemon_alias_map();
+    NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+
+    if ([value boolValue]) {
+        for (NSString *d in daemons) {
+            [disabled removeObject:d];
+            NSString *bundleAlias = aliasMap[d];
+            if (bundleAlias) [disabled removeObject:bundleAlias];
+        }
+    } else {
+        for (NSString *d in daemons) {
+            if (![disabled containsObject:d]) [disabled addObject:d];
+            NSString *bundleAlias = aliasMap[d];
+            if (bundleAlias && ![disabled containsObject:bundleAlias]) [disabled addObject:bundleAlias];
+        }
+    }
+
+    [defaults setObject:disabled forKey:@"disabledPresetRules"];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+    [defaults synchronize];
+    ads_post_notification();
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
 }
 
 - (id)getDaemonEnabled:(PSSpecifier *)spec {
@@ -208,21 +280,64 @@ static inline NSString *ads_root_path(NSString *path) {
     NSUserDefaults *defaults = ads_defaults();
     NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
     NSString *targetID = [spec propertyForKey:@"targetID"];
+    NSDictionary *aliasMap = ads_daemon_alias_map();
 
     if ([value boolValue]) {
         [disabled removeObject:targetID];
-        if ([targetID isEqualToString:@"imagent"]) [disabled removeObject:@"com.apple.imagent"];
-        if ([targetID isEqualToString:@"IMDPersistenceAgent"]) [disabled removeObject:@"com.apple.IMDPersistenceAgent"];
+        NSString *bundleAlias = aliasMap[targetID];
+        if (bundleAlias) [disabled removeObject:bundleAlias];
     } else {
         if (![disabled containsObject:targetID]) [disabled addObject:targetID];
-        if ([targetID isEqualToString:@"imagent"] && ![disabled containsObject:@"com.apple.imagent"]) [disabled addObject:@"com.apple.imagent"];
-        if ([targetID isEqualToString:@"IMDPersistenceAgent"] && ![disabled containsObject:@"com.apple.IMDPersistenceAgent"]) [disabled addObject:@"com.apple.IMDPersistenceAgent"];
+        NSString *bundleAlias = aliasMap[targetID];
+        if (bundleAlias && ![disabled containsObject:bundleAlias]) [disabled addObject:bundleAlias];
     }
 
     [defaults setObject:disabled forKey:@"disabledPresetRules"];
     [defaults setBool:YES forKey:@"ADSNeedsRespring"];
     [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
     [defaults synchronize];
+    ads_post_notification();
+
+    // Reload so the master "All Daemons" switch reflects the new aggregate state.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadSpecifiers];
+}
+
+- (id)getCorelliumEnabled:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    return @([defaults boolForKey:@"corelliumDecoyEnabled"]);
+}
+
+- (void)setCorelliumEnabled:(id)value specifier:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
+    BOOL decoyEnabled = [value boolValue];
+
+    [defaults setBool:decoyEnabled forKey:@"corelliumDecoyEnabled"];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"];
+    [defaults synchronize];
+
+    pid_t pid;
+    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+
+    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+    if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
+        waitpid(pid, NULL, 0);
+
+    if (masterEnabled && decoyEnabled) {
+        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
+            waitpid(pid, NULL, 0);
+    }
+
     ads_post_notification();
 }
 @end
@@ -1021,7 +1136,7 @@ static inline NSString *ads_root_path(NSString *path) {
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown.\n\n⚠️ Warning: Level 3 restricts critical background daemons, lower the level if you have any issues.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown.\n\n⚠️ Warning: Restricts system background daemons.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
             
@@ -1151,18 +1266,9 @@ static inline NSString *ads_root_path(NSString *path) {
         imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         imageView.clipsToBounds = YES;
         
-        imageView.userInteractionEnabled = YES; 
-        UITapGestureRecognizer *bannerTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(openBannerLink)];
-        [imageView addGestureRecognizer:bannerTap];
-        
         [headerView addSubview:imageView];
         self.table.tableHeaderView = headerView;
     }
-}
-
-- (void)openBannerLink {
-    NSURL *githubURL = [NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword/"];
-    if ([[UIApplication sharedApplication] canOpenURL:githubURL]) [[UIApplication sharedApplication] openURL:githubURL options:@{} completionHandler:nil];
 }
 
 - (void)dealloc {

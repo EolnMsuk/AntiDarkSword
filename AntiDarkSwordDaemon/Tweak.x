@@ -121,15 +121,29 @@ static void loadPrefs() {
             @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"
         ];
 
+        // A daemon is disabled if ANY of its known aliases (short process name OR
+        // bundle-ID prefix) appears in disabledPresetRules. Without this cross-alias
+        // check, disabling "apsd" via the UI (which stores the short name) would not
+        // suppress the hook when the process reports its bundleID "com.apple.apsd"
+        // first in the targetsToCheck loop.
+        BOOL isDisabledByUser = NO;
         for (int i = 0; i < 2; i++) {
-            NSString *target = targetsToCheck[i];
-            if (!target) continue;
-
-            if (autoProtectLevel >= 3 && [tier3 containsObject:target] &&
-                ![disabledPresetRules containsObject:target]) {
-                isTargetRestricted = YES;
-                matchedID = target;
+            if (targetsToCheck[i] && [disabledPresetRules containsObject:targetsToCheck[i]]) {
+                isDisabledByUser = YES;
                 break;
+            }
+        }
+
+        if (!isDisabledByUser) {
+            for (int i = 0; i < 2; i++) {
+                NSString *target = targetsToCheck[i];
+                if (!target) continue;
+
+                if (autoProtectLevel >= 3 && [tier3 containsObject:target]) {
+                    isTargetRestricted = YES;
+                    matchedID = target;
+                    break;
+                }
             }
         }
     }
