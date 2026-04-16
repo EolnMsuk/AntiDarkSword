@@ -1,3 +1,6 @@
+ARCHS ?= arm64 arm64e
+TARGET ?= iphone:clang:16.5:14.5
+
 include $(THEOS)/makefiles/common.mk
 
 # Use the ObjC-runtime Logos backend so the dylib has no CydiaSubstrate
