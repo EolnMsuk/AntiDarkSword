@@ -118,9 +118,9 @@ All four checks pass. The payload concludes it is inside a Corellium research en
 
 ## Limitations
 
-- **TrollFools build**: CorelliumDecoy is not included. The dylib cannot install a LaunchDaemon or hook POSIX syscalls with `MSHookFunction` — both require a jailbreak. See the [TrollFools README](../AntiDarkSwordTF/README.md).
 - **Rootless spoofing scope**: The file-path hooks only run inside the tier-3 daemon processes the tweak injects into (`imagent`, `apsd`, `identityservicesd`, `IMDPersistenceAgent`). A payload that checks for `corelliumd` from within a sandboxed app process it controls separately would not see the spoofed path from those hooks — though process-level visibility (`ps`, PID enumeration) still holds system-wide.
 - **Detection fingerprint**: Determined adversaries can probe for inconsistencies (e.g., the fake `stat` buffer returns a fixed size and zeroed timestamps). The decoy is effective against automated payload abort logic, not against a human analyst actively examining a device.
+- **TrollFools build**: CorelliumDecoy is not included. The dylib cannot install a LaunchDaemon or hook POSIX syscalls with `MSHookFunction` — both require a jailbreak. See the [TrollFools README](../AntiDarkSwordTF/README.md).
 
 ---
 
