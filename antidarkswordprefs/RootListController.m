@@ -1308,30 +1308,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
 }
 
-// =======================================================
-// DECOY ENABLE METHOD
-// =======================================================
-- (void)setDecoyEnabled:(id)value specifier:(PSSpecifier *)specifier {
-    [self setPreferenceValue:value specifier:specifier];
-    
-    NSUserDefaults *defaults = ads_defaults();
-    BOOL masterEnabled = [defaults boolForKey:@"enabled"];
-    BOOL decoyEnabled = [value boolValue];
-    
-    pid_t pid;
-    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
-    NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
-    
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
-        waitpid(pid, NULL, 0);
-
-    if (masterEnabled && decoyEnabled) {
-        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
-            waitpid(pid, NULL, 0);
-    }
-}
 
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
     [self setPreferenceValue:value specifier:specifier];
@@ -1442,26 +1418,6 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     }
 }
 
-- (void)setAutoProtect:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = ads_defaults();
-    BOOL enabled = [value boolValue];
-    [defaults setObject:value forKey:@"autoProtectEnabled"];
-    
-    if (enabled && ![defaults boolForKey:@"enabled"]) {
-        [defaults setBool:YES forKey:@"enabled"];
-    }
-    
-    if ([defaults integerForKey:@"autoProtectLevel"] >= 3) {
-        [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-    }
-    
-    [defaults synchronize];
-    [self flagSaveRequirement];
-    ads_post_notification();
-    
-    _specifiers = nil;
-    [self reloadSpecifiers];
-}
 
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
     NSUserDefaults *defaults = ads_defaults();
@@ -1477,7 +1433,23 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     
     if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
         [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
-        
+
+        // Same logic as setCorelliumEnabled:specifier: — ensure all four daemons are
+        // active so the POSIX spoofing hooks fire in every daemon context.  Without this,
+        // a user who had previously disabled daemons, dropped to Level 2, then returned
+        // to Level 3 would have Corellium re-enabled but the daemons still disabled,
+        // leaving the spoofing hooks inactive.
+        NSDictionary *aliasMap = ads_daemon_alias_map();
+        NSArray *daemonShortNames = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
+        NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+        BOOL daemonsChanged = NO;
+        for (NSString *shortName in daemonShortNames) {
+            if ([disabled containsObject:shortName]) { [disabled removeObject:shortName]; daemonsChanged = YES; }
+            NSString *bundleAlias = aliasMap[shortName];
+            if (bundleAlias && [disabled containsObject:bundleAlias]) { [disabled removeObject:bundleAlias]; daemonsChanged = YES; }
+        }
+        if (daemonsChanged) [defaults setObject:disabled forKey:@"disabledPresetRules"];
+
         if ([defaults boolForKey:@"enabled"]) {
             pid_t pid;
             NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
