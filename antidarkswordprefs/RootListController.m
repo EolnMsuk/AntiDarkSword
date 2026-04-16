@@ -225,18 +225,19 @@ static NSDictionary *ads_daemon_alias_map(void) {
         for (NSString *daemon in daemons) {
             PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:[rootCtrl displayNameForTargetID:daemon] target:self set:@selector(setDaemonEnabled:specifier:) get:@selector(getDaemonEnabled:) detail:nil cell:PSSwitchCell edit:nil];
             [spec setProperty:daemon forKey:@"targetID"];
-            
-            // Grey out apsd if Corellium Honeypot is enabled
-            if ([daemon isEqualToString:@"apsd"] && corelliumEnabled) {
+
+            // Grey out all daemons while Corellium Honeypot is enabled — each must be active
+            // for the POSIX spoofing hooks to fire in that daemon's context.
+            if (corelliumEnabled) {
                 [spec setProperty:@NO forKey:@"enabled"];
             }
-            
+
             [specs addObject:spec];
         }
 
         // ---- Corellium Honeypot group ----
         PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [decoyGroup setProperty:@"Spoofs the Corellium environment to trigger advanced exploits (like Coruna) to self-destruct. Requires at least one system daemon to be active." forKey:@"footerText"];
+        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause advanced exploits (like Coruna) to self-abort. The file-path spoofing hooks run inside each daemon process — all four daemons are automatically re-enabled and locked when this is on to ensure full coverage." forKey:@"footerText"];
         [specs addObject:decoyGroup];
 
         PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -293,17 +294,28 @@ static NSDictionary *ads_daemon_alias_map(void) {
 
     [defaults setBool:decoyEnabled forKey:@"corelliumDecoyEnabled"];
     
-    // Auto-enable 'apsd' when Corellium is toggled on
+    // Auto-enable ALL four daemons when Corellium is toggled on.
+    // The POSIX spoofing hooks (access/stat/lstat) fire from within each daemon process
+    // where globalDecoyEnabled is YES, which requires currentProcessRestricted = YES for
+    // that process.  If imagent is disabled but apsd is not, the spoof only works for
+    // calls originating from apsd — not from imagent, which is the primary iMessage attack
+    // vector.  Re-enabling all four guarantees full coverage regardless of which daemon
+    // the exploit payload executes in.
     if (decoyEnabled) {
         NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+        NSDictionary *aliasMap = ads_daemon_alias_map();
+        NSArray *daemonShortNames = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         BOOL changed = NO;
-        if ([disabled containsObject:@"apsd"]) {
-            [disabled removeObject:@"apsd"];
-            changed = YES;
-        }
-        if ([disabled containsObject:@"com.apple.apsd"]) {
-            [disabled removeObject:@"com.apple.apsd"];
-            changed = YES;
+        for (NSString *shortName in daemonShortNames) {
+            if ([disabled containsObject:shortName]) {
+                [disabled removeObject:shortName];
+                changed = YES;
+            }
+            NSString *bundleAlias = aliasMap[shortName];
+            if (bundleAlias && [disabled containsObject:bundleAlias]) {
+                [disabled removeObject:bundleAlias];
+                changed = YES;
+            }
         }
         if (changed) {
             [defaults setObject:disabled forKey:@"disabledPresetRules"];
