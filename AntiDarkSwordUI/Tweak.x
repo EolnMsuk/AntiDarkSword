@@ -31,8 +31,9 @@
 
 // =========================================================
 // PRIVATE INTERFACES — iMessage transfer / preview blocking
-// NOTE: IMFileTransfer lives in IMCore; CKAttachmentMessagePartChatItem
-//       lives in ChatKit.  Both load in com.apple.MobileSMS and related
+// NOTE: IMFileTransfer lives in IMCore;
+//       CKAttachmentMessagePartChatItem lives in ChatKit.
+//       Both load in com.apple.MobileSMS and related
 //       iMessage UI processes that the UI tweak injects into.
 // =========================================================
 @interface IMFileTransfer : NSObject
@@ -63,10 +64,12 @@ static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
+
 // shouldSpoofUA and all apply* variables are read directly by hooks which can
 // fire on threads other than the one running loadPrefs(); _Atomic eliminates
 // the data race without requiring a full lock.
 static _Atomic BOOL shouldSpoofUA          = NO;
+
 // Global Overrides
 static BOOL globalDisableJIT       = NO;
 static BOOL globalDisableJIT15     = NO;
@@ -75,6 +78,7 @@ static BOOL globalDisableMedia     = NO;
 static BOOL globalDisableRTC       = NO;
 static BOOL globalDisableFileAccess = NO;
 static BOOL globalDisableIMessageDL = NO;
+
 // App-Specific Granular Features
 static BOOL disableJIT             = NO;
 static BOOL disableJIT15           = NO;
@@ -83,6 +87,7 @@ static BOOL disableMedia           = NO;
 static BOOL disableRTC             = NO;
 static BOOL disableFileAccess      = NO;
 static BOOL disableIMessageDL      = NO;
+
 // Final Evaluated States
 static _Atomic BOOL applyDisableJIT        = NO;
 static _Atomic BOOL applyDisableJIT15      = NO;
@@ -149,22 +154,18 @@ static NSString *adsBrandsFromUA(NSString *ua) {
 
 static NSString *adsJSONStringLiteral(NSString *str) {
     if (!str || str.length == 0) return @"\"\"";
-
     NSArray *wrapper = @[str];
     NSData  *data    = [NSJSONSerialization dataWithJSONObject:wrapper options:0 error:nil];
     if (!data) return @"\"\"";
-
     NSString *jsonArrayString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     if (jsonArrayString.length >= 2)
         return [jsonArrayString substringWithRange:NSMakeRange(1, jsonArrayString.length - 2)];
-
     return @"\"\"";
 }
 
 // Injects the UA-spoofing navigator property overrides into a WKUserContentController.
 static void injectUAScript(WKUserContentController *ucc) {
     if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
-
     ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
 
     NSString *jsonUA = adsJSONStringLiteral(customUAString);
@@ -193,6 +194,7 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString containsString:@"Macintosh"])      uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"])   uadPlatform = @"\"Windows\"";
     else if ([customUAString containsString:@"Android"])   uadPlatform = @"\"Android\"";
+
     NSString *uadBrands = adsBrandsFromUA(customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
@@ -245,6 +247,7 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
+
     if (applyDisableJS) {
         // allowsContentJavaScript was added in iOS 14 — guard the setter to avoid an
         // unrecognized-selector crash on iOS 13 where WKWebpagePreferences exists but
@@ -256,6 +259,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         }
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             configuration.preferences.javaScriptEnabled = NO;
+
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)])
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
@@ -278,6 +282,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
             configuration.allowsInlineMediaPlayback = NO;
         if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)])
             configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+
         if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)])
             configuration.allowsPictureInPictureMediaPlayback = NO;
     }
@@ -332,6 +337,7 @@ static void loadPrefs() {
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
+
         globalTweakEnabled        = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]                ? [prefs[@"enabled"] boolValue]                : NO;
         globalUASpoofingEnabled   = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)]   ? [prefs[@"globalUASpoofingEnabled"] boolValue]   : NO;
         globalDisableJIT          = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)]           ? [prefs[@"globalDisableJIT"] boolValue]           : NO;
@@ -357,6 +363,7 @@ static void loadPrefs() {
 
         id manualUARaw = prefs[@"customUAString"];
         NSString *manualUA = [manualUARaw isKindOfClass:[NSString class]] ? manualUARaw : @"";
+
         if ([presetUA isEqualToString:@"CUSTOM"]) {
             NSString *trimmedUA = [manualUA stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
             customUAString = (trimmedUA.length > 0) ? trimmedUA
@@ -371,6 +378,7 @@ static void loadPrefs() {
     BOOL isTargetRestricted = NO;
     BOOL isPresetMatch      = NO;
     NSString *matchedID   = nil;
+
     NSString *targetsToCheck[] = { bundleID, processName };
 
     for (int i = 0; i < 2; i++) {
@@ -392,6 +400,7 @@ static void loadPrefs() {
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
         ];
+
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
             @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
@@ -416,6 +425,7 @@ static void loadPrefs() {
             @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
             @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
         ];
+
         // Tier 3 is intentionally empty for the UI tweak.
         // Daemon-level mitigations are handled exclusively by AntiDarkSwordDaemon.
         NSArray *tier3 = @[];
@@ -466,10 +476,12 @@ static void loadPrefs() {
             @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
             @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
+
         NSArray *iMessageUIApps = @[
             @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
             @"com.apple.ActivityMessagesApp"
         ];
+
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
@@ -843,6 +855,13 @@ static BOOL ads_ui_default_value_for_key(NSString *key) {
 }
 
 static void ads_ui_write_prefs(NSDictionary *prefs) {
+    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
+    for (NSString *key in prefs) {
+        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)(prefs[key]), appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    }
+    CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+
+    // Fallback disk write
     NSString *path = ads_prefs_path();
     NSString *dir  = [path stringByDeletingLastPathComponent];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
@@ -865,6 +884,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (instancetype)init {
     if (!(self = [super init])) return nil;
+
     self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows = ads_ui_setting_rows();
 
@@ -961,9 +981,11 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
-    id masterVal             = self.pendingPrefs[@"enabled"];
+    NSString *restrictKey    = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+    id masterVal             = self.pendingPrefs[restrictKey];
     BOOL isMasterEnabled     = masterVal ? [masterVal boolValue] : NO;
     masterSwitch.on          = isMasterEnabled;
+    
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
@@ -1054,7 +1076,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
         [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
+        [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 382)],
 
         [buttonBar.topAnchor      constraintEqualToAnchor:self.tableView.bottomAnchor],
         [buttonBar.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
@@ -1142,7 +1164,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (void)switchChanged:(UISwitch *)sender {
     if (sender.tag == NSIntegerMax) {
-        self.pendingPrefs[@"enabled"] = @(sender.on);
+        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+        self.pendingPrefs[restrictKey] = @(sender.on);
         [UIView animateWithDuration:0.25 animations:^{
             sender.superview.backgroundColor = sender.on
                 ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
@@ -1184,32 +1207,22 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 - (void)saveAndRestart {
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-
-    // Mark this process as explicitly restricted so TargetRules are honoured
-    // even if the bundle ID isn't in a preset tier.
-    NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-    self.pendingPrefs[restrictKey] = @YES;
-
+    
     ads_ui_write_prefs(self.pendingPrefs);
-
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);
 
-    [self dismissViewControllerAnimated:YES completion:^{
-        UIAlertController *alert = [UIAlertController
-            alertControllerWithTitle:@"Settings Saved"
-            message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
-            preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(UIAlertAction *a) { exit(0); }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Later"
-                                                  style:UIAlertActionStyleCancel
-                                                handler:nil]];
-        UIViewController *top = ads_ui_top_vc(ads_ui_key_window().rootViewController);
-        if (top) [top presentViewController:alert animated:YES completion:nil];
-    }];
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"Settings Saved"
+        message:@"The app will now close to apply changes. Please reopen it manually."
+        preferredStyle:UIAlertControllerStyleAlert];
+        
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restart App"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) { exit(0); }]];
+                                            
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
@@ -1233,6 +1246,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
+
     ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
     vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
@@ -1273,6 +1287,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
+    
     // Globally ignore all App Extensions to prevent sandbox read errors
     if ([path hasSuffix:@".appex"]) return;
 

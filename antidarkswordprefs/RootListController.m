@@ -1623,6 +1623,13 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
+        
+        // Explicitly delete the physical file to catch the UI overlay's fallback writes
+        NSString *plistPathOnDisk = ads_root_path(@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
+        if ([[NSFileManager defaultManager] fileExistsAtPath:plistPathOnDisk]) {
+            [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
+        }
+
         ads_post_notification();
 
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
