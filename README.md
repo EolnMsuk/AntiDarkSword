@@ -12,9 +12,23 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 ## 🛠️ Installation
 
+### Which file do I need?
+
+| File | Jailbreak | iOS | Chip |
+| :--- | :--- | :--- | :--- |
+| `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 16.6.1 | A12+ · A8–A11 |
+| `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0 – 15.x | Any |
+| `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 14.0 – 16.x | Any |
+
+> **iOS 15 on older devices (A11 / iPhone X and below):** palera1n can run in either rootful or rootless mode.
+> 
+> Use `arm.deb` if you chose rootful during setup, `arm64.deb` if you chose rootless.
+
+---
+
 **Jailbreak Tweak**
 1. Add repo in Sileo/Zebra: `https://f0rd0w.github.io/`
-2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually (`arm64` = rootless, `arm` = rootful).
+2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually using the table above.
 3. Configure in **Settings > AntiDarkSword** and remove protected apps from Choicy or Roothide Blacklist.
 
 **TrollFools Dylib**
