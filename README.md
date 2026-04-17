@@ -12,6 +12,17 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 ## 🛠️ Installation
 
+**Jailbreak Tweak**
+1. Add repo in Sileo/Zebra: `https://f0rd0w.github.io/`
+2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually using the table above.
+3. Configure in **Settings > AntiDarkSword** and remove protected apps from Choicy or Roothide Blacklist.
+
+**TrollFools Dylib**
+1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
+2. Download `AntiDarkSword.dylib` from the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
+3. Open TrollFools → select an app → inject the `.dylib`.
+4. **Three-finger double-tap** inside the app to open the protection overlay.
+
 ### Which file do I need?
 
 | File | Jailbreak | iOS | Chip |
@@ -23,19 +34,6 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 > **iOS 15 on older devices (A11 / iPhone X and below):** palera1n can run in either rootful or rootless mode.
 > 
 > Use `arm.deb` if you chose rootful during setup, `arm64.deb` if you chose rootless.
-
----
-
-**Jailbreak Tweak**
-1. Add repo in Sileo/Zebra: `https://f0rd0w.github.io/`
-2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually using the table above.
-3. Configure in **Settings > AntiDarkSword** and remove protected apps from Choicy or Roothide Blacklist.
-
-**TrollFools Dylib**
-1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
-2. Download `AntiDarkSword.dylib` from the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
-3. Open TrollFools → select an app → inject the `.dylib`.
-4. **Three-finger double-tap** inside the app to open the protection overlay.
 
 ---
 
