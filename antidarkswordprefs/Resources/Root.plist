@@ -256,7 +256,7 @@
             <key>key</key>
             <string>globalDisableJIT15</string>
             <key>label</key>
-            <string>Disable iOS 15 JIT</string>
+            <string>Disable JIT (Legacy)</string>
             <key>set</key>
             <string>setGlobalMitigation:specifier:</string>
             <key>PostNotification</key>
