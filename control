@@ -3,7 +3,7 @@ Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 4.3.8
 Architecture: iphoneos-arm
-Description: A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation.
+Description: A jailbreak tweak that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits.
 Maintainer: eolnmsuk
 Author: eolnmsuk
 Section: Tweaks
