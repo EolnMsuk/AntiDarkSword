@@ -61,7 +61,7 @@ No jailbreak required. Injects per-app — iMessage and Corellium protections no
 
 **Jailbroken**
 1. Add repo in Sileo/Zebra: `https://f0rd0w.github.io/`
-2. Or install the [latest `.deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually (`arm64` = rootless, `arm` = rootful).
+2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually (`arm64` = rootless, `arm` = rootful).
 3. Configure in **Settings > AntiDarkSword**.
 
 > [!WARNING]
