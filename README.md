@@ -10,8 +10,6 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 > **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
 > **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
 
----
-
 ## 🛠️ Installation
 
 **Jailbreak Tweak**
