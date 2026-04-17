@@ -1251,7 +1251,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
             NSInteger probeCount = [defaults integerForKey:@"corelliumProbeCount"];
 
             PSSpecifier *counterGroup = [PSSpecifier preferenceSpecifierNamed:@"Attack Statistics" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-            [counterGroup setProperty:@"Counts Corellium environment probe attempts detected in system daemons. Each count represents one unique probe event from a potential exploit payload. Requires Level 3 with Corellium Honeypot enabled." forKey:@"footerText"];
+            [counterGroup setProperty:@"Counts Corellium environment probe attempts detected in system daemons. Requires Level 3 with Corellium Honeypot enabled." forKey:@"footerText"];
             [specs insertObject:counterGroup atIndex:infoIdx++];
 
             PSSpecifier *counterToggle = [PSSpecifier preferenceSpecifierNamed:@"Enable Attack Counter"
