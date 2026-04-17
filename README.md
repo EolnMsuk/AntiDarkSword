@@ -31,7 +31,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 ## 🛡️ Protections & Compatibility
 
-| **Jailbreak (tweak)** | iOS 13–14 | iOS 15 | iOS 16+ |
+| **Jailbreak (tweak)** | 13 – 14 | iOS 15  | iOS 16+ |
 | :--- | :--- | :--- | :--- |
 | Disable JIT | ❌ | ✅ | ✅ |
 | Disable JavaScript | 🟡 | ✅ | ✅ |
@@ -41,13 +41,13 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | Disable media autoplay | ✅ | ✅ | ✅ |
 | Disable local file access | ✅ | ✅ | ✅ |
 | Mail auto-download block | ✅ | ✅ | ✅ |
-| iMessage auto-download block (daemon) | ✅ | ✅ | ✅ |
+| iMessage auto-download block | ✅ | ✅ | ✅ |
 | Daemon protection | ✅ | ✅ | ✅ |
 | Corellium decoy | ✅ | ✅ | ✅ |
 
 <br>
 
-| **TrollStore (dylib)** | iOS 13–14 | iOS 15 | iOS 16+ |
+| **TrollStore (dylib)** | 13 – 14 | iOS 15  | iOS 16+ |
 | :--- | :--- | :--- | :--- |
 | Disable JIT | ❌ | ✅ | ✅ |
 | Disable JavaScript | 🟡 | 🟡 | 🟡 |
