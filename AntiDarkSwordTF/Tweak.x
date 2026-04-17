@@ -69,7 +69,7 @@ static _Atomic BOOL applyDisableFileAccess   = NO;
 
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
-static NSString * _Atomic customUAString = nil;
+static NSString *customUAString = nil;
 
 // =========================================================
 // HELPERS (identical to AntiDarkSwordUI)
