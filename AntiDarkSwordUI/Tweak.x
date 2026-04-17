@@ -1,5 +1,6 @@
 // AntiDarkSwordUI/Tweak.x
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
@@ -746,6 +747,516 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
     if (applyDisableJS) return @"";
     return %orig;
+}
+%end
+
+// =========================================================
+// IN-APP SETTINGS OVERLAY
+// Three-finger double-tap on any screen → modal settings panel.
+// Writes TargetRules_<bundleID> and marks the process as
+// restricted so rules are picked up on next app launch.
+// =========================================================
+
+static BOOL ads_ui_gesture_installed = NO;
+
+static UIWindow *ads_ui_key_window(void) {
+    if (@available(iOS 13, *)) {
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            UIWindowScene *ws = (UIWindowScene *)scene;
+            if (ws.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *w in ws.windows) {
+                    if (w.isKeyWindow) return w;
+                }
+            }
+        }
+    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    return [UIApplication sharedApplication].keyWindow;
+#pragma clang diagnostic pop
+}
+
+static UIViewController *ads_ui_top_vc(UIViewController *root) {
+    while (root.presentedViewController) root = root.presentedViewController;
+    return root;
+}
+
+static NSArray<NSDictionary *> *ads_ui_setting_rows(void) {
+    NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
+    NSMutableArray *rows = [NSMutableArray array];
+
+    [rows addObject:@{@"title":   @"Spoof User Agent",
+                      @"detail":  @"Masks the real browser fingerprint",
+                      @"key":     @"spoofUA",
+                      @"enabled": @YES}];
+
+    if (major >= 16) {
+        [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
+                          @"detail":  @"Enables WebKit lockdown mode (iOS 16+)",
+                          @"key":     @"disableJIT",
+                          @"enabled": @YES}];
+    } else if (major >= 15) {
+        [rows addObject:@{@"title":   @"Block JIT",
+                          @"detail":  @"Disables JIT via pool config (iOS 15)",
+                          @"key":     @"disableJIT15",
+                          @"enabled": @YES}];
+    } else {
+        [rows addObject:@{@"title":   @"Block JIT",
+                          @"detail":  @"Not available on iOS 14 and below",
+                          @"key":     @"disableJIT15",
+                          @"enabled": @NO}];
+    }
+
+    [rows addObject:@{@"title":   @"Block JavaScript",
+                      @"detail":  @"Prevents JS execution in WebViews",
+                      @"key":     @"disableJS",
+                      @"enabled": @YES}];
+
+    [rows addObject:@{@"title":   @"Block Media Autoplay",
+                      @"detail":  @"Stops drive-by audio/video loading",
+                      @"key":     @"disableMedia",
+                      @"enabled": @YES}];
+
+    [rows addObject:@{@"title":   @"Block WebGL / WebRTC",
+                      @"detail":  @"Disables GPU and peer-connection APIs",
+                      @"key":     @"disableRTC",
+                      @"enabled": @YES}];
+
+    [rows addObject:@{@"title":   @"Block file:// Access",
+                      @"detail":  @"Prevents local file exfiltration",
+                      @"key":     @"disableFileAccess",
+                      @"enabled": @YES}];
+
+    [rows addObject:@{@"title":   @"Block iMessage Downloads",
+                      @"detail":  @"Blocks auto-download of iMessage attachments",
+                      @"key":     @"disableIMessageDL",
+                      @"enabled": @YES}];
+
+    return rows;
+}
+
+// All defaults OFF — preset-matched apps already get smart defaults from the tier system.
+static BOOL ads_ui_default_value_for_key(NSString *key) {
+    (void)key;
+    return NO;
+}
+
+static void ads_ui_write_prefs(NSDictionary *prefs) {
+    NSString *path = ads_prefs_path();
+    NSString *dir  = [path stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+    [prefs writeToFile:path atomically:YES];
+}
+
+@interface ADSUISettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, strong) UITableView             *tableView;
+@property (nonatomic, strong) NSMutableDictionary     *pendingRules;
+@property (nonatomic, strong) NSMutableDictionary     *pendingPrefs;
+@property (nonatomic, copy)   NSString                *currentBundleID;
+@property (nonatomic, strong) NSArray<NSDictionary *> *rows;
+@property (nonatomic)         BOOL                     jsLocked;
+@end
+
+@implementation ADSUISettingsViewController
+
+- (instancetype)init {
+    if (!(self = [super init])) return nil;
+    self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
+    self.rows = ads_ui_setting_rows();
+
+    NSDictionary *existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (!existing) {
+        CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (kl) {
+            CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (d) existing = (__bridge_transfer NSDictionary *)d;
+            CFRelease(kl);
+        }
+    }
+    self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
+
+    NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
+    NSDictionary *savedRules = self.pendingPrefs[rulesKey];
+    self.pendingRules = [savedRules isKindOfClass:[NSDictionary class]]
+        ? [savedRules mutableCopy]
+        : [NSMutableDictionary dictionary];
+
+    id savedJS = self.pendingRules[@"disableJS"];
+    self.jsLocked = savedJS ? [savedJS boolValue] : ads_ui_default_value_for_key(@"disableJS");
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    UIVisualEffectView *bgView = [[UIVisualEffectView alloc] initWithEffect:blur];
+    bgView.frame = self.view.bounds;
+    bgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:bgView];
+
+    UITapGestureRecognizer *dismissTap = [[UITapGestureRecognizer alloc]
+        initWithTarget:self action:@selector(tappedBackground:)];
+    dismissTap.numberOfTouchesRequired = 1;
+    [bgView addGestureRecognizer:dismissTap];
+
+    UIView *shadowWrapper = [[UIView alloc] init];
+    shadowWrapper.translatesAutoresizingMaskIntoConstraints = NO;
+    shadowWrapper.backgroundColor    = [UIColor clearColor];
+    shadowWrapper.layer.cornerRadius = 18;
+    shadowWrapper.layer.shadowColor  = [UIColor blackColor].CGColor;
+    shadowWrapper.layer.shadowOpacity = 0.45;
+    shadowWrapper.layer.shadowRadius = 16;
+    shadowWrapper.layer.shadowOffset = CGSizeMake(0, 6);
+    [self.view addSubview:shadowWrapper];
+
+    UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor     = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
+    card.layer.cornerRadius  = 18;
+    card.layer.masksToBounds = YES;
+    [shadowWrapper addSubview:card];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.text          = @"AntiDarkSword";
+    titleLabel.font          = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
+    titleLabel.textColor     = [UIColor whiteColor];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [card addSubview:titleLabel];
+
+    UILabel *subLabel = [[UILabel alloc] init];
+    subLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subLabel.text                      = self.currentBundleID;
+    subLabel.font                      = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
+    subLabel.textColor                 = [UIColor colorWithWhite:0.5 alpha:1];
+    subLabel.textAlignment             = NSTextAlignmentCenter;
+    subLabel.adjustsFontSizeToFitWidth = YES;
+    subLabel.minimumScaleFactor        = 0.7;
+    [card addSubview:subLabel];
+
+    UIView *masterRow = [[UIView alloc] init];
+    masterRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [card addSubview:masterRow];
+
+    UIView *separator = [[UIView alloc] init];
+    separator.translatesAutoresizingMaskIntoConstraints = NO;
+    separator.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
+    [masterRow addSubview:separator];
+
+    UILabel *masterLabel = [[UILabel alloc] init];
+    masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    masterLabel.text      = @"Enable Protection";
+    masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    masterLabel.textColor = [UIColor whiteColor];
+    [masterRow addSubview:masterLabel];
+
+    UISwitch *masterSwitch = [[UISwitch alloc] init];
+    masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+    masterSwitch.onTintColor = [UIColor systemGreenColor];
+    masterSwitch.tag         = NSIntegerMax;
+    id masterVal             = self.pendingPrefs[@"enabled"];
+    BOOL isMasterEnabled     = masterVal ? [masterVal boolValue] : NO;
+    masterSwitch.on          = isMasterEnabled;
+    masterRow.backgroundColor = isMasterEnabled
+        ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
+        : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+    [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+    [masterRow addSubview:masterSwitch];
+
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.tableView.dataSource      = self;
+    self.tableView.delegate        = self;
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.separatorColor  = [UIColor colorWithWhite:0.22 alpha:1];
+    self.tableView.separatorInset  = UIEdgeInsetsMake(0, 16, 0, 0);
+    self.tableView.scrollEnabled   = YES;
+    self.tableView.bounces         = NO;
+    self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 1)];
+    [card addSubview:self.tableView];
+
+    UIView *buttonBar = [[UIView alloc] init];
+    buttonBar.translatesAutoresizingMaskIntoConstraints = NO;
+    buttonBar.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1];
+    [card addSubview:buttonBar];
+
+    UIView *btnSep = [[UIView alloc] init];
+    btnSep.translatesAutoresizingMaskIntoConstraints = NO;
+    btnSep.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
+    [buttonBar addSubview:btnSep];
+
+    UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
+    [cancelBtn setTitleColor:[UIColor colorWithWhite:0.55 alpha:1] forState:UIControlStateNormal];
+    cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
+    [cancelBtn addTarget:self action:@selector(cancel) forControlEvents:UIControlEventTouchUpInside];
+    [buttonBar addSubview:cancelBtn];
+
+    UIButton *saveBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    saveBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [saveBtn setTitle:@"Save & Restart" forState:UIControlStateNormal];
+    [saveBtn setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
+    saveBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [saveBtn addTarget:self action:@selector(saveAndRestart) forControlEvents:UIControlEventTouchUpInside];
+    [buttonBar addSubview:saveBtn];
+
+    UIView *btnDivider = [[UIView alloc] init];
+    btnDivider.translatesAutoresizingMaskIntoConstraints = NO;
+    btnDivider.backgroundColor = [UIColor colorWithWhite:0.28 alpha:1];
+    [buttonBar addSubview:btnDivider];
+
+    CGFloat rowH  = 52.0;
+    CGFloat maxTH = rowH * (CGFloat)self.rows.count;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [shadowWrapper.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [shadowWrapper.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [shadowWrapper.widthAnchor   constraintEqualToAnchor:self.view.widthAnchor multiplier:0.88],
+        [shadowWrapper.heightAnchor  constraintLessThanOrEqualToAnchor:self.view.heightAnchor multiplier:0.84],
+
+        [card.topAnchor      constraintEqualToAnchor:shadowWrapper.topAnchor],
+        [card.leadingAnchor  constraintEqualToAnchor:shadowWrapper.leadingAnchor],
+        [card.trailingAnchor constraintEqualToAnchor:shadowWrapper.trailingAnchor],
+        [card.bottomAnchor   constraintEqualToAnchor:shadowWrapper.bottomAnchor],
+
+        [titleLabel.topAnchor      constraintEqualToAnchor:card.topAnchor constant:18],
+        [titleLabel.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+        [subLabel.topAnchor      constraintEqualToAnchor:titleLabel.bottomAnchor constant:3],
+        [subLabel.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [subLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+        [masterRow.topAnchor      constraintEqualToAnchor:subLabel.bottomAnchor constant:14],
+        [masterRow.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
+        [masterRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [masterRow.heightAnchor   constraintEqualToConstant:52],
+
+        [masterLabel.leadingAnchor constraintEqualToAnchor:masterRow.leadingAnchor constant:16],
+        [masterLabel.centerYAnchor constraintEqualToAnchor:masterRow.centerYAnchor],
+
+        [masterSwitch.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor constant:-16],
+        [masterSwitch.centerYAnchor  constraintEqualToAnchor:masterRow.centerYAnchor],
+
+        [separator.leadingAnchor  constraintEqualToAnchor:masterRow.leadingAnchor],
+        [separator.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor],
+        [separator.bottomAnchor   constraintEqualToAnchor:masterRow.bottomAnchor],
+        [separator.heightAnchor   constraintEqualToConstant:0.5],
+
+        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
+        [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
+
+        [buttonBar.topAnchor      constraintEqualToAnchor:self.tableView.bottomAnchor],
+        [buttonBar.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
+        [buttonBar.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
+        [buttonBar.bottomAnchor   constraintEqualToAnchor:card.bottomAnchor],
+        [buttonBar.heightAnchor   constraintEqualToConstant:54],
+
+        [btnSep.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor],
+        [btnSep.leadingAnchor  constraintEqualToAnchor:buttonBar.leadingAnchor],
+        [btnSep.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
+        [btnSep.heightAnchor   constraintEqualToConstant:0.5],
+
+        [cancelBtn.leadingAnchor constraintEqualToAnchor:buttonBar.leadingAnchor],
+        [cancelBtn.topAnchor     constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
+        [cancelBtn.bottomAnchor  constraintEqualToAnchor:buttonBar.bottomAnchor],
+        [cancelBtn.widthAnchor   constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
+
+        [saveBtn.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
+        [saveBtn.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
+        [saveBtn.bottomAnchor   constraintEqualToAnchor:buttonBar.bottomAnchor],
+        [saveBtn.widthAnchor    constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
+
+        [btnDivider.centerXAnchor constraintEqualToAnchor:buttonBar.centerXAnchor],
+        [btnDivider.topAnchor     constraintEqualToAnchor:buttonBar.topAnchor constant:10],
+        [btnDivider.bottomAnchor  constraintEqualToAnchor:buttonBar.bottomAnchor constant:-10],
+        [btnDivider.widthAnchor   constraintEqualToConstant:0.5],
+    ]];
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return (NSInteger)self.rows.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ads_ui_cell"];
+    if (!cell)
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ads_ui_cell"];
+
+    NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
+    NSString     *key = row[@"key"];
+
+    BOOL isJITRow   = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
+    BOOL rowEnabled = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
+
+    cell.textLabel.text           = row[@"title"];
+    cell.textLabel.font           = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    cell.detailTextLabel.text     = row[@"detail"];
+    cell.detailTextLabel.font     = [UIFont systemFontOfSize:11];
+    cell.backgroundColor          = [UIColor colorWithWhite:0.13 alpha:1];
+    cell.selectionStyle           = UITableViewCellSelectionStyleNone;
+
+    if (rowEnabled) {
+        cell.textLabel.textColor       = [UIColor whiteColor];
+        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.48 alpha:1];
+        cell.userInteractionEnabled    = YES;
+    } else {
+        cell.textLabel.textColor       = [UIColor colorWithWhite:0.35 alpha:1];
+        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.30 alpha:1];
+        cell.userInteractionEnabled    = NO;
+    }
+
+    UISwitch *sw;
+    if ([cell.accessoryView isKindOfClass:[UISwitch class]]) {
+        sw = (UISwitch *)cell.accessoryView;
+    } else {
+        sw = [[UISwitch alloc] init];
+        [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = sw;
+    }
+    sw.tag         = indexPath.row;
+    sw.enabled     = rowEnabled;
+    sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
+
+    id saved = self.pendingRules[key];
+    sw.on = saved ? [saved boolValue] : ads_ui_default_value_for_key(key);
+
+    return cell;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return 52;
+}
+
+- (void)switchChanged:(UISwitch *)sender {
+    if (sender.tag == NSIntegerMax) {
+        self.pendingPrefs[@"enabled"] = @(sender.on);
+        [UIView animateWithDuration:0.25 animations:^{
+            sender.superview.backgroundColor = sender.on
+                ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
+                : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        }];
+        return;
+    }
+
+    NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
+    self.pendingRules[key] = @(sender.on);
+
+    if ([key isEqualToString:@"disableJS"]) {
+        self.jsLocked = sender.on;
+        NSInteger jitIdx = -1;
+        for (NSUInteger i = 0; i < self.rows.count; i++) {
+            NSString *k = self.rows[i][@"key"];
+            if ([k isEqualToString:@"disableJIT"] || [k isEqualToString:@"disableJIT15"]) {
+                jitIdx = (NSInteger)i;
+                break;
+            }
+        }
+        if (jitIdx >= 0) {
+            NSString *jitKey = self.rows[(NSUInteger)jitIdx][@"key"];
+            self.pendingRules[jitKey] = @(sender.on);
+            [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:jitIdx inSection:0]]
+                                  withRowAnimation:UITableViewRowAnimationNone];
+        }
+    }
+}
+
+- (void)tappedBackground:(UITapGestureRecognizer *)tap {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)cancel {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)saveAndRestart {
+    NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
+    self.pendingPrefs[rulesKey] = [self.pendingRules copy];
+
+    // Mark this process as explicitly restricted so TargetRules are honoured
+    // even if the bundle ID isn't in a preset tier.
+    NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+    self.pendingPrefs[restrictKey] = @YES;
+
+    ads_ui_write_prefs(self.pendingPrefs);
+
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
+                                         NULL, NULL, YES);
+
+    [self dismissViewControllerAnimated:YES completion:^{
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:@"Settings Saved"
+            message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
+            preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction *a) { exit(0); }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Later"
+                                                  style:UIAlertActionStyleCancel
+                                                handler:nil]];
+        UIViewController *top = ads_ui_top_vc(ads_ui_key_window().rootViewController);
+        if (top) [top presentViewController:alert animated:YES completion:nil];
+    }];
+}
+
+@end
+
+// Persistent singleton target — UITapGestureRecognizer holds a weak reference,
+// so the target must outlive the gesture recognizer.
+@interface ADSUIGestureHandler : NSObject
++ (instancetype)shared;
+- (void)handleTap:(UITapGestureRecognizer *)sender;
+@end
+
+@implementation ADSUIGestureHandler
++ (instancetype)shared {
+    static ADSUIGestureHandler *instance;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ instance = [[self alloc] init]; });
+    return instance;
+}
+- (void)handleTap:(UITapGestureRecognizer *)sender {
+    if (sender.state != UIGestureRecognizerStateEnded) return;
+    UIWindow *win = ads_ui_key_window();
+    UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
+    if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
+    ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
+    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
+    [top presentViewController:vc animated:YES completion:nil];
+}
+@end
+
+static void ads_ui_install_gesture(UIWindow *win) {
+    if (!win || ads_ui_gesture_installed) return;
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
+        initWithTarget:[ADSUIGestureHandler shared]
+                action:@selector(handleTap:)];
+    tap.numberOfTapsRequired    = 2;
+    tap.numberOfTouchesRequired = 3;
+    tap.cancelsTouchesInView    = NO;
+    [win addGestureRecognizer:tap];
+    ads_ui_gesture_installed = YES;
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
+}
+
+%hook UIWindow
+- (void)makeKeyAndVisible {
+    %orig;
+    ads_ui_install_gesture(self);
 }
 %end
 
