@@ -69,13 +69,55 @@ static _Atomic BOOL applyDisableFileAccess   = NO;
 
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
-static NSString *customUAString = nil;
+static NSString * _Atomic customUAString = nil;
 
 // =========================================================
 // HELPERS (identical to AntiDarkSwordUI)
 // =========================================================
 
 // Returns a properly JSON-encoded string literal including surrounding double quotes.
+static NSString *adsJSONStringLiteral(NSString *str);
+
+// Derives a navigator.userAgentData.brands JSON array from a UA string.
+static NSString *adsBrandsFromUA(NSString *ua) {
+    if (!ua) return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
+
+    NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
+        NSRange r = [ua rangeOfString:token];
+        if (r.location == NSNotFound) return @"120";
+        NSString *after = [ua substringFromIndex:NSMaxRange(r)];
+        NSRange stop = [after rangeOfCharacterFromSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]];
+        NSString *ver = stop.location > 0 ? [after substringToIndex:stop.location] : after;
+        return (ver.length > 0 && ver.length <= 6) ? ver : @"120";
+    };
+
+    if ([ua containsString:@"Edg/"] || [ua containsString:@"EdgA/"] || [ua containsString:@"EdgiOS/"]) {
+        NSString *token = [ua containsString:@"Edg/"] ? @"Edg/" : ([ua containsString:@"EdgA/"] ? @"EdgA/" : @"EdgiOS/");
+        NSString *ver = majorAfter(token);
+        return [NSString stringWithFormat:
+            @"[{\"brand\":\"Not(A:Brand\",\"version\":\"24\"},"
+             "{\"brand\":\"Chromium\",\"version\":\"%@\"},"
+             "{\"brand\":\"Microsoft Edge\",\"version\":\"%@\"}]", ver, ver];
+    }
+
+    NSString *chromeToken = [ua containsString:@"Chrome/"] ? @"Chrome/" : ([ua containsString:@"CriOS/"] ? @"CriOS/" : nil);
+    if (chromeToken) {
+        NSString *ver = majorAfter(chromeToken);
+        return [NSString stringWithFormat:
+            @"[{\"brand\":\"Not(A:Brand\",\"version\":\"24\"},"
+             "{\"brand\":\"Chromium\",\"version\":\"%@\"},"
+             "{\"brand\":\"Google Chrome\",\"version\":\"%@\"}]", ver, ver];
+    }
+
+    NSString *ffToken = [ua containsString:@"Firefox/"] ? @"Firefox/" : ([ua containsString:@"FxiOS/"] ? @"FxiOS/" : nil);
+    if (ffToken) {
+        NSString *ver = majorAfter(ffToken);
+        return [NSString stringWithFormat:@"[{\"brand\":\"Firefox\",\"version\":\"%@\"}]", ver];
+    }
+
+    return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
+}
+
 static NSString *adsJSONStringLiteral(NSString *str) {
     if (!str || str.length == 0) return @"\"\"";
     NSArray *wrapper = @[str];
@@ -117,6 +159,7 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString containsString:@"Macintosh"])    uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"]) uadPlatform = @"\"Windows\"";
     else if ([customUAString containsString:@"Android"]) uadPlatform = @"\"Android\"";
+    NSString *uadBrands = adsBrandsFromUA(customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
         @"(function(){"
@@ -125,11 +168,11 @@ static void injectUAScript(WKUserContentController *ucc) {
          "d(n,'appVersion', {get:function(){return %@},configurable:true});"
          "d(n,'platform',   {get:function(){return %@},configurable:true});"
          "d(n,'vendor',     {get:function(){return %@},configurable:true});"
-         "try{var ud={brands:[{brand:'Safari',version:'18'}],mobile:%@,platform:%@,"
+         "try{var ud={brands:%@,mobile:%@,platform:%@,"
          "getHighEntropyValues:function(h){return Promise.resolve({});}};"
          "d(n,'userAgentData',{get:function(){return ud;},configurable:true});}catch(e){}"
          "})();",
-        jsonUA, jsonAppVersion, platform, vendor, uadMobile, uadPlatform];
+        jsonUA, jsonAppVersion, platform, vendor, uadBrands, uadMobile, uadPlatform];
 
     WKUserScript *script = [[WKUserScript alloc]
         initWithSource:jsSource

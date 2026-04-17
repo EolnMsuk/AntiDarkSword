@@ -61,7 +61,7 @@ static _Atomic BOOL prefsLoaded            = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
-static NSString *customUAString    = @"";
+static NSString * _Atomic customUAString = @"";
 // shouldSpoofUA and all apply* variables are read directly by hooks which can
 // fire on threads other than the one running loadPrefs(); _Atomic eliminates
 // the data race without requiring a full lock.
@@ -97,6 +97,55 @@ static _Atomic BOOL applyDisableIMessageDL = NO;
 
 // Returns a properly JSON-encoded string literal (including surrounding double quotes)
 // suitable for embedding directly in JavaScript source.
+static NSString *adsJSONStringLiteral(NSString *str);
+
+// Derives a navigator.userAgentData.brands JSON array from a UA string.
+// Parses engine/browser tokens so the Client Hints brands stay consistent with userAgent.
+static NSString *adsBrandsFromUA(NSString *ua) {
+    if (!ua) return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
+
+    // Helper: extract the leading decimal digits after a token (e.g. "Chrome/120.0.x" → "120").
+    NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
+        NSRange r = [ua rangeOfString:token];
+        if (r.location == NSNotFound) return @"120";
+        NSString *after = [ua substringFromIndex:NSMaxRange(r)];
+        NSRange stop = [after rangeOfCharacterFromSet:[[NSCharacterSet decimalDigitCharacterSet] invertedSet]];
+        NSString *ver = stop.location > 0 ? [after substringToIndex:stop.location] : after;
+        return (ver.length > 0 && ver.length <= 6) ? ver : @"120";
+    };
+
+    // Edge — must check before Chrome since Edge UAs also contain "Chrome/".
+    if ([ua containsString:@"Edg/"] || [ua containsString:@"EdgA/"] || [ua containsString:@"EdgiOS/"]) {
+        NSString *token = [ua containsString:@"Edg/"] ? @"Edg/" : ([ua containsString:@"EdgA/"] ? @"EdgA/" : @"EdgiOS/");
+        NSString *ver = majorAfter(token);
+        return [NSString stringWithFormat:
+            @"[{\"brand\":\"Not(A:Brand\",\"version\":\"24\"},"
+             "{\"brand\":\"Chromium\",\"version\":\"%@\"},"
+             "{\"brand\":\"Microsoft Edge\",\"version\":\"%@\"}]", ver, ver];
+    }
+
+    // Chrome / Chrome-on-iOS (CriOS).
+    NSString *chromeToken = [ua containsString:@"Chrome/"] ? @"Chrome/" : ([ua containsString:@"CriOS/"] ? @"CriOS/" : nil);
+    if (chromeToken) {
+        NSString *ver = majorAfter(chromeToken);
+        return [NSString stringWithFormat:
+            @"[{\"brand\":\"Not(A:Brand\",\"version\":\"24\"},"
+             "{\"brand\":\"Chromium\",\"version\":\"%@\"},"
+             "{\"brand\":\"Google Chrome\",\"version\":\"%@\"}]", ver, ver];
+    }
+
+    // Firefox / Firefox-on-iOS (FxiOS).
+    NSString *ffToken = [ua containsString:@"Firefox/"] ? @"Firefox/" : ([ua containsString:@"FxiOS/"] ? @"FxiOS/" : nil);
+    if (ffToken) {
+        NSString *ver = majorAfter(ffToken);
+        return [NSString stringWithFormat:@"[{\"brand\":\"Firefox\",\"version\":\"%@\"}]", ver];
+    }
+
+    // Safari or unrecognised — userAgentData is not implemented in real Safari, but we
+    // keep a consistent stub so the property exists and doesn't throw.
+    return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
+}
+
 static NSString *adsJSONStringLiteral(NSString *str) {
     if (!str || str.length == 0) return @"\"\"";
 
@@ -143,6 +192,7 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString containsString:@"Macintosh"])      uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"])   uadPlatform = @"\"Windows\"";
     else if ([customUAString containsString:@"Android"])   uadPlatform = @"\"Android\"";
+    NSString *uadBrands = adsBrandsFromUA(customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
         @"(function(){"
@@ -151,11 +201,11 @@ static void injectUAScript(WKUserContentController *ucc) {
          "d(n,'appVersion', {get:function(){return %@},configurable:true});"
          "d(n,'platform',   {get:function(){return %@},configurable:true});"
          "d(n,'vendor',     {get:function(){return %@},configurable:true});"
-         "try{var ud={brands:[{brand:'Safari',version:'18'}],mobile:%@,platform:%@,"
+         "try{var ud={brands:%@,mobile:%@,platform:%@,"
          "getHighEntropyValues:function(h){return Promise.resolve({});}};"
          "d(n,'userAgentData',{get:function(){return ud;},configurable:true});}catch(e){}"
          "})();",
-        jsonUA, jsonAppVersion, platform, vendor, uadMobile, uadPlatform];
+        jsonUA, jsonAppVersion, platform, vendor, uadBrands, uadMobile, uadPlatform];
 
     WKUserScript *script = [[WKUserScript alloc]
         initWithSource:jsSource
