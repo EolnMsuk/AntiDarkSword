@@ -33,9 +33,9 @@ Requires: `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
 
 | Jailbreak | Type | iOS |
 |---|---|---|
-| **NathanLR** | Rootless (semi-jailbreak) | 16.5.1 – 17.0 ² |
+| **NathanLR** | Rootless (semi-jailbreak) | 16.5.1 – 17.0 ¹ |
 | **Dopamine 2** | Rootless / RootHide | 15.0 – 16.6.1 |
-| **palera1n** | Rootless / Rootful | 15.0 – 17.x ¹ |
+| **palera1n** | Rootless / Rootful | 15.0 – 17.x |
 | **meowbrek2** | Rootless | 15.0 – 15.8.3 |
 | **NekoJB** | Rootless | 15.0 – 15.8.3 |
 | **XinaA15** | Hybrid | 15.0 – 15.1.1 |
@@ -44,9 +44,7 @@ Requires: `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
 | **unc0ver** | Rootful | 13.0 – 14.8 |
 | **Odyssey** | Rootful | 13.0 – 13.7 |
 
-> ¹ **palera1n iOS 17.x** is checkm8-based — supported only on **arm64 devices (A8–A11 chips)**: iPhone 6, 6 Plus, 6s, 6s Plus, SE (1st gen), 7, 7 Plus, 8, 8 Plus, and X. No full jailbreak exists for A12+ (arm64e) devices on iOS 17.x. If you are on an iPhone XS or newer running iOS 17.x, use **NathanLR** or **TrollFools** instead (see below).
->
-> ² **NathanLR** is a semi-jailbreak (fork of Serotonin) that requires **TrollStore** to install. It uses the TrollInstallerX kernel exploit and natively supports standard rootless tweaks without any conversion. It is the primary option for **A12+ (arm64e) devices** on iOS 16.5.1–17.0 that lack Dopamine or palera1n support. v2.0 extends support to iOS 17.0 across all devices including iPhone 14 and 15 lineups. Supports daemon injection, so the full `.deb` including system daemon hooks works as expected.
+> ¹ **NathanLR** is a semi-jailbreak (fork of Serotonin) that requires **TrollStore** to install. It uses the TrollInstallerX kernel exploit and natively supports standard rootless tweaks without any conversion. It is the primary option for **A12+ (arm64e) devices** on iOS 16.5.1–17.0 that lack Dopamine or palera1n support. v2.0 extends support to iOS 17.0 across all devices including iPhone 14 and 15 lineups. Supports daemon injection, so the full `.deb` including system daemon hooks works as expected.
 
 ### TrollFools / TrollStore (WebKit dylib only)
 
