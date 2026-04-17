@@ -1,66 +1,20 @@
 # AntiDarkSword ⚔️
 
-A jailbreak tweak and TrollFools dylib that hardens iOS devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self-abort.
+---
+
+A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self-abort.
+
+---
 
 [<img width="1280" height="1030" alt="ReadMeNew" src="https://github.com/user-attachments/assets/0564c070-59a3-4667-8328-924ce73e685d" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
 
 ---
-
-## 🛡️ Protections
-
-| Feature | What it does |
-|---|---|
-| **Disable JIT** | iOS 16+: `lockdownModeEnabled` + `JITEnabled = NO`. iOS 13–15: `JITEnabled = NO` only |
-| **WebKit Hardening** | Disable media autoplay, PiP, WebGL, WebRTC, and local file access |
-| **iMessage Blocking** | Block auto-download and preview generation in IMCore / ChatKit (jailbreak only) |
-| **User Agent Spoofing** | Mask the WKWebView UA to defeat browser fingerprinting used by exploit kits |
-| **Corellium Honeypot** | Spoof `/usr/libexec/corelliumd` + live daemon process — payload aborts on detection |
-| **Granular Rules** | Per-app, per-daemon, and system-wide override controls in Settings |
 
 ## 🛑 Mitigated Threats
 
 **Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
 **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
 **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
-
----
-
-## 📱 Compatibility
-
-### Jailbreak (full tweak — `.deb`)
-
-Requires: `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
-
-| Jailbreak | Type | iOS |
-|---|---|---|
-| **NathanLR** | Rootless (semi-jailbreak) | 16.5.1 – 17.0 ¹ |
-| **Dopamine 2** | Rootless / RootHide | 15.0 – 16.6.1 |
-| **palera1n** | Rootless / Rootful | 15.0 – 17.x |
-| **meowbrek2** | Rootless | 15.0 – 15.8.3 |
-| **NekoJB** | Rootless | 15.0 – 15.8.3 |
-| **XinaA15** | Hybrid | 15.0 – 15.1.1 |
-| **checkra1n** | Rootful | 13.0 – 14.8.1 |
-| **Taurine** | Rootful | 14.0 – 14.8.1 |
-| **unc0ver** | Rootful | 13.0 – 14.8 |
-| **Odyssey** | Rootful | 13.0 – 13.7 |
-
-> ¹ **NathanLR** is a semi-jailbreak (fork of Serotonin) that requires **TrollStore** to install. It uses the TrollInstallerX kernel exploit and natively supports standard rootless tweaks without any conversion. It is the primary option for **A12+ (arm64e) devices** on iOS 16.5.1–17.0 that lack Dopamine or palera1n support. v2.0 extends support to iOS 17.0 across all devices including iPhone 14 and 15 lineups. Supports daemon injection, so the full `.deb` including system daemon hooks works as expected.
-
-### TrollFools / TrollStore (WebKit dylib only)
-
-No jailbreak required. Injects per-app — iMessage and Corellium protections not included.
-
-| iOS | TrollStore |
-|---|---|
-| 14.0 – 14.8.1 | ✅ |
-| 15.0 – 16.6.1 | ✅ |
-| 16.7.x | ⚠️ Limited (device/exploit dependent) |
-| 17.0 | ⚠️ Limited (device/exploit dependent) |
-| 17.1+ | ❌ Not supported |
-
-> For iOS 17.0 on **A12+ devices** (iPhone XS and newer): use **NathanLR** for the full `.deb` (includes daemon hooks and iMessage protection), or **TrollFools** for per-app WebKit protection only.
-
----
 
 ## 🛠️ Installation
 
@@ -75,9 +29,39 @@ No jailbreak required. Injects per-app — iMessage and Corellium protections no
 3. Open TrollFools → select a 3rd-party app → inject the `.dylib`.
 4. **Three-finger double-tap** inside the app to open the protection overlay.
 
----
+## 🛡️ Protections & Compatibility
 
-## ⚙️ Auto-Protect Levels
+| **Jailbreak (tweak)** | iOS 13–14 | iOS 15 | iOS 16+ |
+| :--- | :--- | :--- | :--- |
+| Disable JIT | ❌ | ✅ | ✅ |
+| Disable JavaScript | 🟡 | ✅ | ✅ |
+| UA Spoofing | ✅ | ✅ | ✅ |
+| UA Client Hints | ❌ | ❌ | ✅ |
+| Disable WebRTC / WebGL | ✅ | ✅ | ✅ |
+| Disable media autoplay | ✅ | ✅ | ✅ |
+| Disable local file access | ✅ | ✅ | ✅ |
+| Mail auto-download block | ✅ | ✅ | ✅ |
+| iMessage auto-download block (daemon) | ✅ | ✅ | ✅ |
+| Daemon protection | ✅ | ✅ | ✅ |
+| Corellium decoy | ✅ | ✅ | ✅ |
+
+<br>
+
+| **TrollStore (dylib)** | iOS 13–14 | iOS 15 | iOS 16+ |
+| :--- | :--- | :--- | :--- |
+| Disable JIT | ❌ | ✅ | ✅ |
+| Disable JavaScript | 🟡 | 🟡 | 🟡 |
+| UA Spoofing | ✅ | ✅ | ✅ |
+| UA Client Hints | ❌ | ❌ | ✅ |
+| Disable WebRTC / WebGL | ✅ | ✅ | ✅ |
+| Disable media autoplay | ✅ | ✅ | ✅ |
+| Disable local file access | ✅ | ✅ | ✅ |
+| Mail auto-download block | ✅ | ✅ | ✅ |
+| iMessage auto-download block | ❌ | ❌ | ❌ |
+| Daemon protection | ❌ | ❌ | ❌ |
+| Corellium decoy | ❌ | ❌ | ❌ |
+
+## ⚙️ Preset Level Protection
 
 > Level 3 hooks system daemons. Toggle individual daemons under **Settings > Restrict System Daemons**.
 
