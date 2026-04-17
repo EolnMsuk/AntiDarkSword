@@ -33,8 +33,8 @@ Requires: `mobilesubstrate` (or `ElleKit`), `preferenceloader`, `altlist`
 
 | Jailbreak | Type | iOS |
 |---|---|---|
-| **Dopamine 2** | Rootless / RootHide | 15.0 – 16.6.1 |
 | **NathanLR** | Rootless (semi-jailbreak) | 16.5.1 – 17.0 ² |
+| **Dopamine 2** | Rootless / RootHide | 15.0 – 16.6.1 |
 | **palera1n** | Rootless / Rootful | 15.0 – 17.x ¹ |
 | **meowbrek2** | Rootless | 15.0 – 15.8.3 |
 | **NekoJB** | Rootless | 15.0 – 15.8.3 |
