@@ -225,7 +225,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
 
         // ---- System Daemons group (MOVED DOWN) ----
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
+        [group setProperty:@"Restricting a daemon bypasses all zero-click mitigations for that process. Disable Corellium Honeypot to unlock." forKey:@"footerText"];
         [specs addObject:group];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
