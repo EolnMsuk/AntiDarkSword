@@ -81,8 +81,6 @@ jobs:
             | `*_iphoneos-arm64.deb` | Rootless jailbreaks (Dopamine, palera1n, meowbrek2) |
             | `*_iphoneos-arm.deb` | Rootful jailbreaks (checkra1n, Taurine, unc0ver) |
             | `*_TrollFools.dylib` | TrollStore / TrollFools (no jailbreak required) |
-
-            **TrollFools install:** Open TrollFools → pick your app → tap **+** → select the `.dylib`
           files: output/*
           draft: true
           prerelease: false
