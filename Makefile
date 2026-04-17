@@ -1,5 +1,5 @@
 ARCHS ?= arm64 arm64e
-TARGET ?= iphone:clang:16.5:14.5
+TARGET ?= iphone:clang:16.5:13.0
 
 # Force dual SHA1+SHA256 signing so Dopamine/RootHide trust cache (SHA1 lookup) accepts the dylibs.
 # macOS CI uses codesign which produces both automatically; on-device ldid defaults to SHA256-only.

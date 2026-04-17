@@ -11,7 +11,7 @@
 # No respring or jailbreak required.
 
 ARCHS ?= arm64 arm64e
-TARGET ?= iphone:clang:16.5:14.5
+TARGET ?= iphone:clang:16.5:13.0
 
 include $(THEOS)/makefiles/common.mk
 

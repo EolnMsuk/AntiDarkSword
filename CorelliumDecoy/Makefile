@@ -1,4 +1,4 @@
-TARGET ?= iphone:clang:16.5:14.5
+TARGET ?= iphone:clang:16.5:13.0
 include $(THEOS)/makefiles/common.mk
 
 TOOL_NAME = corelliumd
