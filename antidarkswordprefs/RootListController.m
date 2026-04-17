@@ -1151,7 +1151,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
                 NSString *osVersion = [[UIDevice currentDevice] systemVersion];
                 NSBundle *bundle = [NSBundle bundleForClass:[self class]];
-                NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"3.8.9";
+                NSString *version = [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"4.2.9";
                 
                 NSString *jbType = @"Rootless";
                 if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) jbType = @"Rootful";
@@ -1458,6 +1458,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0)
                 waitpid(pid, NULL, 0);
         }
+    } else if (newLevel < 3 && [defaults boolForKey:@"corelliumDecoyEnabled"]) {
+        [defaults setBool:NO forKey:@"corelliumDecoyEnabled"];
+        pid_t pid;
+        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
+        NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+        const char *unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+        if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
+            waitpid(pid, NULL, 0);
     }
 
     [defaults synchronize];

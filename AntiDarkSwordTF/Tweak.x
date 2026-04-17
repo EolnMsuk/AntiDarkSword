@@ -673,19 +673,24 @@ static BOOL ads_default_value_for_key(NSString *key) {
     dismissTap.numberOfTouchesRequired = 1;
     [bgView addGestureRecognizer:dismissTap];
 
-    // --- Card ---
+    // --- Shadow wrapper (no masksToBounds so the shadow is visible) ---
+    UIView *shadowWrapper = [[UIView alloc] init];
+    shadowWrapper.translatesAutoresizingMaskIntoConstraints = NO;
+    shadowWrapper.backgroundColor       = [UIColor clearColor];
+    shadowWrapper.layer.cornerRadius    = 18;
+    shadowWrapper.layer.shadowColor     = [UIColor blackColor].CGColor;
+    shadowWrapper.layer.shadowOpacity   = 0.45;
+    shadowWrapper.layer.shadowRadius    = 16;
+    shadowWrapper.layer.shadowOffset    = CGSizeMake(0, 6);
+    [self.view addSubview:shadowWrapper];
+
+    // --- Card (masksToBounds clips subviews to rounded corners; no shadow here) ---
     UIView *card                = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor        = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
     card.layer.cornerRadius     = 18;
     card.layer.masksToBounds    = YES;
-    
-    // Subtle drop shadow on the card's parent so it punches through the blur.
-    card.layer.shadowColor      = [UIColor blackColor].CGColor;
-    card.layer.shadowOpacity    = 0.45;
-    card.layer.shadowRadius     = 16;
-    card.layer.shadowOffset     = CGSizeMake(0, 6);
-    [self.view addSubview:card];
+    [shadowWrapper addSubview:card];
     
     // --- Header ---
     UILabel *titleLabel                 = [[UILabel alloc] init];
@@ -791,11 +796,16 @@ static BOOL ads_default_value_for_key(NSString *key) {
     CGFloat maxTH = rowH * (CGFloat)self.rows.count; // table height, scrolls if needed
 
     [NSLayoutConstraint activateConstraints:@[
-        // Card: centered, 88% wide, max 84% tall
-        [card.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [card.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [card.widthAnchor   constraintEqualToAnchor:self.view.widthAnchor multiplier:0.88],
-        [card.heightAnchor  constraintLessThanOrEqualToAnchor:self.view.heightAnchor multiplier:0.84],
+        // Shadow wrapper: centered, 88% wide, max 84% tall
+        [shadowWrapper.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [shadowWrapper.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [shadowWrapper.widthAnchor   constraintEqualToAnchor:self.view.widthAnchor multiplier:0.88],
+        [shadowWrapper.heightAnchor  constraintLessThanOrEqualToAnchor:self.view.heightAnchor multiplier:0.84],
+        // Card fills shadow wrapper
+        [card.topAnchor      constraintEqualToAnchor:shadowWrapper.topAnchor],
+        [card.leadingAnchor  constraintEqualToAnchor:shadowWrapper.leadingAnchor],
+        [card.trailingAnchor constraintEqualToAnchor:shadowWrapper.trailingAnchor],
+        [card.bottomAnchor   constraintEqualToAnchor:shadowWrapper.bottomAnchor],
 
         // Title
         [titleLabel.topAnchor     constraintEqualToAnchor:card.topAnchor constant:18],

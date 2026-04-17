@@ -189,9 +189,11 @@ static void loadPrefs() {
                              (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
 }
 
-static void reloadDaemonPrefsNotification(CFNotificationCenterRef center, void *observer,
-                                          CFStringRef name, const void *object,
-                                          CFDictionaryRef userInfo) {
+static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unused,
+                                          void *observer __unused,
+                                          CFStringRef name __unused,
+                                          const void *object __unused,
+                                          CFDictionaryRef userInfo __unused) {
     prefsLoaded = NO;
     loadPrefs();
 }
