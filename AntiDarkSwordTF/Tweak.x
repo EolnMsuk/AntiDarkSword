@@ -7,7 +7,12 @@
 //     overlay that writes directly to the shared prefs plist.
 //   • No tier matching or process filtering — TrollFools puts the dylib in the
 //     app the user chose; protections apply unconditionally.
-//   • No daemon-layer hooks — injecting into imagent/apsd requires a jailbreak.
+//   • No daemon-layer hooks — imagent/apsd require a jailbreak.
+//     Mail.app (com.apple.mobilemail) IS a supported target: the WebKit hooks
+//     harden HTML email rendering. Enable "Block Remote Content" in the overlay
+//     to prevent auto-loading of external resources in HTML emails (zero-click
+//     mitigation). Mail uses Message.framework, not IMCore, so IMFileTransfer
+//     and CKAttachmentMessagePartChatItem hooks do not apply here.
 //   • JSEvaluateScript C-function hook is omitted (needs MSHookFunction / fishhook).
 //     The WKWebpagePreferences and WKPreferences %hooks cover JS blocking at the
 //     ObjC level, which is sufficient for attack-surface reduction.
@@ -66,10 +71,16 @@ static _Atomic BOOL applyDisableJS           = NO;
 static _Atomic BOOL applyDisableMedia        = NO;
 static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
+static _Atomic BOOL applyBlockRemoteContent  = NO;
 
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
 static NSString *customUAString = nil;
+
+// Compiled once in %ctor; applied to WKWebViewConfigurations when applyBlockRemoteContent=YES.
+// Blocks external http/https resource loads (images, scripts, media, etc.) — the primary
+// zero-click attack surface in HTML email rendering (Mail.app) and similar HTML views.
+static WKContentRuleList *adsContentBlocker = nil;
 
 // =========================================================
 // HELPERS (identical to AntiDarkSwordUI)
@@ -305,7 +316,8 @@ static void loadPrefs() {
     applyDisableJS         =            ads_read_bool(rules, prefs, @"disableJS",         @"globalDisableJS",         NO);
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
-    applyDisableFileAccess =            ads_read_bool(rules, prefs, @"disableFileAccess", @"globalDisableFileAccess", NO);
+    applyDisableFileAccess  =           ads_read_bool(rules, prefs, @"disableFileAccess",  @"globalDisableFileAccess",  NO);
+    applyBlockRemoteContent =           ads_read_bool(rules, prefs, @"blockRemoteContent", @"globalBlockRemoteContent", NO);
 
     // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
@@ -341,10 +353,10 @@ static void loadPrefs() {
     shouldSpoofUA = (globalUA || uaRule) && customUAString.length > 0;
 
     ADSLog(@"[STATUS] TrollFools protection ACTIVE in %@. "
-           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d",
+           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d RemoteBlock:%d",
            bundleID,
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
-           (int)applyDisableFileAccess, (int)shouldSpoofUA);
+           (int)applyDisableFileAccess, (int)shouldSpoofUA, (int)applyBlockRemoteContent);
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -411,6 +423,9 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
+    if (applyBlockRemoteContent && adsContentBlocker)
+        [configuration.userContentController addContentRuleList:adsContentBlocker];
+
     if (shouldSpoofUA) injectUAScript(configuration.userContentController);
 }
 
@@ -423,6 +438,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
+    if (applyBlockRemoteContent && adsContentBlocker && userContentController)
+        [userContentController addContentRuleList:adsContentBlocker];
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
@@ -661,6 +678,11 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     [rows addObject:@{@"title":   @"Block file:// Access",
                       @"detail":  @"Prevents local file exfiltration",
                       @"key":     @"disableFileAccess",
+                      @"enabled": @YES}];
+
+    [rows addObject:@{@"title":   @"Block Remote Content",
+                      @"detail":  @"Blocks external resource loads — recommended for Mail",
+                      @"key":     @"blockRemoteContent",
                       @"enabled": @YES}];
 
     return rows;
@@ -1157,6 +1179,25 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
 %ctor {
     isRootlessJB = (access("/var/jb", F_OK) == 0);
     loadPrefs();
+
+    // Pre-compile the remote content blocker used by "Block Remote Content".
+    // Blocks external http/https resource loads in WKWebViews — the main attack
+    // surface for zero-click exploits delivered via HTML email in Mail.app.
+    // Compilation is async and WebKit caches the result; subsequent launches
+    // reuse the cached build. The completion handler stores the result in
+    // adsContentBlocker; applyWebKitMitigations applies it when the flag is ON.
+    NSString *blockRules =
+        @"[{\"trigger\":{\"url-filter\":\"^https?://\","
+         "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
+         "\"font\",\"media\",\"svg-document\",\"raw\"]},"
+         "\"action\":{\"type\":\"block\"}}]";
+    [WKContentRuleListStore.defaultStore
+        compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
+        encodedContentRuleList:blockRules
+        completionHandler:^(WKContentRuleList *list, NSError *err) {
+            if (list) adsContentBlocker = list;
+            else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
+        }];
 
     ADSLog(@"[INIT] AntiDarkSword (TrollFools) loaded into: %@ (%@)",
            [[NSProcessInfo processInfo] processName],
