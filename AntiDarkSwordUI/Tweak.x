@@ -11,9 +11,14 @@
 // =========================================================
 // PRIVATE WEBKIT INTERFACES (JIT & LOCKDOWN MODE)
 // =========================================================
+// lockdownModeEnabled became a public API in iOS 16 (SDK 160000+).
+// Only forward-declare it as private when building against an older SDK to
+// avoid a duplicate-declaration conflict with the SDK's own header.
+#if __IPHONE_OS_VERSION_MAX_ALLOWED < 160000
 @interface WKWebpagePreferences (Private)
 @property (nonatomic, assign) BOOL lockdownModeEnabled;
 @end
+#endif
 
 @interface _WKProcessPoolConfiguration : NSObject
 @property (nonatomic, assign) BOOL JITEnabled;
