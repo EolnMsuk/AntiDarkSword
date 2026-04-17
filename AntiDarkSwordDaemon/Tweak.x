@@ -37,6 +37,7 @@ static _Atomic BOOL disableIMessageDL        = NO;
 static _Atomic BOOL applyDisableIMessageDL   = NO;
 static _Atomic BOOL countersEnabled          = NO;
 static _Atomic time_t lastProbeTime          = 0;
+static dispatch_queue_t ads_counter_queue    = nil;
 
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
     id restrictedAppsRaw = prefs[@"restrictedApps"];
@@ -238,38 +239,61 @@ static void ads_increment_probe_counter(void) {
     time_t now = time(NULL);
     time_t prev = atomic_load(&lastProbeTime);
     if (now - prev < 2) return;
+    // CAS here — synchronous, before dispatch — so rapid probe bursts are
+    // collapsed even if the async block hasn't run yet.
     if (!atomic_compare_exchange_strong(&lastProbeTime, &prev, now)) return;
 
-    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
-    CFPropertyListRef val = CFPreferencesCopyValue(
-        CFSTR("corelliumProbeCount"),
-        CFSTR("com.eolnmsuk.antidarkswordprefs"),
-        kCFPreferencesCurrentUser,
-        kCFPreferencesAnyHost);
-    NSInteger count = 0;
-    if (val) {
-        CFNumberGetValue((CFNumberRef)val, kCFNumberNSIntegerType, &count);
-        CFRelease(val);
-    }
-    NSInteger newVal = count + 1;
-    CFNumberRef newCount = CFNumberCreate(NULL, kCFNumberNSIntegerType, &newVal);
-    CFPreferencesSetValue(
-        CFSTR("corelliumProbeCount"),
-        newCount,
-        CFSTR("com.eolnmsuk.antidarkswordprefs"),
-        kCFPreferencesCurrentUser,
-        kCFPreferencesAnyHost);
-    CFRelease(newCount);
-    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    // All CFPreferences calls are dispatched async on a serial queue for two reasons:
+    //
+    // 1. DEADLOCK PREVENTION: this function is called from inside POSIX hooks
+    //    (access/stat/lstat) that fire within apsd. apsd itself calls cfprefsd
+    //    synchronously for APNs configuration. Calling CFPreferences here on the
+    //    same thread would make apsd wait on cfprefsd while cfprefsd waits on apsd
+    //    → deadlock → push notification delivery fails → no haptics, sounds, or
+    //    incoming call/video alerts.
+    //
+    // 2. LAYER MISMATCH FIX: CFPreferencesAppSynchronize implicitly targets
+    //    kCFPreferencesCurrentHost, but SetValue/CopyValue use kCFPreferencesAnyHost.
+    //    Using CFPreferencesSynchronize with the matching user/host pair below
+    //    ensures the written value is actually flushed to the plist file that both
+    //    loadPrefs() (dictionaryWithContentsOfFile:) and Settings.app (NSUserDefaults
+    //    suite) read from.
+    if (!ads_counter_queue) return;
+    dispatch_async(ads_counter_queue, ^{
+        CFPropertyListRef val = CFPreferencesCopyValue(
+            CFSTR("corelliumProbeCount"),
+            CFSTR("com.eolnmsuk.antidarkswordprefs"),
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost);
+        NSInteger count = 0;
+        if (val) {
+            CFNumberGetValue((CFNumberRef)val, kCFNumberNSIntegerType, &count);
+            CFRelease(val);
+        }
+        NSInteger newVal = count + 1;
+        CFNumberRef newCount = CFNumberCreate(NULL, kCFNumberNSIntegerType, &newVal);
+        CFPreferencesSetValue(
+            CFSTR("corelliumProbeCount"),
+            newCount,
+            CFSTR("com.eolnmsuk.antidarkswordprefs"),
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost);
+        CFRelease(newCount);
+        // Flush the any-host layer — must match the user/host used by SetValue.
+        CFPreferencesSynchronize(
+            CFSTR("com.eolnmsuk.antidarkswordprefs"),
+            kCFPreferencesCurrentUser,
+            kCFPreferencesAnyHost);
 
-    // Separate notification so Settings.app refreshes the counter cell
-    // without triggering a full prefs reload in all other tweaks.
-    CFNotificationCenterPostNotification(
-        CFNotificationCenterGetDarwinNotifyCenter(),
-        CFSTR("com.eolnmsuk.antidarkswordprefs/counter"),
-        NULL, NULL, YES);
+        // Separate notification so Settings.app refreshes the counter cell
+        // without triggering a full prefs reload in all other tweaks.
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFSTR("com.eolnmsuk.antidarkswordprefs/counter"),
+            NULL, NULL, YES);
 
-    ADSLog(@"[COUNTER] Corellium probe detected. Total: %ld", (long)newVal);
+        ADSLog(@"[COUNTER] Corellium probe detected. Total: %ld", (long)newVal);
+    });
 }
 
 // =========================================================
@@ -378,8 +402,13 @@ int hook_lstat(const char *path, struct stat *buf) {
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
         NULL, CFNotificationSuspensionBehaviorCoalesce);
 
+    // Create the counter queue before installing POSIX hooks so it is ready
+    // the instant any hook fires and calls ads_increment_probe_counter().
+    ads_counter_queue = dispatch_queue_create("com.eolnmsuk.ads.counter", DISPATCH_QUEUE_SERIAL);
+
     // Hooks check globalDecoyEnabled at call time; install unconditionally
     // so pref changes take effect immediately without re-hooking.
+
     MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
     MSHookFunction((void *)stat,   (void *)hook_stat,   (void **)&orig_stat);
     MSHookFunction((void *)lstat,  (void *)hook_lstat,  (void **)&orig_lstat);
