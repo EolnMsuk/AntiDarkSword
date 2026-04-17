@@ -2,7 +2,7 @@
 
 A jailbreak tweak and TrollFools dylib that hardens iOS devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self-abort.
 
-[<img width="1249" height="918" alt="readmeORIG" src="https://github.com/user-attachments/assets/2634bd49-f315-4035-a446-3ef48ffdd134" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
+[<img width="1280" height="1030" alt="ReadMeNew" src="https://github.com/user-attachments/assets/0564c070-59a3-4667-8328-924ce73e685d" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
 
 ---
 
