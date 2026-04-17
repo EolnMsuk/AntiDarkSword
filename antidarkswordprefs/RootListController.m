@@ -1241,6 +1241,39 @@ static NSDictionary *ads_daemon_alias_map(void) {
             }
         }
         
+        // Attack counter section — inserted before FooterGroup
+        NSUInteger footerIdx = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+            return [[obj propertyForKey:@"id"] isEqualToString:@"FooterGroup"];
+        }];
+
+        if (footerIdx != NSNotFound) {
+            BOOL showCounter = [defaults boolForKey:@"countersEnabled"];
+            NSInteger probeCount = [defaults integerForKey:@"corelliumProbeCount"];
+
+            PSSpecifier *counterGroup = [PSSpecifier preferenceSpecifierNamed:@"Attack Statistics" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+            [counterGroup setProperty:@"Counts Corellium environment probe attempts detected in system daemons. Each count represents one unique probe event from a potential exploit payload. Requires Level 3 with Corellium Honeypot enabled." forKey:@"footerText"];
+            [specs insertObject:counterGroup atIndex:footerIdx++];
+
+            PSSpecifier *counterToggle = [PSSpecifier preferenceSpecifierNamed:@"Enable Attack Counter"
+                target:self
+                set:@selector(setCountersEnabled:specifier:)
+                get:@selector(getCountersEnabled:)
+                detail:nil cell:PSSwitchCell edit:nil];
+            [specs insertObject:counterToggle atIndex:footerIdx++];
+
+            if (showCounter) {
+                NSString *countLabel = (probeCount == 0)
+                    ? @"Corellium Probes Detected: None"
+                    : [NSString stringWithFormat:@"Corellium Probes Detected: %ld", (long)probeCount];
+                PSSpecifier *countCell = [PSSpecifier preferenceSpecifierNamed:countLabel target:self set:nil get:nil detail:nil cell:PSStaticTextCell edit:nil];
+                [specs insertObject:countCell atIndex:footerIdx++];
+
+                PSSpecifier *resetBtn = [PSSpecifier preferenceSpecifierNamed:@"Reset Counter" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
+                resetBtn->action = @selector(resetProbeCounter);
+                [specs insertObject:resetBtn atIndex:footerIdx++];
+            }
+        }
+
         _specifiers = [specs copy];
     }
     return _specifiers;
@@ -1263,7 +1296,8 @@ static NSDictionary *ads_daemon_alias_map(void) {
     saveButton.enabled = needsRespring || (isEnabled && needsReboot);
     
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
-    
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)ProbeCounterNotification, CFSTR("com.eolnmsuk.antidarkswordprefs/counter"), NULL, CFNotificationSuspensionBehaviorCoalesce);
+
     [self setupHeaderView];
 }
 
@@ -1291,6 +1325,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
 
 - (void)dealloc {
     CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL);
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), CFSTR("com.eolnmsuk.antidarkswordprefs/counter"), NULL);
 }
 
 static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
@@ -1300,9 +1335,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         BOOL isEnabled = [defaults boolForKey:@"enabled"];
         BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"];
         BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
+        });
+    }
+}
+
+static void ProbeCounterNotification(CFNotificationCenterRef center __unused, void *observer,
+                                     CFStringRef name __unused, const void *object __unused,
+                                     CFDictionaryRef userInfo __unused) {
+    AntiDarkSwordPrefsRootListController *controller = (__bridge AntiDarkSwordPrefsRootListController *)observer;
+    if (controller) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            controller->_specifiers = nil;
+            [controller reloadSpecifiers];
         });
     }
 }
@@ -1614,6 +1661,38 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             if (posix_spawn(&pid, killall.UTF8String, NULL, NULL, (char* const*)args, NULL) == 0)
                 waitpid(pid, NULL, 0);
         }
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (id)getCountersEnabled:(PSSpecifier *)spec {
+    return @([ads_defaults() boolForKey:@"countersEnabled"]);
+}
+
+- (void)setCountersEnabled:(id)value specifier:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
+    [defaults synchronize];
+    ads_post_notification();
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self->_specifiers = nil;
+        [self reloadSpecifiers];
+    });
+}
+
+- (void)resetProbeCounter {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset Counter"
+        message:@"Clear the Corellium probe count?"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reset" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        NSUserDefaults *defaults = ads_defaults();
+        [defaults setInteger:0 forKey:@"corelliumProbeCount"];
+        [defaults synchronize];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self->_specifiers = nil;
+            [self reloadSpecifiers];
+        });
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }

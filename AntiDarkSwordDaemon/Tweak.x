@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <time.h>
 #include <substrate.h>
 
 #import "../ADSLogging.h"
@@ -34,6 +35,8 @@ static _Atomic BOOL globalDisableIMessageDL  = NO;
 static _Atomic BOOL globalDecoyEnabled       = NO;
 static _Atomic BOOL disableIMessageDL        = NO;
 static _Atomic BOOL applyDisableIMessageDL   = NO;
+static _Atomic BOOL countersEnabled          = NO;
+static _Atomic time_t lastProbeTime          = 0;
 
 static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedAppsArray) {
     id restrictedAppsRaw = prefs[@"restrictedApps"];
@@ -161,6 +164,8 @@ static void loadPrefs() {
     BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)])
                      ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
     globalDecoyEnabled = (globalTweakEnabled && decoyPref && currentProcessRestricted);
+    countersEnabled    = (prefs && [prefs[@"countersEnabled"] respondsToSelector:@selector(boolValue)])
+                         ? [prefs[@"countersEnabled"] boolValue] : NO;
 
     // iMessage auto-download blocking applies to imagent and IMDPersistenceAgent by default.
     // identityservicesd / apsd are included via tier3 for Corellium spoofing only;
@@ -221,6 +226,53 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
 %end
 
 // =========================================================
+// CORELLIUM PROBE COUNTER
+// Debounced — collapses the rapid access+stat+lstat burst
+// that a single probe event generates into one count.
+// Fires for both rootless (spoof path) and rootful (real
+// binary present, but we still detect the probe call).
+// =========================================================
+
+static void ads_increment_probe_counter(void) {
+    if (!countersEnabled) return;
+    time_t now = time(NULL);
+    time_t prev = atomic_load(&lastProbeTime);
+    if (now - prev < 2) return;
+    if (!atomic_compare_exchange_strong(&lastProbeTime, &prev, now)) return;
+
+    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    CFPropertyListRef val = CFPreferencesCopyValue(
+        CFSTR("corelliumProbeCount"),
+        CFSTR("com.eolnmsuk.antidarkswordprefs"),
+        kCFPreferencesCurrentUser,
+        kCFPreferencesAnyHost);
+    NSInteger count = 0;
+    if (val) {
+        CFNumberGetValue((CFNumberRef)val, kCFNumberNSIntegerType, &count);
+        CFRelease(val);
+    }
+    NSInteger newVal = count + 1;
+    CFNumberRef newCount = CFNumberCreate(NULL, kCFNumberNSIntegerType, &newVal);
+    CFPreferencesSetValue(
+        CFSTR("corelliumProbeCount"),
+        newCount,
+        CFSTR("com.eolnmsuk.antidarkswordprefs"),
+        kCFPreferencesCurrentUser,
+        kCFPreferencesAnyHost);
+    CFRelease(newCount);
+    CFPreferencesAppSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"));
+
+    // Separate notification so Settings.app refreshes the counter cell
+    // without triggering a full prefs reload in all other tweaks.
+    CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        CFSTR("com.eolnmsuk.antidarkswordprefs/counter"),
+        NULL, NULL, YES);
+
+    ADSLog(@"[COUNTER] Corellium probe detected. Total: %ld", (long)newVal);
+}
+
+// =========================================================
 // CORELLIUM HONEYPOT — POSIX FILE PATH SPOOFING
 // Spoofs /usr/libexec/corelliumd for rootless installs so
 // that advanced payloads checking for the Corellium path
@@ -230,67 +282,75 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (globalDecoyEnabled && isRootlessJB &&
-        path && strcmp(path, "/usr/libexec/corelliumd") == 0)
-        return 0;
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        ads_increment_probe_counter();
+        if (isRootlessJB) return 0;
+    }
     return orig_access(path, amode);
 }
 
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && isRootlessJB &&
-        path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
-        if (buf) {
-            memset(buf, 0, sizeof(struct stat));
-            buf->st_dev     = 1;          // root filesystem device
-            buf->st_ino     = 0x00c12a7f; // plausible inode
-            buf->st_mode    = S_IFREG | 0755;
-            buf->st_nlink   = 1;
-            buf->st_uid     = 0;
-            buf->st_gid     = 0;
-            buf->st_size    = 34520;
-            buf->st_blksize = 4096;
-            buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        ads_increment_probe_counter();
+        if (isRootlessJB) {
+            if (buf) {
+                memset(buf, 0, sizeof(struct stat));
+                buf->st_dev     = 1;          // root filesystem device
+                buf->st_ino     = 0x00c12a7f; // plausible inode
+                buf->st_mode    = S_IFREG | 0755;
+                buf->st_nlink   = 1;
+                buf->st_uid     = 0;
+                buf->st_gid     = 0;
+                buf->st_size    = 34520;
+                buf->st_blksize = 4096;
+                buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
+            }
+            return 0;
         }
-        return 0;
     }
     return orig_stat(path, buf);
 }
 
 static int (*orig_lstat)(const char *path, struct stat *buf);
 int hook_lstat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && isRootlessJB &&
-        path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
-        if (buf) {
-            memset(buf, 0, sizeof(struct stat));
-            buf->st_dev     = 1;
-            buf->st_ino     = 0x00c12a7f;
-            buf->st_mode    = S_IFREG | 0755;
-            buf->st_nlink   = 1;
-            buf->st_uid     = 0;
-            buf->st_gid     = 0;
-            buf->st_size    = 34520;
-            buf->st_blksize = 4096;
-            buf->st_blocks  = 72;
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+        ads_increment_probe_counter();
+        if (isRootlessJB) {
+            if (buf) {
+                memset(buf, 0, sizeof(struct stat));
+                buf->st_dev     = 1;
+                buf->st_ino     = 0x00c12a7f;
+                buf->st_mode    = S_IFREG | 0755;
+                buf->st_nlink   = 1;
+                buf->st_uid     = 0;
+                buf->st_gid     = 0;
+                buf->st_size    = 34520;
+                buf->st_blksize = 4096;
+                buf->st_blocks  = 72;
+            }
+            return 0;
         }
-        return 0;
     }
     return orig_lstat(path, buf);
 }
 
 %hook NSFileManager
 - (BOOL)fileExistsAtPath:(NSString *)path {
-    if (globalDecoyEnabled && isRootlessJB &&
-        [path isEqualToString:@"/usr/libexec/corelliumd"])
-        return YES;
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+        ads_increment_probe_counter();
+        if (isRootlessJB) return YES;
+    }
     return %orig;
 }
 
 - (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
-    if (globalDecoyEnabled && isRootlessJB &&
-        [path isEqualToString:@"/usr/libexec/corelliumd"]) {
-        if (isDirectory) *isDirectory = NO;
-        return YES;
+    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+        ads_increment_probe_counter();
+        if (isRootlessJB) {
+            if (isDirectory) *isDirectory = NO;
+            return YES;
+        }
     }
     return %orig;
 }
