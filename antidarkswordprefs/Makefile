@@ -8,6 +8,6 @@ AntiDarkSwordPrefs_EXTRA_FRAMEWORKS = AltList
 AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles
 
 AntiDarkSwordPrefs_CFLAGS = -fobjc-arc -F../vendor
-AntiDarkSwordPrefs_LDFLAGS = -F../vendor
+AntiDarkSwordPrefs_LDFLAGS = -F../vendor -Wl,-headerpad_max_install_names
 
 include $(THEOS_MAKE_PATH)/bundle.mk
