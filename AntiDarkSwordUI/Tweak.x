@@ -195,8 +195,14 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
     if (applyDisableJS) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        // allowsContentJavaScript was added in iOS 14 — guard the setter to avoid an
+        // unrecognized-selector crash on iOS 13 where WKWebpagePreferences exists but
+        // that property does not.
+        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             configuration.preferences.javaScriptEnabled = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)])
@@ -530,8 +536,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }
@@ -551,8 +560,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }

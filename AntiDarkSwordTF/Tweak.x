@@ -321,8 +321,11 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
     
     if (applyDisableJS) {
-        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             configuration.preferences.javaScriptEnabled = NO;
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)])
@@ -407,8 +410,11 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }
@@ -429,8 +435,11 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
     if (applyDisableJS) {
-        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)])
-            self.configuration.defaultWebpagePreferences.allowsContentJavaScript = NO;
+        if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+            WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
+            if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
+                pagePrefs.allowsContentJavaScript = NO;
+        }
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }

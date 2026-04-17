@@ -1,5 +1,5 @@
 ARCHS ?= arm64 arm64e
-TARGET ?= iphone:clang:17.5:13.0
+TARGET ?= iphone:clang:16.5:13.0
 
 TARGET_CODESIGN_FLAGS = -S -Hsha1 -Hsha256
 
