@@ -38,8 +38,7 @@ jobs:
         run: |
           make clean
           rm -rf packages/*
-          cp -r vendor/AltList.framework $THEOS/lib/
-          install_name_tool -id /Library/Frameworks/AltList.framework/AltList $THEOS/lib/AltList.framework/AltList
+          # The custom Makefile internal-stage handles dyld patching now
           make package FINALPACKAGE=1
           mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm.deb
 
@@ -47,19 +46,16 @@ jobs:
         run: |
           make clean
           rm -rf packages/*
-          cp -r vendor/AltList.framework $THEOS/lib/
-          install_name_tool -id /var/jb/Library/Frameworks/AltList.framework/AltList $THEOS/lib/AltList.framework/AltList
+          # The custom Makefile internal-stage handles dyld patching now
           make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
           mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
 
       - name: Compile TrollFools Dylib
         run: |
-          # Build directly inside the subproject directory so no "-f" flag
-          # is ever present in MAKEFLAGS for any make invocation.
           cd AntiDarkSwordTF
           make clean ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:13.0"
           make FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:13.0"
-          DYLIB=$(find .theos/obj -name "AntiDarkSword.dylib" | head -1)
+          DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
           cp "$DYLIB" ../output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib
 
       - name: Upload All Artifacts
