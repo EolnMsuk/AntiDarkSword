@@ -709,6 +709,10 @@ static NSDictionary *ads_daemon_alias_map(void) {
             } else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
                 rules[@"disableJIT15"] = @YES;
             }
+        } else {
+            // JS re-enabled — clear the JIT flag that was auto-set when JS was disabled.
+            rules[@"disableJIT"]   = @NO;
+            rules[@"disableJIT15"] = @NO;
         }
         
         [defaults setObject:rules forKey:dictKey];
@@ -1400,7 +1404,13 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         [self presentViewController:alert animated:YES completion:nil];
     } else {
         [self setPreferenceValue:value specifier:specifier];
-        
+        // globalDisableJS turned off — clear the JIT flag that was auto-set when it was enabled.
+        if ([key isEqualToString:@"globalDisableJS"]) {
+            NSUserDefaults *defaults = ads_defaults();
+            [defaults setBool:NO forKey:@"globalDisableJIT"];
+            [defaults setBool:NO forKey:@"globalDisableJIT15"];
+            [defaults synchronize];
+        }
         dispatch_async(dispatch_get_main_queue(), ^{
             self->_specifiers = nil;
             [self reloadSpecifiers];
