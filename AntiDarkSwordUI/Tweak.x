@@ -61,7 +61,7 @@ static _Atomic BOOL prefsLoaded            = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
-static NSString * _Atomic customUAString = @"";
+static NSString *customUAString = @"";
 // shouldSpoofUA and all apply* variables are read directly by hooks which can
 // fire on threads other than the one running loadPrefs(); _Atomic eliminates
 // the data race without requiring a full lock.
