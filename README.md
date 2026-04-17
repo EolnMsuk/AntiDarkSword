@@ -6,8 +6,6 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 [<img width="1280" height="1030" alt="ReadMeNew" src="https://github.com/user-attachments/assets/0564c070-59a3-4667-8328-924ce73e685d" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
 
-## 🛑 Mitigated Threats
-
 > **Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
 > **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
 > **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
