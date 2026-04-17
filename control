@@ -1,7 +1,7 @@
 Package: com.eolnmsuk.antidarksword
 Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
-Version: 4.3.4
+Version: 4.3.5
 Architecture: iphoneos-arm
 Description: A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation.
 Maintainer: eolnmsuk
