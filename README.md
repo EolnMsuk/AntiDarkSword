@@ -8,9 +8,9 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 ## 🛑 Mitigated Threats
 
-**Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
-**Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
-**CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
+> **Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
+> **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
+> **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
 
 ---
 
@@ -64,8 +64,6 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 ---
 
 ## ⚙️ Preset Level Protection
-
-> Level 3 hooks system daemons. Toggle individual daemons under **Settings > Restrict System Daemons**.
 
 ```text
 Level 1
