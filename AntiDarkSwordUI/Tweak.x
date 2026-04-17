@@ -981,14 +981,23 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
-    NSString *restrictKey    = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-    id masterVal             = self.pendingPrefs[restrictKey];
-    BOOL isMasterEnabled     = masterVal ? [masterVal boolValue] : NO;
+    
+    // Read the ACTUAL live protection status straight from the tweak engine
+    BOOL isMasterEnabled     = currentProcessRestricted;
     masterSwitch.on          = isMasterEnabled;
     
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
+        
+    // If the Global switch in Settings is OFF, disable this switch entirely
+    if (!globalTweakEnabled) {
+        masterSwitch.enabled = NO;
+        masterLabel.text = @"Protection (Globally Disabled)";
+        masterLabel.textColor = [UIColor colorWithWhite:0.6 alpha:1];
+        masterRow.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
+    }
+    
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
 
@@ -1164,8 +1173,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (void)switchChanged:(UISwitch *)sender {
     if (sender.tag == NSIntegerMax) {
-        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-        self.pendingPrefs[restrictKey] = @(sender.on);
+        self.pendingPrefs[@"_intendedMasterState"] = @(sender.on);
         [UIView animateWithDuration:0.25 animations:^{
             sender.superview.backgroundColor = sender.on
                 ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
@@ -1208,6 +1216,32 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
     
+    // Apply changes to the master Enable Protection switch if the user toggled it
+    id intendedState = self.pendingPrefs[@"_intendedMasterState"];
+    if (intendedState) {
+        BOOL enable = [intendedState boolValue];
+        
+        // 1. Update preset rules array (unrestricts preset apps if disabled)
+        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
+        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
+                                    ? [existingDisabled mutableCopy] 
+                                    : [NSMutableArray array];
+        if (enable) {
+            [disabled removeObject:self.currentBundleID];
+        } else {
+            if (![disabled containsObject:self.currentBundleID]) {
+                [disabled addObject:self.currentBundleID];
+            }
+        }
+        self.pendingPrefs[@"disabledPresetRules"] = disabled;
+        
+        // 2. Update custom apps dictionary (restricts 3rd party apps if enabled)
+        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+        self.pendingPrefs[restrictKey] = @(enable);
+        
+        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
+    }
+
     ads_ui_write_prefs(self.pendingPrefs);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
