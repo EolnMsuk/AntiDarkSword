@@ -212,14 +212,21 @@ static NSDictionary *ads_daemon_alias_map(void) {
     if (!_specifiers) {
         NSMutableArray *specs = [NSMutableArray array];
         AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+        NSUserDefaults *defaults = ads_defaults();
+        BOOL corelliumEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
 
-        // ---- System Daemons group ----
+        // ---- Corellium Honeypot group (MOVED UP) ----
+        PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause advanced exploits (like Coruna) to self-abort. The file-path spoofing hooks run inside each daemon process — all four daemons are automatically re-enabled and locked when this is on to ensure full coverage." forKey:@"footerText"];
+        [specs addObject:decoyGroup];
+
+        PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
+        [specs addObject:decoySpec];
+
+        // ---- System Daemons group (MOVED DOWN) ----
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [group setProperty:@"Disabling a daemon bypasses all zero-click mitigations for that process. It is highly recommended to leave these enabled on Level 3." forKey:@"footerText"];
         [specs addObject:group];
-
-        NSUserDefaults *defaults = ads_defaults();
-        BOOL corelliumEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         for (NSString *daemon in daemons) {
@@ -234,14 +241,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
 
             [specs addObject:spec];
         }
-
-        // ---- Corellium Honeypot group ----
-        PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause advanced exploits (like Coruna) to self-abort. The file-path spoofing hooks run inside each daemon process — all four daemons are automatically re-enabled and locked when this is on to ensure full coverage." forKey:@"footerText"];
-        [specs addObject:decoyGroup];
-
-        PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
-        [specs addObject:decoySpec];
 
         _specifiers = [specs copy];
     }
