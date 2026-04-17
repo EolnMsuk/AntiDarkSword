@@ -16,7 +16,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 
 ## 🛠️ Installation
 
-**Full Tweak**
+**Jailbreak Tweak**
 1. Add repo in Sileo/Zebra: `https://f0rd0w.github.io/`
 2. Or install the [`latest .deb`](https://github.com/EolnMsuk/AntiDarkSword/releases) manually (`arm64` = rootless, `arm` = rootful).
 3. Configure in **Settings > AntiDarkSword** and remove protected apps from Choicy or Roothide Blacklist.
