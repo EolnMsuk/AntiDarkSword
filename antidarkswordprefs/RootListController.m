@@ -549,8 +549,8 @@ static NSDictionary *ads_daemon_alias_map(void) {
         
         NSArray *features = @[
             @{@"key": @"spoofUA", @"label": @"Spoof User Agent"},
-            @{@"key": @"disableJIT", @"label": @"Disable iOS 16+ JIT"},
-            @{@"key": @"disableJIT15", @"label": @"Disable iOS 15 JIT"},
+            @{@"key": @"disableJIT", @"label": @"Disable JIT (iOS 16+)"},
+            @{@"key": @"disableJIT15", @"label": @"Disable JIT (Legacy)"},
             @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"},
             @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"},
             @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"},
