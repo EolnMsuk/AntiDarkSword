@@ -10,7 +10,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS devices against WebKit R
 
 | Feature | What it does |
 |---|---|
-| **JIT Disable** | iOS 16+: `lockdownModeEnabled` + `JITEnabled = NO`. iOS 14–15: `JITEnabled = NO` only |
+| **Disable JIT** | iOS 16+: `lockdownModeEnabled` + `JITEnabled = NO`. iOS 14–15: `JITEnabled = NO` only |
 | **WebKit Hardening** | Disables media autoplay, PiP, WebGL, WebRTC, and local file access per-app |
 | **iMessage Blocking** | Blocks auto-download and preview generation in IMCore / ChatKit (jailbreak only) |
 | **User Agent Spoofing** | Masks the WKWebView UA to defeat browser fingerprinting used by exploit kits |
