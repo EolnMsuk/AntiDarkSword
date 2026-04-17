@@ -227,7 +227,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
 
         // ---- Corellium Honeypot group (MOVED UP) ----
         PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause advanced exploits (like Coruna) to self-abort. The file-path spoofing hooks run inside each daemon process — all four daemons are automatically re-enabled and locked when this is on to ensure full coverage." forKey:@"footerText"];
+        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause exploits (like Coruna) to self-abort. All four daemons are re-enabled and locked when this is on" forKey:@"footerText"];
         [specs addObject:decoyGroup];
 
         PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
