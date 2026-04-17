@@ -16,6 +16,8 @@ internal-stage::
 
 after-stage::
 	$(ECHO_NOTHING)install_name_tool -change @loader_path/.jbroot/Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)
+	$(ECHO_NOTHING)install_name_tool -change @loader_path/jbroot/Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)
 	$(ECHO_NOTHING)install_name_tool -change /var/jb/Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/var/jb/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)
 	$(ECHO_NOTHING)install_name_tool -change @loader_path/.jbroot/Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)
+	$(ECHO_NOTHING)install_name_tool -change @loader_path/jbroot/Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)
 	$(ECHO_NOTHING)install_name_tool -change /Library/Frameworks/AltList.framework/AltList @loader_path/../../Frameworks/AltList.framework/AltList $(THEOS_STAGING_DIR)/Library/PreferenceBundles/AntiDarkSwordPrefs.bundle/AntiDarkSwordPrefs 2>/dev/null || true$(ECHO_END)

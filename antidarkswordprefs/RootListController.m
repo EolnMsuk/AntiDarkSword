@@ -71,12 +71,22 @@ static inline UIColor *ads_color_red(void) {
 }
 
 static inline NSString *ads_root_path(NSString *path) {
-    // Roothide: jbroot() remaps paths to the correct per-process prefix.
-    // dlsym lookup is cached after the first call.
+    // RootHide: jbroot() remaps paths to a per-process preboot prefix.
+    // Guard: verify the symbol actually performs a non-trivial remap (jbroot("/") != "/")
+    // to avoid false-positive detection on rootless setups that happen to export jbroot
+    // as a no-op shim or compatibility stub.
     static void *jbrootFn = NULL;
+    static BOOL jbrootIsReal = NO;
     static dispatch_once_t jbrootOnce;
-    dispatch_once(&jbrootOnce, ^{ jbrootFn = dlsym(RTLD_DEFAULT, "jbroot"); });
-    if (jbrootFn) {
+    dispatch_once(&jbrootOnce, ^{
+        jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
+        if (jbrootFn) {
+            typedef char *(*jbroot_fn)(const char *);
+            char *test = ((jbroot_fn)jbrootFn)("/");
+            jbrootIsReal = (test != NULL && strcmp(test, "/") != 0);
+        }
+    });
+    if (jbrootIsReal) {
         typedef char *(*jbroot_fn)(const char *);
         char *resolved = ((jbroot_fn)jbrootFn)(path.UTF8String);
         if (resolved) return @(resolved);
