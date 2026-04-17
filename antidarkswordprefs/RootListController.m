@@ -1241,36 +1241,36 @@ static NSDictionary *ads_daemon_alias_map(void) {
             }
         }
         
-        // Attack counter section — inserted before FooterGroup
-        NSUInteger footerIdx = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
-            return [[obj propertyForKey:@"id"] isEqualToString:@"FooterGroup"];
+        // Attack counter section — inserted before InfoGroup
+        NSUInteger infoIdx = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) {
+            return [[obj propertyForKey:@"id"] isEqualToString:@"InfoGroup"];
         }];
 
-        if (footerIdx != NSNotFound) {
+        if (infoIdx != NSNotFound) {
             BOOL showCounter = [defaults boolForKey:@"countersEnabled"];
             NSInteger probeCount = [defaults integerForKey:@"corelliumProbeCount"];
 
             PSSpecifier *counterGroup = [PSSpecifier preferenceSpecifierNamed:@"Attack Statistics" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
             [counterGroup setProperty:@"Counts Corellium environment probe attempts detected in system daemons. Each count represents one unique probe event from a potential exploit payload. Requires Level 3 with Corellium Honeypot enabled." forKey:@"footerText"];
-            [specs insertObject:counterGroup atIndex:footerIdx++];
+            [specs insertObject:counterGroup atIndex:infoIdx++];
 
             PSSpecifier *counterToggle = [PSSpecifier preferenceSpecifierNamed:@"Enable Attack Counter"
                 target:self
                 set:@selector(setCountersEnabled:specifier:)
                 get:@selector(getCountersEnabled:)
                 detail:nil cell:PSSwitchCell edit:nil];
-            [specs insertObject:counterToggle atIndex:footerIdx++];
+            [specs insertObject:counterToggle atIndex:infoIdx++];
 
             if (showCounter) {
                 NSString *countLabel = (probeCount == 0)
                     ? @"Corellium Probes Detected: None"
                     : [NSString stringWithFormat:@"Corellium Probes Detected: %ld", (long)probeCount];
                 PSSpecifier *countCell = [PSSpecifier preferenceSpecifierNamed:countLabel target:self set:nil get:nil detail:nil cell:PSStaticTextCell edit:nil];
-                [specs insertObject:countCell atIndex:footerIdx++];
+                [specs insertObject:countCell atIndex:infoIdx++];
 
                 PSSpecifier *resetBtn = [PSSpecifier preferenceSpecifierNamed:@"Reset Counter" target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
                 resetBtn->action = @selector(resetProbeCounter);
-                [specs insertObject:resetBtn atIndex:footerIdx++];
+                [specs insertObject:resetBtn atIndex:infoIdx++];
             }
         }
 
