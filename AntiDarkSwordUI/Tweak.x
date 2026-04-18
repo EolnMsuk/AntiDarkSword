@@ -1320,15 +1320,32 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     return instance;
 }
 
-// CRITICAL: Prevent WebKit from swallowing the 3-finger tap
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    return YES;
+// Do NOT implement shouldRecognizeSimultaneouslyWith — returning YES caused Safari to break
+// in testing (Round 3). The default NO means our gesture wins and WKWebView's recognizers
+// get cancelled, which is the correct behavior for a deliberate 3-finger double-tap.
+
+// Prevent any gesture in the hierarchy (e.g. WKWebView internals) from requiring us to fail
+// before it can recognize. Without this, WebKit's text-interaction gestures can block ours.
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    return NO;
 }
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    if (!gestureActive) return;
-    
+
+    // Gate 1: master protection switch (set by loadPrefs — reliable for all apps)
+    if (!globalTweakEnabled) return;
+
+    // Gate 2: read mitigationShortcutEnabled directly from cfprefsd at tap time.
+    // Do NOT rely on the gestureActive static — Safari has a longer startup, widening the
+    // race window where loadPrefs() from %ctor and a concurrent reloadPrefsNotification can
+    // interleave and leave gestureActive stale (NO) even after the user enabled the toggle.
+    CFTypeRef shortcutRef = CFPreferencesCopyAppValue(CFSTR("mitigationShortcutEnabled"),
+                                                      CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    BOOL shortcutOn = shortcutRef ? [(__bridge id)shortcutRef boolValue] : NO;
+    if (shortcutRef) CFRelease(shortcutRef);
+    if (!shortcutOn) return;
+
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
     
