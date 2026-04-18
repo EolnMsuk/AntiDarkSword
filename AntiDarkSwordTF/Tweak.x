@@ -1080,38 +1080,30 @@ static BOOL ads_default_value_for_key(NSString *key) {
 }
 
 - (void)saveAndRestart {
-    // Write TargetRules back, then flush the full plist.
     NSString *rulesKey       = [NSString stringWithFormat:@"TargetRules_%@", self.bundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-    
-    // ads_write_prefs tries the system path first, falls back to NSUserDefaults
-    // suite — the fallback always succeeds on sandboxed TrollStore devices.
     ads_write_prefs(self.pendingPrefs);
 
-    // Notify the live-reload path for settings that take effect immediately.
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);
-                                         
-    [self dismissViewControllerAnimated:YES completion:^{
-        UIAlertController *alert = [UIAlertController
-            alertControllerWithTitle:@"Settings Saved"
-            message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
-            preferredStyle:UIAlertControllerStyleAlert];
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(UIAlertAction *a) {
-            exit(0);
-        }]];
-        
-        [alert addAction:[UIAlertAction actionWithTitle:@"Later"
-                                                  style:UIAlertActionStyleCancel
-                                                handler:nil]];
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"Settings Saved"
+        message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
+        preferredStyle:UIAlertControllerStyleAlert];
 
-        UIViewController *top = ads_top_vc(ads_key_window().rootViewController);
-        if (top) [top presentViewController:alert animated:YES completion:nil];
-    }];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *a) { exit(0); }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Later"
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(UIAlertAction *a) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
