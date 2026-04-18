@@ -97,6 +97,7 @@ static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
+static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
 
 // =========================================================
 // HELPERS
@@ -561,6 +562,16 @@ static void loadPrefs() {
     } else {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
+
+    // Gesture gate: only active when mitigationShortcutEnabled AND master enabled.
+    BOOL shortcut = (prefs && [prefs isKindOfClass:[NSDictionary class]])
+        ? [[prefs objectForKey:@"mitigationShortcutEnabled"] boolValue]
+        : NO;
+    BOOL newGestureActive = shortcut && globalTweakEnabled;
+    gestureActive = newGestureActive;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        adsUIGesture.enabled = newGestureActive;
+    });
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -781,6 +792,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // =========================================================
 
 static BOOL ads_ui_gesture_installed = NO;
+static UITapGestureRecognizer *adsUIGesture = nil; // tracked for runtime enable/disable
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
@@ -1302,6 +1314,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
+    // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
+    if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1321,9 +1335,11 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
+    tap.enabled                 = gestureActive; // off until mitigationShortcutEnabled && enabled
+    adsUIGesture                = tap;
     [win addGestureRecognizer:tap];
     ads_ui_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed (active=%d).", (int)gestureActive);
 }
 
 %hook UIWindow
