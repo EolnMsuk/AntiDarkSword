@@ -122,7 +122,6 @@ static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
 static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
 static BOOL ads_ui_gesture_installed       = NO;
-static UITapGestureRecognizer *adsUIGesture = nil;
 
 // =========================================================
 // HELPERS
@@ -588,12 +587,6 @@ static void loadPrefs() {
         : NO;
     BOOL newGestureActive = shortcut && globalTweakEnabled;
     gestureActive = newGestureActive;
-    // Update the installed gesture recognizer's enabled state on the main thread.
-    // tap.enabled is the gate — handleTap: fires only when the gesture is enabled,
-    // so no in-callback pref read is needed and there are no Safari-specific timing issues.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        adsUIGesture.enabled = newGestureActive;
-    });
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -1328,6 +1321,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
+    if (!gestureActive) return;
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
     UIWindow *win = ads_ui_key_window();
@@ -1348,8 +1342,6 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
-    tap.enabled                 = gestureActive;
-    adsUIGesture                = tap;
     [win addGestureRecognizer:tap];
     ads_ui_gesture_installed    = YES;
     ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
