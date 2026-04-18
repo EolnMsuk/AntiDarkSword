@@ -315,19 +315,28 @@ static void loadPrefs() {
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
-    NSString *prefsFilePath = ads_prefs_path();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+
+    // CFPreferences is always authoritative: cfprefsd survives a respring and holds
+    // the latest writes from the Settings bundle regardless of whether the physical
+    // plist has been flushed to disk yet. Reading the plist first can return a stale
+    // file that lacks keys written after the plist was last flushed (e.g. `enabled`
+    // set by PSListController right before a respring), which silently prevents the
+    // CFPreferences fallback from being tried because the file IS a valid dictionary.
+    CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (keyList) {
+        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+        CFRelease(keyList);
     }
 
+    // Physical plist fallback — used only when cfprefsd has no data for this domain
+    // (e.g. a genuinely fresh install where no preferences have been written at all).
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-            CFRelease(keyList);
+        NSString *prefsFilePath = ads_prefs_path();
+        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+            prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
         }
     }
 
@@ -890,17 +899,20 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows = ads_ui_setting_rows();
 
-    NSDictionary *existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    if (!existing) {
-        CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (kl) {
-            CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (d) existing = (__bridge_transfer NSDictionary *)d;
-            CFRelease(kl);
-        }
+    // CFPreferences first so the overlay initializes from live cfprefsd state, not a
+    // potentially-stale plist that may be missing keys (e.g. `enabled`) written after
+    // the last plist flush. A stale init causes saveAndRestart to write back an
+    // incomplete dict that wipes those keys from cfprefsd.
+    NSDictionary *existing = nil;
+    CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (kl) {
+        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (d) existing = (__bridge_transfer NSDictionary *)d;
+        CFRelease(kl);
     }
+    if (!existing) existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
 
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
@@ -1350,12 +1362,11 @@ static void ads_ui_install_gesture(UIWindow *win) {
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
-    // 3. Manual override check — try the on-disk plist first, then fall back to
-    //    CFPreferences so that Roothide installs and fresh installs where the plist
-    //    has not been flushed to disk yet are handled correctly.
+    // 3. Manual override check — CFPreferences first (authoritative live state),
+    //    plist fallback for the edge case where cfprefsd has no data for the domain.
     BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    if (!prefs) {
+    NSDictionary *prefs = nil;
+    {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
                                                       kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
@@ -1364,6 +1375,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
             if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
             CFRelease(keyList);
         }
+        if (!prefs) prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     }
     if (prefs) {
         NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];

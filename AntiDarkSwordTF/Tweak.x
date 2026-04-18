@@ -205,11 +205,11 @@ static void injectUAScript(WKUserContentController *ucc) {
 static NSString * const kADSTFSuite = @"com.eolnmsuk.antidarkswordprefs";
 
 static NSDictionary *ads_read_prefs(void) {
-    // 1. Try the shared system plist (jailbreak / unsandboxed TrollStore).
-    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    if (d) return d;
-
-    // 2. Try CFPreferences (picks up prefs written by the jailbreak bundle).
+    // 1. Try CFPreferences first — cfprefsd is authoritative on a jailbroken device
+    //    and reflects writes from the Settings bundle even before the physical plist
+    //    has been flushed.  Reading the plist first can silently return a stale dict
+    //    that blocks the CFPreferences fallback because the file exists but is missing
+    //    keys written after the last flush (e.g. `enabled` set just before a respring).
     CFArrayRef keyList = CFPreferencesCopyKeyList((__bridge CFStringRef)kADSTFSuite,
                                                   kCFPreferencesCurrentUser,
                                                   kCFPreferencesAnyHost);
@@ -222,7 +222,14 @@ static NSDictionary *ads_read_prefs(void) {
         if (dict) return (__bridge_transfer NSDictionary *)dict;
     }
 
-    // 3. Fall back to NSUserDefaults suite (sandboxed TrollFools app container).
+    // 2. Physical plist fallback (jailbreak / unsandboxed TrollStore).
+    //    Used when cfprefsd returns nothing — e.g. a fresh install where the domain
+    //    has never been written through cfprefsd, or if this is a sandboxed process
+    //    where the plist was written directly by a prior overlay save.
+    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (d) return d;
+
+    // 3. NSUserDefaults suite fallback (sandboxed TrollFools app container).
     NSUserDefaults *ud = [[NSUserDefaults alloc] initWithSuiteName:kADSTFSuite];
     NSDictionary *all  = [ud dictionaryRepresentation];
     return (all && all.count > 0) ? all : nil;

@@ -70,19 +70,23 @@ static void loadPrefs() {
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
-    NSString *prefsFilePath = ads_prefs_path();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+
+    // CFPreferences first — same rationale as AntiDarkSwordUI/loadPrefs().
+    // cfprefsd survives a respring and holds the authoritative live state; the
+    // physical plist can be stale if cfprefsd hasn't flushed recent writes to disk.
+    CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (keyList) {
+        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+        CFRelease(keyList);
     }
 
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-            CFRelease(keyList);
+        NSString *prefsFilePath = ads_prefs_path();
+        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+            prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
         }
     }
 
