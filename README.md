@@ -21,7 +21,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
 2. Download `AntiDarkSword.dylib` from the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
 3. Open TrollFools → select an app → inject the `.dylib`.
-4. **Three-finger double-tap** inside the app to open the protection overlay.
+4. Enable **Mitigation Shortcut** in **Settings → AntiDarkSword**, then **three-finger double-tap** inside the app to open the settings overlay.
 
 ### Which file do I need?
 
@@ -52,6 +52,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | iMessage auto-download block | ✅ | ✅ | ✅ |
 | Daemon protection | ✅ | ✅ | ✅ |
 | Corellium decoy | ✅ | ✅ | ✅ |
+| Mitigation Shortcut¹ | ✅ | ✅ | ✅ |
 
 <br>
 
@@ -68,6 +69,9 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | iMessage auto-download block | ❌ | ❌ | ❌ |
 | Daemon protection | ❌ | ❌ | ❌ |
 | Corellium decoy | ❌ | ❌ | ❌ |
+| Mitigation Shortcut¹ | ✅ | ✅ | ✅ |
+
+> ¹ **Mitigation Shortcut:** Enable in **Settings → AntiDarkSword** (requires Enable Protection to be on). Three-finger double-tap anywhere inside the injected app to open the per-app settings panel. Disabled by default; does not activate on SpringBoard.
 
 ---
 
