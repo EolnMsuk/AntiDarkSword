@@ -59,8 +59,9 @@ static NSString *ads_prefs_path(void) {
 // Runtime State Variables
 // prefsLoaded gates re-entrant calls; atomic so reloadPrefsNotification is safe
 // from any thread the Darwin notification center may use.
-static _Atomic BOOL prefsLoaded            = NO;
+static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
+static _Atomic BOOL currentProcessIsPreset   = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
@@ -449,6 +450,7 @@ static void loadPrefs() {
     }
 
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
+    currentProcessIsPreset   = isPresetMatch;
 
     disableMedia      = NO;
     disableRTC        = NO;
@@ -1235,9 +1237,14 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         }
         self.pendingPrefs[@"disabledPresetRules"] = disabled;
         
-        // 2. Update custom apps dictionary (restricts 3rd party apps if enabled)
-        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-        self.pendingPrefs[restrictKey] = @(enable);
+        // 2. Update custom apps key only for non-preset apps.
+        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
+        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
+        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
+        if (!currentProcessIsPreset) {
+            NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+            self.pendingPrefs[restrictKey] = @(enable);
+        }
         
         [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
     }
@@ -1249,13 +1256,19 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:@"Settings Saved"
-        message:@"The app will now close to apply changes. Please reopen it manually."
+        message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
         preferredStyle:UIAlertControllerStyleAlert];
-        
-    [alert addAction:[UIAlertAction actionWithTitle:@"Restart App"
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *a) { exit(0); }]];
-                                            
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Later"
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(UIAlertAction *a) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }]];
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 

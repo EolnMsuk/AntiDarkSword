@@ -1,7 +1,7 @@
 Package: com.eolnmsuk.antidarksword
 Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
-Version: 4.4
+Version: 4.4.1
 Architecture: iphoneos-arm
 Description: A jailbreak tweak that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits.
 Maintainer: eolnmsuk
