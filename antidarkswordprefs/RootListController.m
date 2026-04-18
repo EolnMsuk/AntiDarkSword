@@ -1644,7 +1644,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
     
     NSString *title = @"Save";
-    NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
+    NSString *msg = needsReboot ? @"Apply with userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
     NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
