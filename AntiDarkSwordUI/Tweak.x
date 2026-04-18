@@ -120,8 +120,9 @@ static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
-static _Atomic BOOL gestureActive          = NO;
-// mitigationShortcutEnabled && globalTweakEnabled
+static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
+static BOOL ads_ui_gesture_installed       = NO;
+static UITapGestureRecognizer *adsUIGesture = nil;
 
 // =========================================================
 // HELPERS
@@ -582,12 +583,17 @@ static void loadPrefs() {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
 
-    // Gesture gate: checked at tap time in handleTap: rather than via tap.enabled,
-    // so there is no timing dependency on when makeKeyAndVisible fires vs loadPrefs.
     BOOL shortcut = (prefs && [prefs isKindOfClass:[NSDictionary class]])
         ? [[prefs objectForKey:@"mitigationShortcutEnabled"] boolValue]
         : NO;
-    gestureActive = shortcut && globalTweakEnabled;
+    BOOL newGestureActive = shortcut && globalTweakEnabled;
+    gestureActive = newGestureActive;
+    // Update the installed gesture recognizer's enabled state on the main thread.
+    // tap.enabled is the gate — handleTap: fires only when the gesture is enabled,
+    // so no in-callback pref read is needed and there are no Safari-specific timing issues.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        adsUIGesture.enabled = newGestureActive;
+    });
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -1307,7 +1313,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 // Persistent singleton target — UITapGestureRecognizer holds a weak reference,
 // so the target must outlive the gesture recognizer.
-@interface ADSUIGestureHandler : NSObject <UIGestureRecognizerDelegate>
+@interface ADSUIGestureHandler : NSObject
 + (instancetype)shared;
 - (void)handleTap:(UITapGestureRecognizer *)sender;
 @end
@@ -1320,70 +1326,13 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     return instance;
 }
 
-// Do NOT implement shouldRecognizeSimultaneouslyWith — returning YES caused Safari to break
-// in testing (Round 3). The default NO means our gesture wins and WKWebView's recognizers
-// get cancelled, which is the correct behavior for a deliberate 3-finger double-tap.
-
-// Prevent any gesture in the hierarchy (e.g. WKWebView internals) from requiring us to fail
-// before it can recognize. Without this, WebKit's text-interaction gestures can block ours.
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
-    return NO;
-}
-
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-
-    // Gate 1: master protection switch (set by loadPrefs — reliable for all apps)
-    if (!globalTweakEnabled) return;
-
-    // Gate 2: read mitigationShortcutEnabled directly from cfprefsd at tap time.
-    // Do NOT rely on the gestureActive static — Safari has a longer startup, widening the
-    // race window where loadPrefs() from %ctor and a concurrent reloadPrefsNotification can
-    // interleave and leave gestureActive stale (NO) even after the user enabled the toggle.
-    CFTypeRef shortcutRef = CFPreferencesCopyAppValue(CFSTR("mitigationShortcutEnabled"),
-                                                      CFSTR("com.eolnmsuk.antidarkswordprefs"));
-    BOOL shortcutOn = shortcutRef ? [(__bridge id)shortcutRef boolValue] : NO;
-    if (shortcutRef) CFRelease(shortcutRef);
-    if (!shortcutOn) return;
-
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
-    
-    // 1. Prefer the window the gesture actually fired on
-    UIWindow *win = nil;
-    if ([sender.view isKindOfClass:[UIWindow class]]) {
-        win = (UIWindow *)sender.view;
-    }
-    
-    // 2. If it has no root VC, fallback to the standard key window
-    if (!win || !win.rootViewController) {
-        win = ads_ui_key_window();
-    }
-    
-    // 3. If STILL no root VC (common with Safari helper windows), aggressively scan for any valid presentation window
-    if (!win || !win.rootViewController) {
-        if (@available(iOS 13, *)) {
-            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-                if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
-                    for (UIWindow *w in ((UIWindowScene *)scene).windows) {
-                        if (w.rootViewController) { win = w; break; }
-                    }
-                }
-                if (win) break;
-            }
-        } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            for (UIWindow *w in [UIApplication sharedApplication].windows) {
-                if (w.rootViewController) { win = w; break; }
-            }
-#pragma clang diagnostic pop
-        }
-    }
-
+    UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
-
     ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
     vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
@@ -1392,42 +1341,24 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win) return;
-    
-    // Per-window duplicate guard
-    for (UIGestureRecognizer *g in win.gestureRecognizers) {
-        if ([g isKindOfClass:[UITapGestureRecognizer class]]) {
-            UITapGestureRecognizer *t = (UITapGestureRecognizer *)g;
-            if (t.numberOfTapsRequired == 2 && t.numberOfTouchesRequired == 3) return;
-        }
-    }
+    if (!win || ads_ui_gesture_installed) return;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
-    tap.delegate                = [ADSUIGestureHandler shared]; // Added delegate
+    tap.enabled                 = gestureActive;
+    adsUIGesture                = tap;
     [win addGestureRecognizer:tap];
-    ADSLog(@"[INIT] AntiDarkSword gesture installed on window: %@", [win class]);
+    ads_ui_gesture_installed    = YES;
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
 }
 
 %hook UIWindow
 - (void)makeKeyAndVisible {
     %orig;
     ads_ui_install_gesture(self);
-}
-
-// Catches Safari state restoration
-- (void)becomeKeyWindow {
-    %orig;
-    ads_ui_install_gesture(self);
-}
-
-// Catches Safari un-hiding a backgrounded scene
-- (void)setHidden:(BOOL)hidden {
-    %orig;
-    if (!hidden) ads_ui_install_gesture(self);
 }
 %end
 
