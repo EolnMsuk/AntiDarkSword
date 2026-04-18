@@ -1313,8 +1313,20 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     if (!gestureActive) return;
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
-    UIWindow *win = ads_ui_key_window();
+
+    // Prefer the window the gesture is attached to (sender.view IS the UIWindow we installed on).
+    // ads_ui_key_window() can return a transient keyboard/toolbar window with no rootViewController,
+    // which causes top = nil and silently swallows the presentation — visible in Safari where
+    // several UIWindows coexist and the browsing window may not be "key" at tap time.
+    UIWindow *win = [sender.view isKindOfClass:[UIWindow class]]
+        ? (UIWindow *)sender.view
+        : ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
+    if (!top) {
+        // Fallback: key window
+        win = ads_ui_key_window();
+        top = win ? ads_ui_top_vc(win.rootViewController) : nil;
+    }
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
 
     ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
@@ -1348,6 +1360,13 @@ static void ads_ui_install_gesture(UIWindow *win) {
 
 %hook UIWindow
 - (void)makeKeyAndVisible {
+    %orig;
+    ads_ui_install_gesture(self);
+}
+// Belt-and-suspenders: Safari on iOS 16+ can promote a window to key via becomeKeyWindow
+// without going through makeKeyAndVisible. Per-window duplicate check in ads_ui_install_gesture
+// ensures this fires only once per window even if both paths trigger.
+- (void)becomeKeyWindow {
     %orig;
     ads_ui_install_gesture(self);
 }
