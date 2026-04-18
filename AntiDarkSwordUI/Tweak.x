@@ -1302,7 +1302,10 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 // Persistent singleton target — UITapGestureRecognizer holds a weak reference,
 // so the target must outlive the gesture recognizer.
-@interface ADSUIGestureHandler : NSObject
+// UIGestureRecognizerDelegate: returning YES for simultaneous recognition lets
+// our tap fire even when Safari's WKWebView internal gestures (text selection,
+// scroll, etc.) also recognize — without this Safari swallows the 3-finger tap.
+@interface ADSUIGestureHandler : NSObject <UIGestureRecognizerDelegate>
 + (instancetype)shared;
 - (void)handleTap:(UITapGestureRecognizer *)sender;
 @end
@@ -1313,6 +1316,10 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{ instance = [[self alloc] init]; });
     return instance;
+}
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gr
+    shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
+    return YES;
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
@@ -1337,6 +1344,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
+    tap.delegate                = [ADSUIGestureHandler shared]; // allows simultaneous recognition with WKWebView gestures
     tap.enabled                 = gestureActive; // off until mitigationShortcutEnabled && enabled
     adsUIGesture                = tap;
     [win addGestureRecognizer:tap];
