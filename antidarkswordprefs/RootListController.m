@@ -1693,6 +1693,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
     [defaults synchronize];
     ads_post_notification();
+    [self flagSaveRequirement];
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
         [self reloadSpecifiers];
@@ -1708,6 +1709,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     [defaults setBool:[value boolValue] forKey:@"mitigationShortcutEnabled"];
     [defaults synchronize];
     ads_post_notification();
+    [self flagSaveRequirement];
 }
 
 - (void)resetProbeCounter {
