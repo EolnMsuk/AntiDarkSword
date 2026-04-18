@@ -120,7 +120,6 @@ static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
-static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
 static BOOL ads_ui_gesture_installed       = NO;
 
 // =========================================================
@@ -582,11 +581,6 @@ static void loadPrefs() {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
 
-    BOOL shortcut = (prefs && [prefs isKindOfClass:[NSDictionary class]])
-        ? [[prefs objectForKey:@"mitigationShortcutEnabled"] boolValue]
-        : NO;
-    BOOL newGestureActive = shortcut && globalTweakEnabled;
-    gestureActive = newGestureActive;
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -1321,7 +1315,17 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    if (!gestureActive) return;
+    // Read live from cfprefsd at tap time — avoids any stale-cache issue where
+    // loadPrefs() ran before cfprefsd had data for this domain at process launch.
+    CFTypeRef shortcutRef = CFPreferencesCopyAppValue(CFSTR("mitigationShortcutEnabled"),
+                                                      CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    BOOL shortcutOn = shortcutRef ? [(__bridge id)shortcutRef boolValue] : NO;
+    if (shortcutRef) CFRelease(shortcutRef);
+    CFTypeRef enabledRef = CFPreferencesCopyAppValue(CFSTR("enabled"),
+                                                     CFSTR("com.eolnmsuk.antidarkswordprefs"));
+    BOOL tweakOn = enabledRef ? [(__bridge id)enabledRef boolValue] : NO;
+    if (enabledRef) CFRelease(enabledRef);
+    if (!shortcutOn || !tweakOn) return;
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
     UIWindow *win = ads_ui_key_window();
