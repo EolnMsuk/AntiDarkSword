@@ -72,8 +72,6 @@ static _Atomic BOOL applyDisableMedia        = NO;
 static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
 static _Atomic BOOL applyBlockRemoteContent  = NO;
-// Combined gate: mitigationShortcutEnabled AND masterEnabled. Drives gesture recognizer.enabled.
-static _Atomic BOOL gestureActive            = NO;
 
 // Written once per loadPrefs call, read from hooks on any thread.
 // Safe under the prefsLoaded CAS gate — only one writer at a time.
@@ -83,10 +81,6 @@ static NSString *customUAString = nil;
 // Blocks external http/https resource loads (images, scripts, media, etc.) — the primary
 // zero-click attack surface in HTML email rendering (Mail.app) and similar HTML views.
 static WKContentRuleList *adsContentBlocker = nil;
-
-// Tracked so loadPrefs can flip enabled/disabled when prefs change at runtime.
-// Written only from ads_install_settings_gesture_on_window (main thread).
-static UITapGestureRecognizer *adsTFGesture = nil;
 
 // =========================================================
 // HELPERS (identical to AntiDarkSwordUI)
@@ -301,19 +295,7 @@ static void loadPrefs() {
     id enabledVal = prefs[@"enabled"];
     if (enabledVal && [enabledVal respondsToSelector:@selector(boolValue)])
         masterEnabled = [enabledVal boolValue];
-
-    // mitigationShortcutEnabled is read before the master-off early return so the
-    // gesture recognizer stays in sync regardless of master state.
-    BOOL shortcut = NO;
-    id shortcutVal = prefs[@"mitigationShortcutEnabled"];
-    if (shortcutVal && [shortcutVal respondsToSelector:@selector(boolValue)])
-        shortcut = [shortcutVal boolValue];
-    BOOL newGestureActive = shortcut && masterEnabled;
-    gestureActive = newGestureActive;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        adsTFGesture.enabled = newGestureActive;
-    });
-
+        
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
             applyDisableMedia = applyDisableRTC = applyDisableFileAccess = NO;
@@ -1129,13 +1111,10 @@ static BOOL ads_default_value_for_key(NSString *key) {
 // ---- Gesture installation ----
 
 static void ads_show_settings_overlay(void) {
-    // Never show on SpringBoard
-    if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
-
     UIWindow       *win  = ads_key_window();
     UIViewController *top = win ? ads_top_vc(win.rootViewController) : nil;
     if (!top) return;
-
+    
     // Don't stack multiple overlays
     if ([top isKindOfClass:[ADSTFSettingsViewController class]]) return;
 
@@ -1177,12 +1156,10 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
-    tap.enabled                 = gestureActive; // off until mitigationShortcutEnabled && enabled
-    adsTFGesture                = tap;
     [win addGestureRecognizer:tap];
 
     ads_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed on %@ (active=%d).", win, (int)gestureActive);
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed on %@.", win);
 }
 
 // Hook UIWindow so we catch the main window the moment it becomes key,

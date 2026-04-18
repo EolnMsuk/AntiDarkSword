@@ -4,9 +4,10 @@
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
-#import <dlfcn.h> // Added for jbroot dynamic resolution
 #include <unistd.h>
 #include <stdatomic.h>
+#include <dlfcn.h>
+#import <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -46,40 +47,29 @@
 - (BOOL)_needsPreviewGeneration;
 @end
 
-// Set once in %ctor;
-// used by ads_prefs_path() at all subsequent call sites.
+// Set once in %ctor; used by ads_prefs_path() at all subsequent call sites.
+// Priority: RootHide (jbroot) → standard rootless (/var/jb) → rootful.
+static BOOL isRootHideJB = NO;
 static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
-// Handles RootHide dynamically via jbroot, falls back to standard rootless or rootful.
+// Handles RootHide → rootless → rootful in that priority order.
 static NSString *ads_prefs_path(void) {
-    NSString *basePath = @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
-    
-    // 1. Check for RootHide dynamically
-    static void *jbrootFn = NULL;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
-    });
-    
-    if (jbrootFn) {
-        typedef char *(*jbroot_fn)(const char *);
-        char *resolved = ((jbroot_fn)jbrootFn)(basePath.UTF8String);
-        if (resolved) return @(resolved);
+    if (isRootHideJB) {
+        void *fn = dlsym(RTLD_DEFAULT, "jbroot");
+        if (fn) {
+            typedef char *(*jbroot_fn)(const char *);
+            char *p = ((jbroot_fn)fn)("/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
+            if (p) return @(p);
+        }
     }
-    
-    // 2. Check for standard Rootless (Dopamine/Palera1n)
-    if (isRootlessJB) { 
-        return [@"/var/jb" stringByAppendingString:basePath];
-    }
-    
-    // 3. Fallback for Rootful
-    return basePath;
+    return isRootlessJB
+        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
 }
 
 // Runtime State Variables
-// prefsLoaded gates re-entrant calls;
-// atomic so reloadPrefsNotification is safe
+// prefsLoaded gates re-entrant calls; atomic so reloadPrefsNotification is safe
 // from any thread the Darwin notification center may use.
 static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
@@ -89,8 +79,7 @@ static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
 
 // shouldSpoofUA and all apply* variables are read directly by hooks which can
-// fire on threads other than the one running loadPrefs();
-// _Atomic eliminates
+// fire on threads other than the one running loadPrefs(); _Atomic eliminates
 // the data race without requiring a full lock.
 static _Atomic BOOL shouldSpoofUA          = NO;
 
@@ -120,7 +109,6 @@ static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
-static BOOL ads_ui_gesture_installed       = NO;
 
 // =========================================================
 // HELPERS
@@ -134,7 +122,7 @@ static NSString *adsJSONStringLiteral(NSString *str);
 // Parses engine/browser tokens so the Client Hints brands stay consistent with userAgent.
 static NSString *adsBrandsFromUA(NSString *ua) {
     if (!ua) return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
-    
+
     // Helper: extract the leading decimal digits after a token (e.g. "Chrome/120.0.x" → "120").
     NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
         NSRange r = [ua rangeOfString:token];
@@ -219,7 +207,7 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString containsString:@"Macintosh"])      uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"])   uadPlatform = @"\"Windows\"";
     else if ([customUAString containsString:@"Android"])   uadPlatform = @"\"Android\"";
-    
+
     NSString *uadBrands = adsBrandsFromUA(customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
@@ -272,7 +260,7 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
-    
+
     if (applyDisableJS) {
         // allowsContentJavaScript was added in iOS 14 — guard the setter to avoid an
         // unrecognized-selector crash on iOS 13 where WKWebpagePreferences exists but
@@ -284,6 +272,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         }
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             configuration.preferences.javaScriptEnabled = NO;
+
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)])
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
@@ -306,6 +295,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
             configuration.allowsInlineMediaPlayback = NO;
         if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)])
             configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+
         if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)])
             configuration.allowsPictureInPictureMediaPlayback = NO;
     }
@@ -331,9 +321,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 static void loadPrefs() {
-    // Atomic compare-and-swap: only the first caller proceeds;
-    // re-entrant or concurrent callers return immediately. 
-    // reloadPrefsNotification resets the flag before calling.
+    // Atomic compare-and-swap: only the first caller proceeds; re-entrant or concurrent
+    // callers return immediately. reloadPrefsNotification resets the flag before calling.
     BOOL expected = NO;
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
@@ -341,7 +330,10 @@ static void loadPrefs() {
 
     // CFPreferences is always authoritative: cfprefsd survives a respring and holds
     // the latest writes from the Settings bundle regardless of whether the physical
-    // plist has been flushed to disk yet.
+    // plist has been flushed to disk yet. Reading the plist first can return a stale
+    // file that lacks keys written after the plist was last flushed (e.g. `enabled`
+    // set by PSListController right before a respring), which silently prevents the
+    // CFPreferences fallback from being tried because the file IS a valid dictionary.
     CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
                                                   kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     if (keyList) {
@@ -364,9 +356,10 @@ static void loadPrefs() {
     NSArray  *activeCustomDaemonIDs = @[];
     NSArray  *disabledPresetRules   = @[];
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
-    
+
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
+
         globalTweakEnabled        = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]                ? [prefs[@"enabled"] boolValue]                : NO;
         globalUASpoofingEnabled   = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)]   ? [prefs[@"globalUASpoofingEnabled"] boolValue]   : NO;
         globalDisableJIT          = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)]           ? [prefs[@"globalDisableJIT"] boolValue]           : NO;
@@ -383,7 +376,7 @@ static void loadPrefs() {
 
         id disabledPresetRaw = prefs[@"disabledPresetRules"];
         if ([disabledPresetRaw isKindOfClass:[NSArray class]]) disabledPresetRules = disabledPresetRaw;
-        
+
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
@@ -407,6 +400,7 @@ static void loadPrefs() {
     BOOL isTargetRestricted = NO;
     BOOL isPresetMatch      = NO;
     NSString *matchedID   = nil;
+
     NSString *targetsToCheck[] = { bundleID, processName };
 
     for (int i = 0; i < 2; i++) {
@@ -428,7 +422,7 @@ static void loadPrefs() {
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
             @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
         ];
-        
+
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
             @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
@@ -443,8 +437,7 @@ static void loadPrefs() {
             @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
             @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
             @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
-            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", 
-            @"com.sixdays.trust",
+            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
             @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
             @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
             @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
@@ -454,7 +447,7 @@ static void loadPrefs() {
             @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
             @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
         ];
-        
+
         // Tier 3 is intentionally empty for the UI tweak.
         // Daemon-level mitigations are handled exclusively by AntiDarkSwordDaemon.
         NSArray *tier3 = @[];
@@ -467,7 +460,7 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
-            
+
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -488,13 +481,13 @@ static void loadPrefs() {
     disableJIT15      = NO;
     disableJS         = NO;
     disableFileAccess = NO;
-    
+
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
         disableJIT   = isIOS16OrGreater;
         disableJIT15 = !isIOS16OrGreater;
         disableJS    = !isIOS16OrGreater;
-        
+
         // iMessage-capable UI processes — block media, RTC, file access, and message DL.
         // com.apple.Passbook is included for BLASTPASS (PassKit attachment) mitigation.
         NSArray *msgAndMail = @[
@@ -506,18 +499,18 @@ static void loadPrefs() {
             @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
             @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
-        
+
         NSArray *iMessageUIApps = @[
             @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
             @"com.apple.ActivityMessagesApp"
         ];
-        
+
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
             @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
-        
+
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia      = YES;
             disableRTC        = YES;
@@ -563,7 +556,7 @@ static void loadPrefs() {
     applyDisableRTC         = globalTweakEnabled && (globalDisableRTC        || (currentProcessRestricted && disableRTC));
     applyDisableFileAccess  = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
     applyDisableIMessageDL  = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
-    
+
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
@@ -580,7 +573,6 @@ static void loadPrefs() {
     } else {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
-
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -800,6 +792,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // restricted so rules are picked up on next app launch.
 // =========================================================
 
+static const char kADSGestureKey = 0;
+
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
@@ -826,10 +820,12 @@ static UIViewController *ads_ui_top_vc(UIViewController *root) {
 static NSArray<NSDictionary *> *ads_ui_setting_rows(void) {
     NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
     NSMutableArray *rows = [NSMutableArray array];
+
     [rows addObject:@{@"title":   @"Spoof User Agent",
                       @"detail":  @"Masks the real browser fingerprint",
                       @"key":     @"spoofUA",
                       @"enabled": @YES}];
+
     if (major >= 16) {
         [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
                           @"detail":  @"Enables WebKit lockdown mode (iOS 16+)",
@@ -851,22 +847,27 @@ static NSArray<NSDictionary *> *ads_ui_setting_rows(void) {
                       @"detail":  @"Prevents JS execution in WebViews",
                       @"key":     @"disableJS",
                       @"enabled": @YES}];
+
     [rows addObject:@{@"title":   @"Block Media Autoplay",
                       @"detail":  @"Stops drive-by audio/video loading",
                       @"key":     @"disableMedia",
                       @"enabled": @YES}];
+
     [rows addObject:@{@"title":   @"Block WebGL / WebRTC",
                       @"detail":  @"Disables GPU and peer-connection APIs",
                       @"key":     @"disableRTC",
                       @"enabled": @YES}];
+
     [rows addObject:@{@"title":   @"Block file:// Access",
                       @"detail":  @"Prevents local file exfiltration",
                       @"key":     @"disableFileAccess",
                       @"enabled": @YES}];
+
     [rows addObject:@{@"title":   @"Block iMessage Downloads",
                       @"detail":  @"Blocks auto-download of iMessage attachments",
                       @"key":     @"disableIMessageDL",
                       @"enabled": @YES}];
+
     return rows;
 }
 
@@ -906,9 +907,10 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 - (instancetype)init {
     if (!(self = [super init])) return nil;
+
     self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows = ads_ui_setting_rows();
-    
+
     // CFPreferences first so the overlay initializes from live cfprefsd state, not a
     // potentially-stale plist that may be missing keys (e.g. `enabled`) written after
     // the last plist flush. A stale init causes saveAndRestart to write back an
@@ -923,7 +925,6 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         CFRelease(kl);
     }
     if (!existing) existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    
     self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
 
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
@@ -945,12 +946,12 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     bgView.frame = self.view.bounds;
     bgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:bgView];
-    
+
     UITapGestureRecognizer *dismissTap = [[UITapGestureRecognizer alloc]
         initWithTarget:self action:@selector(tappedBackground:)];
     dismissTap.numberOfTouchesRequired = 1;
     [bgView addGestureRecognizer:dismissTap];
-    
+
     UIView *shadowWrapper = [[UIView alloc] init];
     shadowWrapper.translatesAutoresizingMaskIntoConstraints = NO;
     shadowWrapper.backgroundColor    = [UIColor clearColor];
@@ -960,7 +961,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     shadowWrapper.layer.shadowRadius = 16;
     shadowWrapper.layer.shadowOffset = CGSizeMake(0, 6);
     [self.view addSubview:shadowWrapper];
-    
+
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor     = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
@@ -1001,7 +1002,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
-    
+
     UISwitch *masterSwitch = [[UISwitch alloc] init];
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
@@ -1010,6 +1011,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     // Read the ACTUAL live protection status straight from the tweak engine
     BOOL isMasterEnabled     = currentProcessRestricted;
     masterSwitch.on          = isMasterEnabled;
+    
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
@@ -1041,12 +1043,12 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     buttonBar.translatesAutoresizingMaskIntoConstraints = NO;
     buttonBar.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1];
     [card addSubview:buttonBar];
-    
+
     UIView *btnSep = [[UIView alloc] init];
     btnSep.translatesAutoresizingMaskIntoConstraints = NO;
     btnSep.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
     [buttonBar addSubview:btnSep];
-    
+
     UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
@@ -1062,15 +1064,15 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     saveBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     [saveBtn addTarget:self action:@selector(saveAndRestart) forControlEvents:UIControlEventTouchUpInside];
     [buttonBar addSubview:saveBtn];
-    
+
     UIView *btnDivider = [[UIView alloc] init];
     btnDivider.translatesAutoresizingMaskIntoConstraints = NO;
     btnDivider.backgroundColor = [UIColor colorWithWhite:0.28 alpha:1];
     [buttonBar addSubview:btnDivider];
-    
+
     CGFloat rowH  = 52.0;
     CGFloat maxTH = rowH * (CGFloat)self.rows.count;
-    
+
     [NSLayoutConstraint activateConstraints:@[
         [shadowWrapper.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [shadowWrapper.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
@@ -1162,7 +1164,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     cell.detailTextLabel.font     = [UIFont systemFontOfSize:11];
     cell.backgroundColor          = [UIColor colorWithWhite:0.13 alpha:1];
     cell.selectionStyle           = UITableViewCellSelectionStyleNone;
-    
+
     if (rowEnabled) {
         cell.textLabel.textColor       = [UIColor whiteColor];
         cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.48 alpha:1];
@@ -1184,7 +1186,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     sw.tag         = indexPath.row;
     sw.enabled     = rowEnabled;
     sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
-    
+
     id saved = self.pendingRules[key];
     sw.on = saved ? [saved boolValue] : ads_ui_default_value_for_key(key);
 
@@ -1208,7 +1210,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
     self.pendingRules[key] = @(sender.on);
-    
+
     if ([key isEqualToString:@"disableJS"]) {
         self.jsLocked = sender.on;
         NSInteger jitIdx = -1;
@@ -1250,7 +1252,6 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
                                     ? [existingDisabled mutableCopy] 
                                     : [NSMutableArray array];
-        
         if (enable) {
             [disabled removeObject:self.currentBundleID];
         } else {
@@ -1276,7 +1277,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);
-                                         
+
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:@"Settings Saved"
         message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
@@ -1284,8 +1285,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
                                               style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction *a) { exit(0);
-    }]];
+                                            handler:^(UIAlertAction *a) { exit(0); }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Later"
                                               style:UIAlertActionStyleCancel
@@ -1312,25 +1312,33 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     dispatch_once(&once, ^{ instance = [[self alloc] init]; });
     return instance;
 }
-
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    // Read live from cfprefsd at tap time — avoids any stale-cache issue where
-    // loadPrefs() ran before cfprefsd had data for this domain at process launch.
-    CFTypeRef shortcutRef = CFPreferencesCopyAppValue(CFSTR("mitigationShortcutEnabled"),
-                                                      CFSTR("com.eolnmsuk.antidarkswordprefs"));
-    BOOL shortcutOn = shortcutRef ? [(__bridge id)shortcutRef boolValue] : NO;
-    if (shortcutRef) CFRelease(shortcutRef);
-    CFTypeRef enabledRef = CFPreferencesCopyAppValue(CFSTR("enabled"),
-                                                     CFSTR("com.eolnmsuk.antidarkswordprefs"));
-    BOOL tweakOn = enabledRef ? [(__bridge id)enabledRef boolValue] : NO;
-    if (enabledRef) CFRelease(enabledRef);
-    if (!shortcutOn || !tweakOn) return;
-    // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
-    if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
+
+    // Read preferences live at tap time — avoids stale cached values in long-running
+    // processes like Safari that may have loaded settings at startup hours ago.
+    BOOL tweakEnabled    = NO;
+    BOOL shortcutEnabled = NO;
+    CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                              kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (kl) {
+        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                       kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (d) {
+            NSDictionary *prefs = (__bridge_transfer NSDictionary *)d;
+            id enVal = prefs[@"enabled"];
+            id scVal = prefs[@"mitigationShortcutEnabled"];
+            tweakEnabled    = [enVal respondsToSelector:@selector(boolValue)] && [enVal boolValue];
+            shortcutEnabled = [scVal respondsToSelector:@selector(boolValue)] && [scVal boolValue];
+        }
+        CFRelease(kl);
+    }
+    if (!tweakEnabled || !shortcutEnabled) return;
+
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
+
     ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
     vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
@@ -1339,7 +1347,10 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win || ads_ui_gesture_installed) return;
+    if (!win) return;
+    // Per-window guard using associated objects — safe for apps that create multiple
+    // windows (e.g. Safari tabs, alert overlays) without double-installing.
+    if (objc_getAssociatedObject(win, &kADSGestureKey)) return;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
@@ -1347,8 +1358,8 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
-    ads_ui_gesture_installed    = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
+    objc_setAssociatedObject(win, &kADSGestureKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed on window.");
 }
 
 %hook UIWindow
@@ -1359,29 +1370,39 @@ static void ads_ui_install_gesture(UIWindow *win) {
 %end
 
 %ctor {
-    // Set rootless flag first
-    isRootlessJB = (access("/var/jb", F_OK) == 0);
+    // Detect jailbreak type: RootHide first, then standard rootless, then rootful.
+    // jbroot() on RootHide remaps paths to a per-process preboot mount; verify it's
+    // non-trivial (jbroot("/") != "/") to avoid false-positive on no-op shims.
+    void *jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
+    if (jbrootFn) {
+        typedef char *(*jbroot_fn)(const char *);
+        char *test = ((jbroot_fn)jbrootFn)("/");
+        isRootHideJB = (test != NULL && strcmp(test, "/") != 0);
+    }
+    if (!isRootHideJB) isRootlessJB = (access("/var/jb", F_OK) == 0);
 
     NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
 
-    // Fast-fail noisy / unrelated background daemons
+    // Fast-fail noisy / unrelated background daemons.
+    // SpringBoard is excluded here — the in-app gesture and WebKit hooks are
+    // not meaningful on the Home Screen, and the gesture must not appear there.
     NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight",
-                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
+                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid",
+                         @"SpringBoard"];
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     
     // Globally ignore all App Extensions to prevent sandbox read errors
     if ([path hasSuffix:@".appex"]) return;
-    
+
     // 1. Path-based whitelist
     BOOL isUserApp      = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
 
     // 2. Service whitelist
     NSArray *allowedServices = @[
-        @"com.apple.mobilesafari", // Explicitly added MobileSafari to ensure loading despite path oddities
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
         @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
@@ -1420,8 +1441,12 @@ static void ads_ui_install_gesture(UIWindow *win) {
         }
     }
 
-    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
-    
+    // Explicit safeguard for Mobile Safari — belt-and-suspenders in case path detection
+    // fails to match Safari's bundle path on a particular jailbreak variant.
+    BOOL isMobileSafari = [bundleID isEqualToString:@"com.apple.mobilesafari"];
+
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride && !isMobileSafari) return;
+
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
