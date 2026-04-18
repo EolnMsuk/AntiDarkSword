@@ -98,9 +98,6 @@ static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
 static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
-// Tracked so loadPrefs can flip enabled/disabled when prefs change at runtime.
-// Written only from ads_ui_install_gesture (main thread); read in the loadPrefs dispatch block.
-static UITapGestureRecognizer *adsUIGesture = nil;
 
 // =========================================================
 // HELPERS
@@ -566,15 +563,12 @@ static void loadPrefs() {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
 
-    // Gesture gate: only active when mitigationShortcutEnabled AND master enabled.
+    // Gesture gate: checked at tap time in handleTap: rather than via tap.enabled,
+    // so there is no timing dependency on when makeKeyAndVisible fires vs loadPrefs.
     BOOL shortcut = (prefs && [prefs isKindOfClass:[NSDictionary class]])
         ? [[prefs objectForKey:@"mitigationShortcutEnabled"] boolValue]
         : NO;
-    BOOL newGestureActive = shortcut && globalTweakEnabled;
-    gestureActive = newGestureActive;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        adsUIGesture.enabled = newGestureActive;
-    });
+    gestureActive = shortcut && globalTweakEnabled;
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -1302,10 +1296,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 // Persistent singleton target — UITapGestureRecognizer holds a weak reference,
 // so the target must outlive the gesture recognizer.
-// UIGestureRecognizerDelegate: returning YES for simultaneous recognition lets
-// our tap fire even when Safari's WKWebView internal gestures (text selection,
-// scroll, etc.) also recognize — without this Safari swallows the 3-finger tap.
-@interface ADSUIGestureHandler : NSObject <UIGestureRecognizerDelegate>
+@interface ADSUIGestureHandler : NSObject
 + (instancetype)shared;
 - (void)handleTap:(UITapGestureRecognizer *)sender;
 @end
@@ -1317,12 +1308,10 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     dispatch_once(&once, ^{ instance = [[self alloc] init]; });
     return instance;
 }
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gr
-    shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)other {
-    return YES;
-}
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
+    // Gate checked here at call time — avoids tap.enabled timing issues with Safari's window lifecycle.
+    if (!gestureActive) return;
     // Block SpringBoard — it passes the path filter (/Applications/) but should never show the overlay.
     if ([([[NSBundle mainBundle] bundleIdentifier] ?: @"") isEqualToString:@"com.apple.springboard"]) return;
     UIWindow *win = ads_ui_key_window();
@@ -1344,9 +1333,6 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
-    tap.delegate                = [ADSUIGestureHandler shared]; // allows simultaneous recognition with WKWebView gestures
-    tap.enabled                 = gestureActive; // off until mitigationShortcutEnabled && enabled
-    adsUIGesture                = tap;
     [win addGestureRecognizer:tap];
     ads_ui_gesture_installed = YES;
     ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed (active=%d).", (int)gestureActive);
