@@ -1272,6 +1272,18 @@ static NSDictionary *ads_daemon_alias_map(void) {
                 resetBtn->action = @selector(resetProbeCounter);
                 [specs insertObject:resetBtn atIndex:infoIdx++];
             }
+
+            // Mitigation Shortcut — three-finger overlay toggle, after Attack Statistics, before Info
+            PSSpecifier *shortcutGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+            [shortcutGroup setProperty:@"Three-finger double-tap to access the in-app protection overlay in TrollFools-injected apps. Only activates when Enable Protection is also on." forKey:@"footerText"];
+            [specs insertObject:shortcutGroup atIndex:infoIdx++];
+
+            PSSpecifier *shortcutToggle = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut"
+                target:self
+                set:@selector(setMitigationShortcut:specifier:)
+                get:@selector(getMitigationShortcut:)
+                detail:nil cell:PSSwitchCell edit:nil];
+            [specs insertObject:shortcutToggle atIndex:infoIdx];
         }
 
         _specifiers = [specs copy];
@@ -1685,6 +1697,17 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         self->_specifiers = nil;
         [self reloadSpecifiers];
     });
+}
+
+- (id)getMitigationShortcut:(PSSpecifier *)spec {
+    return @([ads_defaults() boolForKey:@"mitigationShortcutEnabled"]);
+}
+
+- (void)setMitigationShortcut:(id)value specifier:(PSSpecifier *)spec {
+    NSUserDefaults *defaults = ads_defaults();
+    [defaults setBool:[value boolValue] forKey:@"mitigationShortcutEnabled"];
+    [defaults synchronize];
+    ads_post_notification();
 }
 
 - (void)resetProbeCounter {
