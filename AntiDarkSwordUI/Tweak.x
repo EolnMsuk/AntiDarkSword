@@ -788,7 +788,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // restricted so rules are picked up on next app launch.
 // =========================================================
 
-static BOOL ads_ui_gesture_installed = NO;
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
@@ -1326,7 +1325,17 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win || ads_ui_gesture_installed) return;
+    if (!win) return;
+    // Per-window duplicate guard — Safari and multi-window apps call makeKeyAndVisible
+    // on several windows; the old process-wide one-shot flag caused the gesture to land
+    // on whichever window fired first (often a helper window), leaving the browsing
+    // window without it. Check each window individually instead.
+    for (UIGestureRecognizer *g in win.gestureRecognizers) {
+        if ([g isKindOfClass:[UITapGestureRecognizer class]]) {
+            UITapGestureRecognizer *t = (UITapGestureRecognizer *)g;
+            if (t.numberOfTapsRequired == 2 && t.numberOfTouchesRequired == 3) return;
+        }
+    }
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
@@ -1334,8 +1343,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
-    ads_ui_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed (active=%d).", (int)gestureActive);
+    ADSLog(@"[INIT] AntiDarkSword gesture installed on window: %@", [win class]);
 }
 
 %hook UIWindow
