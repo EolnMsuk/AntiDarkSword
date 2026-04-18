@@ -98,6 +98,9 @@ static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
 static _Atomic BOOL gestureActive          = NO; // mitigationShortcutEnabled && globalTweakEnabled
+// Tracked so loadPrefs can flip enabled/disabled when prefs change at runtime.
+// Written only from ads_ui_install_gesture (main thread); read in the loadPrefs dispatch block.
+static UITapGestureRecognizer *adsUIGesture = nil;
 
 // =========================================================
 // HELPERS
@@ -792,7 +795,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // =========================================================
 
 static BOOL ads_ui_gesture_installed = NO;
-static UITapGestureRecognizer *adsUIGesture = nil; // tracked for runtime enable/disable
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
