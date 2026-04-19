@@ -215,6 +215,7 @@ static void injectUAScript(WKUserContentController *ucc) {
         initWithSource:jsSource
          injectionTime:WKUserScriptInjectionTimeAtDocumentStart
       forMainFrameOnly:NO];
+
     [ucc addUserScript:script];
 }
 
@@ -260,7 +261,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         }
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             configuration.preferences.javaScriptEnabled = NO;
-
         if ([configuration.preferences respondsToSelector:@selector(setJavaScriptCanOpenWindowsAutomatically:)])
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
@@ -283,7 +283,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
             configuration.allowsInlineMediaPlayback = NO;
         if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)])
             configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-
         if ([configuration respondsToSelector:@selector(setAllowsPictureInPictureMediaPlayback:)])
             configuration.allowsPictureInPictureMediaPlayback = NO;
     }
@@ -315,19 +314,22 @@ static void loadPrefs() {
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
-    NSString *prefsFilePath = ads_prefs_path();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
-        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+    
+    // Priority 1: CFPreferences (Authoritative Live State)
+    CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (keyList) {
+        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+        CFRelease(keyList);
     }
-
+    
+    // Priority 2: Physical Plist (Fresh Install Fallback)
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-            CFRelease(keyList);
+        NSString *prefsFilePath = ads_prefs_path();
+        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+            prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
         }
     }
 
@@ -358,6 +360,7 @@ static void loadPrefs() {
 
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
+
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
             presetUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
         }
@@ -463,6 +466,7 @@ static void loadPrefs() {
 
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
+
         disableJIT   = isIOS16OrGreater;
         disableJIT15 = !isIOS16OrGreater;
         disableJS    = !isIOS16OrGreater;
@@ -858,6 +862,7 @@ static BOOL ads_ui_default_value_for_key(NSString *key) {
 
 static void ads_ui_write_prefs(NSDictionary *prefs) {
     CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
+
     for (NSString *key in prefs) {
         CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)(prefs[key]), appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     }
@@ -890,27 +895,38 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows = ads_ui_setting_rows();
 
-    NSDictionary *existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    NSDictionary *existing = nil;
+    
+    // Priority 1: CFPreferences (Authoritative Live State)
+    CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    if (kl) {
+        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (d) existing = (__bridge_transfer NSDictionary *)d;
+        CFRelease(kl);
+    }
+    
+    // Priority 2: Physical Plist (Fresh Install Fallback)
     if (!existing) {
-        CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (kl) {
-            CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (d) existing = (__bridge_transfer NSDictionary *)d;
-            CFRelease(kl);
+        NSString *prefsFilePath = ads_prefs_path();
+        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+            existing = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
         }
     }
+    
     self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
 
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     NSDictionary *savedRules = self.pendingPrefs[rulesKey];
+
     self.pendingRules = [savedRules isKindOfClass:[NSDictionary class]]
         ? [savedRules mutableCopy]
         : [NSMutableDictionary dictionary];
 
     id savedJS = self.pendingRules[@"disableJS"];
     self.jsLocked = savedJS ? [savedJS boolValue] : ads_ui_default_value_for_key(@"disableJS");
+
     return self;
 }
 
@@ -983,15 +999,15 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
-    
+
     // Read the ACTUAL live protection status straight from the tweak engine
     BOOL isMasterEnabled     = currentProcessRestricted;
     masterSwitch.on          = isMasterEnabled;
-    
+
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
-        
+
     // If the Global switch in Settings is OFF, disable this switch entirely
     if (!globalTweakEnabled) {
         masterSwitch.enabled = NO;
@@ -1218,32 +1234,49 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
     
-    // Determine effective Enable Rule state: use explicit user intent if toggled,
-    // otherwise fall back to the current runtime state so saves always anchor correctly.
+    // Apply changes to the master Enable Rule switch if the user toggled it
     id intendedState = self.pendingPrefs[@"_intendedMasterState"];
-    BOOL enable = intendedState ? [intendedState boolValue] : currentProcessRestricted;
+    if (intendedState) {
+        BOOL enable = [intendedState boolValue];
 
-    // Update preset rules array (controls preset-tier apps via disabledPresetRules).
-    id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
-    NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]]
-                                ? [existingDisabled mutableCopy]
-                                : [NSMutableArray array];
-    if (enable) {
-        [disabled removeObject:self.currentBundleID];
-    } else {
-        if (![disabled containsObject:self.currentBundleID]) [disabled addObject:self.currentBundleID];
+        // 1. Update preset rules array (unrestricts preset apps if disabled)
+        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
+        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
+                                    ? [existingDisabled mutableCopy] 
+                                    : [NSMutableArray array];
+        
+        if (enable) {
+            [disabled removeObject:self.currentBundleID];
+        } else {
+            if (![disabled containsObject:self.currentBundleID]) {
+                [disabled addObject:self.currentBundleID];
+            }
+        }
+        self.pendingPrefs[@"disabledPresetRules"] = disabled;
+
+        // 2. Update custom apps key only for non-preset apps.
+        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
+        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
+        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
+        if (!currentProcessIsPreset) {
+            NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+            self.pendingPrefs[restrictKey] = @(enable);
+            
+            // Mirror RootListController's behavior: Clean up legacy dictionary key to avoid conflicts
+            id existingDictRaw = self.pendingPrefs[@"restrictedApps"];
+            if ([existingDictRaw isKindOfClass:[NSDictionary class]]) {
+                NSMutableDictionary *appsDict = [existingDictRaw mutableCopy];
+                if (enable) {
+                    appsDict[self.currentBundleID] = @YES;
+                } else if (appsDict[self.currentBundleID]) {
+                    [appsDict removeObjectForKey:self.currentBundleID];
+                }
+                self.pendingPrefs[@"restrictedApps"] = appsDict;
+            }
+        }
+        
+        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
     }
-    self.pendingPrefs[@"disabledPresetRules"] = disabled;
-
-    // Always write the Select Apps (restrictedApps-) key for non-preset apps so the tweak
-    // loads correctly on the next launch regardless of whether the master switch was toggled.
-    // Preset apps use disabledPresetRules exclusively to avoid bypassing smart defaults.
-    if (!currentProcessIsPreset) {
-        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-        self.pendingPrefs[restrictKey] = @(enable);
-    }
-
-    [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
 
     ads_ui_write_prefs(self.pendingPrefs);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1257,7 +1290,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
                                               style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction *a) { exit(0); }]];
+                                            handler:^(UIAlertAction *a) { exit(0);
+    }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"Later"
                                               style:UIAlertActionStyleCancel
@@ -1286,8 +1320,6 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    prefsLoaded = NO;
-    loadPrefs();
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1301,14 +1333,17 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
 static void ads_ui_install_gesture(UIWindow *win) {
     if (!win || ads_ui_gesture_installed) return;
+
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
+
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
     ads_ui_gesture_installed = YES;
+
     ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
 }
 
@@ -1332,7 +1367,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    
+
     // Globally ignore all App Extensions to prevent sandbox read errors
     if ([path hasSuffix:@".appex"]) return;
 
