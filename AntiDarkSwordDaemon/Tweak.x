@@ -22,6 +22,7 @@ static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
 // Relies on isRootlessJB being set in %ctor before first use.
+// RootHide: the Patcher patches the /var/jb/ string literal in the compiled binary.
 static NSString *ads_prefs_path(void) {
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"

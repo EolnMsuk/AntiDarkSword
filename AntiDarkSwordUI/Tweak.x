@@ -6,7 +6,6 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
-#include <dlfcn.h>
 
 #import "../ADSLogging.h"
 
@@ -50,24 +49,9 @@
 static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
-// Supports rootful, rootless (/var/jb prefix), and RootHide (jbroot() remap).
+// Relies on isRootlessJB being set in %ctor before first use.
+// RootHide: the Patcher patches the /var/jb/ string literal in the compiled binary.
 static NSString *ads_prefs_path(void) {
-    static void *jbrootFn = NULL;
-    static BOOL jbrootIsReal = NO;
-    static dispatch_once_t jbrootOnce;
-    dispatch_once(&jbrootOnce, ^{
-        jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
-        if (jbrootFn) {
-            typedef char *(*jbroot_fn)(const char *);
-            char *test = ((jbroot_fn)jbrootFn)("/");
-            jbrootIsReal = (test != NULL && strcmp(test, "/") != 0);
-        }
-    });
-    if (jbrootIsReal) {
-        typedef char *(*jbroot_fn)(const char *);
-        char *resolved = ((jbroot_fn)jbrootFn)("/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
-        if (resolved) return @(resolved);
-    }
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
@@ -884,21 +868,35 @@ static BOOL ads_ui_default_value_for_key(NSString *key) {
     return NO;
 }
 
-static void ads_ui_write_prefs(NSDictionary *prefs) {
+// Writes only the keys in `updatesOnly` to cfprefsd — never the full prefs dict.
+// Passing only the overlay-managed keys prevents stale snapshots of global settings
+// (enabled, autoProtectLevel, etc.) from being silently written back.
+static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
     CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    for (NSString *key in prefs) {
-        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)(prefs[key]), appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    for (NSString *key in updatesOnly) {
+        CFPreferencesSetValue((__bridge CFStringRef)key,
+                              (__bridge CFPropertyListRef)(updatesOnly[key]),
+                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     }
     CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 
-    // Fallback disk write
+    // Fallback disk write — use the FULL merged state from cfprefsd so the plist
+    // remains a complete snapshot, not just a partial overlay-key subset.
     NSString *path = ads_prefs_path();
     NSString *dir  = [path stringByDeletingLastPathComponent];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
-    [prefs writeToFile:path atomically:YES];
+    CFArrayRef kl = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    NSDictionary *fullPrefs = nil;
+    if (kl) {
+        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, appID,
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (d) fullPrefs = (__bridge_transfer NSDictionary *)d;
+        CFRelease(kl);
+    }
+    [(fullPrefs ?: updatesOnly) writeToFile:path atomically:YES];
 }
 
 @interface ADSUISettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
@@ -1238,41 +1236,47 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 
 - (void)saveAndRestart {
+    // Build a minimal dict of ONLY the keys this overlay is allowed to change.
+    // Never write the full pendingPrefs — it contains a snapshot of global settings
+    // (enabled, autoProtectLevel, globalDisableJS, etc.) that could silently overwrite
+    // changes the user made in Settings.app while this app was already running.
+    NSMutableDictionary *updates = [NSMutableDictionary dictionary];
+
+    // Per-app feature rules for the current bundle ID
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
-    self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-    
-    // Apply changes to the master Enable Protection switch if the user toggled it
+    updates[rulesKey] = [self.pendingRules copy];
+
+    // Handle "Enable Rule" toggle if the user changed it
     id intendedState = self.pendingPrefs[@"_intendedMasterState"];
     if (intendedState) {
         BOOL enable = [intendedState boolValue];
-        
-        // 1. Update preset rules array (unrestricts preset apps if disabled)
-        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
-        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
-                                    ? [existingDisabled mutableCopy] 
-                                    : [NSMutableArray array];
+
+        // Read disabledPresetRules fresh from cfprefsd so we don't overwrite
+        // concurrent Settings.app changes to that array.
+        id freshDisabledRaw = (__bridge_transfer id)CFPreferencesCopyValue(
+            CFSTR("disabledPresetRules"), CFSTR("com.eolnmsuk.antidarkswordprefs"),
+            kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        NSMutableArray *disabled = [freshDisabledRaw isKindOfClass:[NSArray class]]
+            ? [freshDisabledRaw mutableCopy] : [NSMutableArray array];
+
         if (enable) {
             [disabled removeObject:self.currentBundleID];
         } else {
-            if (![disabled containsObject:self.currentBundleID]) {
-                [disabled addObject:self.currentBundleID];
-            }
+            if (![disabled containsObject:self.currentBundleID]) [disabled addObject:self.currentBundleID];
         }
-        self.pendingPrefs[@"disabledPresetRules"] = disabled;
-        
-        // 2. Update custom apps key only for non-preset apps.
-        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
-        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
-        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
+        updates[@"disabledPresetRules"] = disabled;
+
+        // Non-preset apps: write the restrictedApps- key so the app gets into the
+        // restricted list. Preset apps are controlled exclusively via disabledPresetRules;
+        // writing restrictedApps-<bundleID> for a preset app would cause loadPrefs() to
+        // treat it as a manually-added app (isPresetMatch = NO), bypassing smart defaults.
         if (!currentProcessIsPreset) {
             NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-            self.pendingPrefs[restrictKey] = @(enable);
+            updates[restrictKey] = @(enable);
         }
-        
-        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
     }
 
-    ads_ui_write_prefs(self.pendingPrefs);
+    ads_ui_write_prefs(updates);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);

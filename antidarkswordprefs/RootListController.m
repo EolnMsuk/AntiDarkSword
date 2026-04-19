@@ -1165,7 +1165,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
                 
                 NSString *jbType = @"Rootless";
                 if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) jbType = @"Rootful";
-                if (dlsym(RTLD_DEFAULT, "jbroot")) jbType = @"Roothide";
+				if (dlsym(RTLD_DEFAULT, "jbroot")) jbType = @"Roothide";
                 
                 NSString *footerString = [NSString stringWithFormat:@"AntiDarkSword v%@ (iOS %@ %@)", version, osVersion, jbType];
                 [s setProperty:footerString forKey:@"footerText"];
@@ -1631,15 +1631,23 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
             waitpid(pid, NULL, 0);
 
+        // Clear via CFPreferences API (same path the in-app overlay uses to write),
+        // then also via NSUserDefaults for belt-and-suspenders coverage.
+        CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
+        CFArrayRef cfKeyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (cfKeyList) {
+            CFPreferencesSetMultiple(NULL, cfKeyList, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            CFRelease(cfKeyList);
+        }
+
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
-        
-        // Explicitly delete the physical file to catch the UI overlay's fallback writes
+
+        // Delete the physical plist to clear the overlay's fallback write path
         NSString *plistPathOnDisk = ads_root_path(@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
-        if ([[NSFileManager defaultManager] fileExistsAtPath:plistPathOnDisk]) {
-            [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
-        }
+        [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
 
         ads_post_notification();
 
