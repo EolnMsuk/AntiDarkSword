@@ -30,10 +30,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 16.6.1 | A12+ · A8–A11 |
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0 – 15.x | N/A |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 14.0 – 16.x | N/A |
-
-> **iOS 15 on older devices (A11 / iPhone X and below):** palera1n can run in either rootful or rootless mode.
-> 
-> Use `arm.deb` if you chose rootful during setup, `arm64.deb` if you chose rootless.
+> Use `arm.deb` for rootful, `arm64.deb` for rootless/roothide.
 
 ---
 
