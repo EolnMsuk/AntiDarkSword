@@ -3,9 +3,9 @@ Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 4.5.0
 Architecture: iphoneos-arm
-Description: A jailbreak tweak that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits.
+Description: A jailbreak tweak that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits github.com/
 Maintainer: eolnmsuk
 Author: eolnmsuk
 Section: Tweaks
-SileoIcon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/icon.png
+SileoIcon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png
 Depiction: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/depiction.json
