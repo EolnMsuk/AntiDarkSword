@@ -942,7 +942,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) { return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"]; }];
         
         NSUInteger systemOptionsIndex = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) { return [[obj propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]; }];
-        if (systemOptionsIndex != NSNotFound) insertIndexAuto = systemOptionsIndex;
         
         if (insertIndexAuto != NSNotFound) {
             insertIndexAuto++;

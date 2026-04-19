@@ -110,6 +110,20 @@
             <key>label</key>
             <string>Preset Rules</string>
         </dict>
+
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>id</key>
+            <string>SystemOptionsCell</string>
+            <key>label</key>
+            <string>⚙️  Advanced Options</string>
+            <key>detail</key>
+            <string>AntiDarkSwordDaemonListController</string>
+            <key>isController</key>
+            <true/>
+        </dict>
+
         <dict>
             <key>cell</key>
             <string>PSSegmentCell</string>
@@ -135,19 +149,6 @@
             </array>
             <key>set</key>
             <string>setAutoProtectLevel:specifier:</string>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSLinkCell</string>
-            <key>id</key>
-            <string>SystemOptionsCell</string>
-            <key>label</key>
-            <string>⚙️  Advanced Options</string>
-            <key>detail</key>
-            <string>AntiDarkSwordDaemonListController</string>
-            <key>isController</key>
-            <true/>
         </dict>
 
         <dict>
@@ -204,8 +205,7 @@
             <key>label</key>
             <string>Advanced Rules</string>
             <key>footerText</key>
-            <string>Add bundle IDs or process names.
-Swipe left on rules to remove.</string>
+            <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
         </dict>
         <dict>
             <key>cell</key>
