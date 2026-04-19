@@ -15,7 +15,7 @@
                 },
                 {
                     "class": "DepictionMarkdownView",
-                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation: https://github.com/EolnMsuk/AntiDarkSword"
+                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation: github.com/EolnMsuk/AntiDarkSword"
                 }
             ]
         }
