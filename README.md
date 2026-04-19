@@ -30,7 +30,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 16.6.1 | A12+ · A8–A11 |
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0 – 15.x | N/A |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 14.0 – 16.x | N/A |
-> Not compatible with iOS 13 on A12 or newer.
+> Not compatible with iOS 13 on A12 or newer (GitHub's Theos limitation).
 >
 > Use `arm.deb` for rootful, `arm64.deb` for rootless/roothide.
 ---
