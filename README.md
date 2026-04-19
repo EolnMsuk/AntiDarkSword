@@ -69,7 +69,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 | Corellium decoy | ❌ | ❌ | ❌ |
 | Mitigation Shortcut¹ | ✅ | ✅ | ✅ |
 
-> ¹ **Mitigation Shortcut:** Enable in **Settings → AntiDarkSword** - Three-finger double-tap on open app to trigger a shortcut mitigation settings panel.
+> ¹ **Mitigation Shortcut:** Three-finger double-tap on open app to trigger a shortcut mitigation settings panel.
 
 ---
 
