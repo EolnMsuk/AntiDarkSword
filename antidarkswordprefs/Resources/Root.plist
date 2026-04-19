@@ -27,7 +27,7 @@
             <string>setEnableProtection:specifier:</string>
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
+         </dict>
 
         <dict>
             <key>cell</key>
@@ -101,7 +101,7 @@
             <key>PostNotification</key>
             <string>com.eolnmsuk.antidarkswordprefs/saved</string>
         </dict>
-
+        
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -208,145 +208,6 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>id</key>
-            <string>GlobalMitigationsGroup</string>
-            <key>label</key>
-            <string>Global Mitigation Rules (BETA)</string>
-            <key>footerText</key>
-            <string>Enable specific mitigations system-wide.</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalUASpoofingEnabled</string>
-            <key>label</key>
-            <string>Spoof User Agent</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableJIT</string>
-            <key>label</key>
-            <string>Disable JIT (iOS 16+)</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableJIT15</string>
-            <key>label</key>
-            <string>Disable JIT (Legacy)</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableJS</string>
-            <key>label</key>
-            <string>Disable JavaScript ⚠︎</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableRTC</string>
-            <key>label</key>
-            <string>Disable WebGL &amp; WebRTC</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableMedia</string>
-            <key>label</key>
-            <string>Disable Media Auto-Play</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableIMessageDL</string>
-            <key>label</key>
-            <string>Disable Msg Auto-Download</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-        <dict>
-            <key>cell</key>
-            <string>PSSwitchCell</string>
-            <key>default</key>
-            <false/>
-            <key>defaults</key>
-            <string>com.eolnmsuk.antidarkswordprefs</string>
-            <key>key</key>
-            <string>globalDisableFileAccess</string>
-            <key>label</key>
-            <string>Disable Local File Access</string>
-            <key>set</key>
-            <string>setGlobalMitigation:specifier:</string>
-            <key>PostNotification</key>
-            <string>com.eolnmsuk.antidarkswordprefs/saved</string>
-        </dict>
-
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
             <string>InfoGroup</string>
             <key>label</key>
             <string>Info</string>
@@ -390,7 +251,7 @@
             <key>isDestructive</key>
             <true/>
         </dict>
-
+        
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
@@ -398,7 +259,7 @@
             <string>FooterGroup</string>
         </dict>
     </array>
-
+    
     <key>title</key>
     <string>AntiDarkSword</string>
 </dict>
