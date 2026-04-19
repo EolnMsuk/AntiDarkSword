@@ -974,7 +974,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     UILabel *masterLabel = [[UILabel alloc] init];
     masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text      = @"Enable Protection";
+    masterLabel.text      = @"Enable Rule";
     masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
@@ -995,7 +995,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     // If the Global switch in Settings is OFF, disable this switch entirely
     if (!globalTweakEnabled) {
         masterSwitch.enabled = NO;
-        masterLabel.text = @"Protection (Globally Disabled)";
+        masterLabel.text = @"Enable Rule (Globally Disabled)";
         masterLabel.textColor = [UIColor colorWithWhite:0.6 alpha:1];
         masterRow.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
     }
@@ -1132,7 +1132,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSString     *key = row[@"key"];
 
     BOOL isJITRow   = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
-    BOOL rowEnabled = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
+    BOOL rowEnabled = globalTweakEnabled && [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
 
     cell.textLabel.text           = row[@"title"];
     cell.textLabel.font           = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -1218,36 +1218,32 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
     
-    // Apply changes to the master Enable Protection switch if the user toggled it
+    // Determine effective Enable Rule state: use explicit user intent if toggled,
+    // otherwise fall back to the current runtime state so saves always anchor correctly.
     id intendedState = self.pendingPrefs[@"_intendedMasterState"];
-    if (intendedState) {
-        BOOL enable = [intendedState boolValue];
-        
-        // 1. Update preset rules array (unrestricts preset apps if disabled)
-        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
-        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
-                                    ? [existingDisabled mutableCopy] 
-                                    : [NSMutableArray array];
-        if (enable) {
-            [disabled removeObject:self.currentBundleID];
-        } else {
-            if (![disabled containsObject:self.currentBundleID]) {
-                [disabled addObject:self.currentBundleID];
-            }
-        }
-        self.pendingPrefs[@"disabledPresetRules"] = disabled;
-        
-        // 2. Update custom apps key only for non-preset apps.
-        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
-        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
-        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
-        if (!currentProcessIsPreset) {
-            NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-            self.pendingPrefs[restrictKey] = @(enable);
-        }
-        
-        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
+    BOOL enable = intendedState ? [intendedState boolValue] : currentProcessRestricted;
+
+    // Update preset rules array (controls preset-tier apps via disabledPresetRules).
+    id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
+    NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]]
+                                ? [existingDisabled mutableCopy]
+                                : [NSMutableArray array];
+    if (enable) {
+        [disabled removeObject:self.currentBundleID];
+    } else {
+        if (![disabled containsObject:self.currentBundleID]) [disabled addObject:self.currentBundleID];
     }
+    self.pendingPrefs[@"disabledPresetRules"] = disabled;
+
+    // Always write the Select Apps (restrictedApps-) key for non-preset apps so the tweak
+    // loads correctly on the next launch regardless of whether the master switch was toggled.
+    // Preset apps use disabledPresetRules exclusively to avoid bypassing smart defaults.
+    if (!currentProcessIsPreset) {
+        NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+        self.pendingPrefs[restrictKey] = @(enable);
+    }
+
+    [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
 
     ads_ui_write_prefs(self.pendingPrefs);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1290,6 +1286,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
+    prefsLoaded = NO;
+    loadPrefs();
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;

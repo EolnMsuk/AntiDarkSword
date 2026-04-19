@@ -77,14 +77,14 @@ Both are also private `WKPreferences` keys.
 
 Replaces the real device UA with a configured string to break fingerprinting used by exploits that only target specific device/OS combinations (DarkSword and Coruna both check UA before deploying payloads).
 
-Three hooks combine to make the spoof stick:
+Four hooks combine to make the spoof stick:
 
 1. **`WKWebView.customUserAgent` setter** — intercepts any attempt to set a custom UA and forces it to the spoofed string.
 2. **`WKWebViewConfiguration.applicationNameForUserAgent` setter** — cleared to an empty string to prevent the app name from leaking into the real UA.
-3. **JS navigator override** — a `WKUserScript` injected at document start uses `Object.defineProperty` to override `navigator.userAgent`, `navigator.appVersion`, `navigator.platform`, and `navigator.vendor`. This means even JS that reads `navigator.userAgent` directly gets the spoofed value, not the real one.
+3. **JS navigator override** — a `WKUserScript` injected at document start uses `Object.defineProperty` to override `navigator.userAgent`, `navigator.appVersion`, `navigator.platform`, `navigator.vendor`, and `navigator.userAgentData` (the Client Hints API, iOS 16+). This means even JS that reads these properties directly gets the spoofed values.
 4. **HTTP header override in `loadRequest:`** — if the outgoing request already has a `User-Agent` header that doesn't match the spoofed string, the request is mutated before it goes out.
 
-The `navigator.platform` and `navigator.vendor` values are inferred from the UA string (e.g., a Chrome Android UA gets `"Linux aarch64"` / `"Google Inc."`), so the JS environment is internally consistent rather than a half-spoofed mix.
+The `navigator.platform`, `navigator.vendor`, and `navigator.userAgentData.brands` values are all derived from the UA string (e.g., a Chrome Android UA gets `"Linux aarch64"` / `"Google Inc."` / a Chromium brands array), so the entire JS navigator environment is internally consistent rather than a half-spoofed mix.
 
 ### iMessage UI-Layer Blocking
 

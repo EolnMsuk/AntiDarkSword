@@ -18,6 +18,7 @@ Injected per-app. All mitigations apply only inside the app you injected into.
 | **Block Media Autoplay** | OFF | Stops drive-by audio/video loading inside WebViews |
 | **Block WebGL & WebRTC** | OFF | Disables GPU and peer-connection APIs used by some exploit kits |
 | **Block `file://` Access** | OFF | Prevents local file exfiltration via WebView |
+| **Block Remote Content** | OFF | Blocks all external `http`/`https` resource loads (images, scripts, fonts, media) via `WKContentRuleList`. Strongly recommended for Mail.app — removes the primary zero-click attack surface in HTML email rendering |
 
 ---
 
@@ -27,7 +28,7 @@ The dylib is sandboxed to the injected app and has no system-level access. These
 
 | Feature | Jailbreak | TrollFools |
 |---|---|---|
-| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | ✅ | ❌ — TrollFools cannot inject into system daemons; `IMFileTransfer` hooks are intentionally absent from this build |
+| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | ✅ | ❌ — TrollFools cannot inject into system daemons; `IMFileTransfer` hooks are intentionally absent from this build. **Mail.app** (`com.apple.mobilemail`) is a valid TrollFools target — the WebKit hooks harden HTML email rendering. Use "Block Remote Content" in the overlay to block external resource loads in HTML emails as a zero-click mitigation |
 | Corellium Honeypot (file-path spoofing + `corelliumd` process) | ✅ | ❌ — needs POSIX hook installation and LaunchDaemon |
 | System-wide auto-protection tiers (Level 1/2/3) | ✅ | ❌ — no PreferenceLoader; settings are per-app in-overlay |
 | Settings.app preferences UI | ✅ | ❌ — replaced by in-app three-finger double-tap overlay |
@@ -65,7 +66,7 @@ There is no Settings.app UI for the TrollFools build. Settings are configured in
 
 The overlay shows:
 - **Enable Protection** master toggle (defaults OFF — tap to activate). The row background is **green** when protection is ON and **red** when OFF, making the active state immediately obvious at a glance.
-- Per-feature toggles for UA spoof, JIT, JS, media, WebRTC, and file access
+- Per-feature toggles for UA spoof, JIT, JS, media, WebRTC, file access, and **Block Remote Content**
 - **Save & Restart** — writes settings and prompts to restart the app so WebKit picks up the new configuration
 
 > Settings are saved per-app. Each injected app stores its own configuration. If you inject into five apps, each has independent toggle states.
@@ -104,23 +105,6 @@ TrollStore's availability depends on which exploit method is available for your 
 | 17.1+ | all | ❌ Not supported (as of this writing) |
 
 > Check [TrollStore](https://github.com/opa334/TrollStore) directly — supported iOS versions expand as new exploits are found.
-
-### Jailbreak (full tweak)
-
-For users who can jailbreak and want the complete protection stack:
-
-| Jailbreak | Type | Supported iOS |
-|---|---|---|
-| **Dopamine (2)** | Rootless/hide | 15.0 – 16.6.1 |
-| **Palera1n** | Rootless/ful | 15.0 – 17.x |
-| **meowbrek2** | Rootless | 15.0 – 15.8.3 |
-| **NekoJB** | Rootless | 15.0 – 15.8.3 |
-| **XinaA15** | Hybrid | 15.0 – 15.1.1 |
-| **checkra1n** | Rootful | 14.5 – 14.8.1 |
-| **Taurine** | Rootful | 14.5 – 14.8.1 |
-| **unc0ver** | Rootful | 14.5 – 14.8 |
-
-Install the full `.deb` from [Latest Release](https://github.com/EolnMsuk/AntiDarkSword/releases) via Sileo or Zebra, or add the repo: `https://f0rd0w.github.io/`
 
 ---
 
