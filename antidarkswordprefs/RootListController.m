@@ -1274,20 +1274,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
             }
         }
 
-        // Mitigation Shortcut section — inserted right after Attack Statistics, before Info.
-        if (infoIdx != NSNotFound) {
-            PSSpecifier *shortcutGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-            [shortcutGroup setProperty:@"Three-finger double-tap to access the in-app protection overlay. Only activates when Enable Protection is also on." forKey:@"footerText"];
-            [specs insertObject:shortcutGroup atIndex:infoIdx++];
-
-            PSSpecifier *shortcutToggle = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut"
-                target:self
-                set:@selector(setMitigationShortcut:specifier:)
-                get:@selector(getMitigationShortcut:)
-                detail:nil cell:PSSwitchCell edit:nil];
-            [specs insertObject:shortcutToggle atIndex:infoIdx++];
-        }
-
         _specifiers = [specs copy];
     }
     return _specifiers;
@@ -1694,7 +1680,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     NSUserDefaults *defaults = ads_defaults();
     [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
     [defaults synchronize];
-    [self flagSaveRequirement];
     ads_post_notification();
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
@@ -1725,18 +1710,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
 
 - (void)openVenmo {
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://venmo.com/user/eolnmsuk"] options:@{} completionHandler:nil];
-}
-
-- (id)getMitigationShortcut:(PSSpecifier *)spec {
-    return @([ads_defaults() boolForKey:@"mitigationShortcutEnabled"]);
-}
-
-- (void)setMitigationShortcut:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults();
-    [defaults setBool:[value boolValue] forKey:@"mitigationShortcutEnabled"];
-    [defaults synchronize];
-    [self flagSaveRequirement];
-    ads_post_notification();
 }
 
 @end

@@ -6,8 +6,6 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
-#include <dlfcn.h>
-#import <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -48,21 +46,11 @@
 @end
 
 // Set once in %ctor; used by ads_prefs_path() at all subsequent call sites.
-// Priority: RootHide (jbroot) → standard rootless (/var/jb) → rootful.
-static BOOL isRootHideJB = NO;
 static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
-// Handles RootHide → rootless → rootful in that priority order.
+// Relies on isRootlessJB being set in %ctor before first use.
 static NSString *ads_prefs_path(void) {
-    if (isRootHideJB) {
-        void *fn = dlsym(RTLD_DEFAULT, "jbroot");
-        if (fn) {
-            typedef char *(*jbroot_fn)(const char *);
-            char *p = ((jbroot_fn)fn)("/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
-            if (p) return @(p);
-        }
-    }
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
@@ -792,7 +780,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // restricted so rules are picked up on next app launch.
 // =========================================================
 
-static const char kADSGestureKey = 0;
+static BOOL ads_ui_gesture_installed = NO;
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
@@ -1314,27 +1302,6 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-
-    // Read preferences live at tap time — avoids stale cached values in long-running
-    // processes like Safari that may have loaded settings at startup hours ago.
-    BOOL tweakEnabled    = NO;
-    BOOL shortcutEnabled = NO;
-    CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                              kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    if (kl) {
-        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                       kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (d) {
-            NSDictionary *prefs = (__bridge_transfer NSDictionary *)d;
-            id enVal = prefs[@"enabled"];
-            id scVal = prefs[@"mitigationShortcutEnabled"];
-            tweakEnabled    = [enVal respondsToSelector:@selector(boolValue)] && [enVal boolValue];
-            shortcutEnabled = [scVal respondsToSelector:@selector(boolValue)] && [scVal boolValue];
-        }
-        CFRelease(kl);
-    }
-    if (!tweakEnabled || !shortcutEnabled) return;
-
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1347,10 +1314,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win) return;
-    // Per-window guard using associated objects — safe for apps that create multiple
-    // windows (e.g. Safari tabs, alert overlays) without double-installing.
-    if (objc_getAssociatedObject(win, &kADSGestureKey)) return;
+    if (!win || ads_ui_gesture_installed) return;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
@@ -1358,8 +1322,8 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
-    objc_setAssociatedObject(win, &kADSGestureKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed on window.");
+    ads_ui_gesture_installed = YES;
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
 }
 
 %hook UIWindow
@@ -1370,26 +1334,15 @@ static void ads_ui_install_gesture(UIWindow *win) {
 %end
 
 %ctor {
-    // Detect jailbreak type: RootHide first, then standard rootless, then rootful.
-    // jbroot() on RootHide remaps paths to a per-process preboot mount; verify it's
-    // non-trivial (jbroot("/") != "/") to avoid false-positive on no-op shims.
-    void *jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
-    if (jbrootFn) {
-        typedef char *(*jbroot_fn)(const char *);
-        char *test = ((jbroot_fn)jbrootFn)("/");
-        isRootHideJB = (test != NULL && strcmp(test, "/") != 0);
-    }
-    if (!isRootHideJB) isRootlessJB = (access("/var/jb", F_OK) == 0);
+    // Set rootless flag first — ads_prefs_path() and loadPrefs() both depend on it.
+    isRootlessJB = (access("/var/jb", F_OK) == 0);
 
     NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
 
-    // Fast-fail noisy / unrelated background daemons.
-    // SpringBoard is excluded here — the in-app gesture and WebKit hooks are
-    // not meaningful on the Home Screen, and the gesture must not appear there.
+    // Fast-fail noisy / unrelated background daemons
     NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight",
-                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid",
-                         @"SpringBoard"];
+                         @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
@@ -1441,11 +1394,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
         }
     }
 
-    // Explicit safeguard for Mobile Safari — belt-and-suspenders in case path detection
-    // fails to match Safari's bundle path on a particular jailbreak variant.
-    BOOL isMobileSafari = [bundleID isEqualToString:@"com.apple.mobilesafari"];
-
-    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride && !isMobileSafari) return;
+    if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
 
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
