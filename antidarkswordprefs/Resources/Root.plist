@@ -22,7 +22,7 @@
             <key>key</key>
             <string>enabled</string>
             <key>label</key>
-            <string>Enable Protection 🛡️</string>
+            <string>Enable Protection ⛨</string>
             <key>set</key>
             <string>setEnableProtection:specifier:</string>
             <key>PostNotification</key>
@@ -275,6 +275,6 @@
     </array>
     
     <key>title</key>
-    <string>AntiDarkSword 🛡️</string>
+    <string>AntiDarkSword ⛨</string>
 </dict>
 </plist>
