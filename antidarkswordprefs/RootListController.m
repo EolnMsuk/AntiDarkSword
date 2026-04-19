@@ -1620,17 +1620,11 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
             waitpid(pid, NULL, 0);
 
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFPreferencesSetMultiple(NULL, keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            CFRelease(keyList);
-        }
-        CFPreferencesSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
         
+        // Explicitly delete the physical file to catch the UI overlay's fallback writes
         NSString *plistPathOnDisk = ads_root_path(@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
         if ([[NSFileManager defaultManager] fileExistsAtPath:plistPathOnDisk]) {
             [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
@@ -1640,6 +1634,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
 
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
+        // No waitpid — the reboot kills this process.
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
