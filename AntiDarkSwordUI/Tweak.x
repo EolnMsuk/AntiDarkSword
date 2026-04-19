@@ -1213,6 +1213,8 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTapsRequired    = 2;
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
+    tap.delaysTouchesBegan      = NO;
+    tap.delaysTouchesEnded      = NO;
     [win addGestureRecognizer:tap];
     ads_ui_gesture_installed = YES;
     ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
