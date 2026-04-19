@@ -806,7 +806,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
     NSArray *msgAndMail = ads_msg_and_mail_apps();
     NSArray *allProtected = [self autoProtectedItemsForLevel:3];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected];
-    [expandedTargets removeObject:kADSDaemonsGroupSentinel];
     [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"]];
 
     for (NSString *targetID in expandedTargets) {
@@ -847,7 +846,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
     }];
     NSArray *tier2JB = @[ @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza" ];
     
-    if (level >= 3) [items addObject:kADSDaemonsGroupSentinel];
     [items addObjectsFromArray:tier1];
     if (level >= 2) { [items addObjectsFromArray:sortedTier2]; [items addObjectsFromArray:tier2JB]; }
     return items;
@@ -876,18 +874,8 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         NSInteger ruleType = [ruleTypeObj integerValue];
         BOOL isEnabled = YES;
         if (ruleType == 0) {
-            if ([targetID isEqualToString:kADSDaemonsGroupSentinel]) {
-                NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
-                NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
-                BOOL anyActive = NO;
-                for (NSString *d in daemons) {
-                    if (![disabled containsObject:d]) { anyActive = YES; break; }
-                }
-                isEnabled = anyActive;
-            } else {
-                NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
-                isEnabled = ![disabled containsObject:targetID];
-            }
+            NSArray *disabled = self.cachedDisabledPresetRules ?: @[];
+            isEnabled = ![disabled containsObject:targetID];
         } else if (ruleType == 2) {
             NSArray *active = self.cachedActiveCustomDaemons ?: @[];
             isEnabled = [active containsObject:targetID];
@@ -929,6 +917,15 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
                 else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Restricts system background daemons.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
+            if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
+                if (autoProtectLevel < 3) {
+                    [s setProperty:@NO forKey:@"enabled"];
+                    s.name = @"System Options (Level 3 Required)";
+                } else {
+                    [s setProperty:@YES forKey:@"enabled"];
+                    s.name = @"System Options";
+                }
+            }
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
                 NSString *osVersion = [[UIDevice currentDevice] systemVersion];
                 NSBundle *bundle = [NSBundle bundleForClass:[self class]];
@@ -943,30 +940,16 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         }
 
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) { return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"]; }];
+        
+        NSUInteger systemOptionsIndex = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) { return [[obj propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]; }];
+        if (systemOptionsIndex != NSNotFound) insertIndexAuto = systemOptionsIndex;
+        
         if (insertIndexAuto != NSNotFound) {
             insertIndexAuto++;
             PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
             [specs insertObject:groupSpec atIndex:insertIndexAuto++];
             NSArray *autoItems = [self autoProtectedItemsForLevel:autoProtectLevel];
             for (NSString *item in autoItems) {
-                if ([item isEqualToString:kADSDaemonsGroupSentinel]) {
-                    PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:@"System Options" target:self set:nil get:nil detail:[AntiDarkSwordDaemonListController class] cell:PSLinkCell edit:nil];
-                    [spec setProperty:kADSDaemonsGroupSentinel forKey:@"targetID"];
-                    [spec setProperty:@(0) forKey:@"ruleType"];
-                    UIImage *icon = nil;
-                    if (@available(iOS 13.0, *)) {
-                        icon = [UIImage systemImageNamed:@"bolt.shield.fill"];
-                        icon = [icon imageWithTintColor:[UIColor systemGrayColor] renderingMode:UIImageRenderingModeAlwaysOriginal];
-                    }
-                    if (icon) {
-                        CGSize newSize = CGSizeMake(23, 23);
-                        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:newSize];
-                        UIImage *resizedIcon = [renderer imageWithActions:^(UIGraphicsImageRendererContext *ctx) { [icon drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)]; }];
-                        [spec setProperty:resizedIcon forKey:@"iconImage"];
-                    }
-                    [specs insertObject:spec atIndex:insertIndexAuto++];
-                    continue;
-                }
                 if (![self isTargetInstalled:item]) continue; 
                 NSString *displayName = [self displayNameForTargetID:item];
                 PSSpecifier *spec = [PSSpecifier preferenceSpecifierNamed:displayName target:self set:nil get:nil detail:[AntiDarkSwordAppController class] cell:PSLinkCell edit:nil];
