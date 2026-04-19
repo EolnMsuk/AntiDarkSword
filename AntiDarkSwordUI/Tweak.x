@@ -48,6 +48,7 @@
 // Set once in %ctor;
 // used by ads_prefs_path() at all subsequent call sites.
 static BOOL isRootlessJB = NO;
+
 // Returns the correct prefs path for the active jailbreak type.
 // Relies on isRootlessJB being set in %ctor before first use.
 static NSString *ads_prefs_path(void) {
@@ -71,6 +72,7 @@ static NSString *customUAString = @"";
 // _Atomic eliminates
 // the data race without requiring a full lock.
 static _Atomic BOOL shouldSpoofUA          = NO;
+
 // Global Overrides
 static BOOL globalDisableJIT       = NO;
 static BOOL globalDisableJIT15     = NO;
@@ -79,6 +81,7 @@ static BOOL globalDisableMedia     = NO;
 static BOOL globalDisableRTC       = NO;
 static BOOL globalDisableFileAccess = NO;
 static BOOL globalDisableIMessageDL = NO;
+
 // App-Specific Granular Features
 static BOOL disableJIT             = NO;
 static BOOL disableJIT15           = NO;
@@ -87,6 +90,7 @@ static BOOL disableMedia           = NO;
 static BOOL disableRTC             = NO;
 static BOOL disableFileAccess      = NO;
 static BOOL disableIMessageDL      = NO;
+
 // Final Evaluated States
 static _Atomic BOOL applyDisableJIT        = NO;
 static _Atomic BOOL applyDisableJIT15      = NO;
@@ -108,8 +112,9 @@ static NSString *adsJSONStringLiteral(NSString *str);
 // Parses engine/browser tokens so the Client Hints brands stay consistent with userAgent.
 static NSString *adsBrandsFromUA(NSString *ua) {
     if (!ua) return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
-// Helper: extract the leading decimal digits after a token (e.g. "Chrome/120.0.x" → "120").
-NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
+
+    // Helper: extract the leading decimal digits after a token (e.g. "Chrome/120.0.x" → "120").
+    NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
         NSRange r = [ua rangeOfString:token];
         if (r.location == NSNotFound) return @"120";
         NSString *after = [ua substringFromIndex:NSMaxRange(r)];
@@ -120,7 +125,8 @@ NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
 
     // Edge — must check before Chrome since Edge UAs also contain "Chrome/".
     if ([ua containsString:@"Edg/"] || [ua containsString:@"EdgA/"] || [ua containsString:@"EdgiOS/"]) {
-        NSString *token = [ua containsString:@"Edg/"] ? @"Edg/" : ([ua containsString:@"EdgA/"] ? @"EdgA/" : @"EdgiOS/");
+        NSString *token = [ua containsString:@"Edg/"] ?
+            @"Edg/" : ([ua containsString:@"EdgA/"] ? @"EdgA/" : @"EdgiOS/");
         NSString *ver = majorAfter(token);
         return [NSString stringWithFormat:
             @"[{\"brand\":\"Not(A:Brand\",\"version\":\"24\"},"
@@ -145,8 +151,8 @@ NSString *(^majorAfter)(NSString *) = ^NSString *(NSString *token) {
         return [NSString stringWithFormat:@"[{\"brand\":\"Firefox\",\"version\":\"%@\"}]", ver];
     }
 
-    // Safari or unrecognised — userAgentData is not implemented in real Safari, but we
-    // keep a consistent stub so the property exists and doesn't throw.
+    // Safari or unrecognised — userAgentData is not implemented in real Safari, but a
+    // consistent stub is kept so the property exists and doesn't throw.
     return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
 }
 
@@ -173,12 +179,15 @@ static void injectUAScript(WKUserContentController *ucc) {
     else if ([customUAString containsString:@"Macintosh"]) platform = @"\"MacIntel\"";
     else if ([customUAString containsString:@"Windows"])   platform = @"\"Win32\"";
     else if ([customUAString containsString:@"Android"])   platform = @"\"Linux aarch64\"";
+
     NSString *vendor = @"\"Apple Computer, Inc.\"";
     if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"])
         vendor = @"\"Google Inc.\"";
+
     NSString *appVersion = customUAString;
     if ([customUAString hasPrefix:@"Mozilla/"]) appVersion = [customUAString substringFromIndex:8];
     NSString *jsonAppVersion = adsJSONStringLiteral(appVersion);
+
     // UA Client Hints (navigator.userAgentData) — iOS 16+ Safari 16+.
     // mobile/platform follow the same UA heuristics used above.
     BOOL isMobileUA = [customUAString containsString:@"iPhone"] ||
@@ -189,6 +198,7 @@ static void injectUAScript(WKUserContentController *ucc) {
     if ([customUAString containsString:@"Macintosh"])      uadPlatform = @"\"macOS\"";
     else if ([customUAString containsString:@"Windows"])   uadPlatform = @"\"Windows\"";
     else if ([customUAString containsString:@"Android"])   uadPlatform = @"\"Android\"";
+    
     NSString *uadBrands = adsBrandsFromUA(customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
@@ -203,10 +213,12 @@ static void injectUAScript(WKUserContentController *ucc) {
          "d(n,'userAgentData',{get:function(){return ud;},configurable:true});}catch(e){}"
          "})();",
         jsonUA, jsonAppVersion, platform, vendor, uadBrands, uadMobile, uadPlatform];
+
     WKUserScript *script = [[WKUserScript alloc]
         initWithSource:jsSource
          injectionTime:WKUserScriptInjectionTimeAtDocumentStart
       forMainFrameOnly:NO];
+      
     [ucc addUserScript:script];
 }
 
@@ -240,6 +252,7 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
+
     if (applyDisableJS) {
         // allowsContentJavaScript was added in iOS 14 — guard the setter to avoid an
         // unrecognized-selector crash on iOS 13 where WKWebpagePreferences exists but
@@ -325,6 +338,7 @@ static void loadPrefs() {
     NSArray  *activeCustomDaemonIDs = @[];
     NSArray  *disabledPresetRules   = @[];
     NSMutableArray *restrictedAppsArray = [NSMutableArray array];
+
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
         globalTweakEnabled        = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]                ? [prefs[@"enabled"] boolValue]                : NO;
@@ -343,6 +357,7 @@ static void loadPrefs() {
 
         id disabledPresetRaw = prefs[@"disabledPresetRules"];
         if ([disabledPresetRaw isKindOfClass:[NSArray class]]) disabledPresetRules = disabledPresetRaw;
+
         id presetUARaw = prefs[@"selectedUAPreset"];
         NSString *presetUA = [presetUARaw isKindOfClass:[NSString class]] ? presetUARaw : nil;
         if (!presetUA || [presetUA isEqualToString:@"NONE"]) {
@@ -401,8 +416,7 @@ static void loadPrefs() {
             @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
             @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
             @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
-            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", 
-            @"com.sixdays.trust",
+            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
             @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
             @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
             @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
@@ -424,6 +438,7 @@ static void loadPrefs() {
             if ([tier1 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 2 && [tier2 containsObject:target]) targetMatch = target;
             else if (autoProtectLevel >= 3 && [tier3 containsObject:target]) targetMatch = target;
+
             if (targetMatch && ![disabledPresetRules containsObject:targetMatch]) {
                 isTargetRestricted = YES;
                 matchedID = targetMatch;
@@ -444,11 +459,13 @@ static void loadPrefs() {
     disableJIT15      = NO;
     disableJS         = NO;
     disableFileAccess = NO;
+
     if (currentProcessRestricted && isPresetMatch) {
         BOOL isIOS16OrGreater = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
         disableJIT   = isIOS16OrGreater;
         disableJIT15 = !isIOS16OrGreater;
         disableJS    = !isIOS16OrGreater;
+        
         // iMessage-capable UI processes — block media, RTC, file access, and message DL.
         // com.apple.Passbook is included for BLASTPASS (PassKit attachment) mitigation.
         NSArray *msgAndMail = @[
@@ -460,15 +477,18 @@ static void loadPrefs() {
             @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
             @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
         ];
+        
         NSArray *iMessageUIApps = @[
             @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
             @"com.apple.ActivityMessagesApp"
         ];
+        
         NSArray *browsers = @[
             @"com.apple.mobilesafari", @"com.apple.SafariViewService",
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
             @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
+        
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia      = YES;
             disableRTC        = YES;
@@ -514,6 +534,7 @@ static void loadPrefs() {
     applyDisableRTC         = globalTweakEnabled && (globalDisableRTC        || (currentProcessRestricted && disableRTC));
     applyDisableFileAccess  = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
     applyDisableIMessageDL  = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
+    
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
@@ -663,7 +684,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     if (applyDisableJS && allowed) return %orig(NO);
     %orig;
 }
-// Prevent apps (or exploits) from disabling lockdown mode after we've enabled it.
+// Prevent apps (or exploits) from disabling lockdown mode after it is enabled.
 - (void)setLockdownModeEnabled:(BOOL)enabled {
     if (applyDisableJIT && !enabled) return;
     %orig;
@@ -677,7 +698,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 }
 %end
 
-// Prevent code from re-enabling JIT after we've disabled it via the pool configuration.
+// Prevent code from re-enabling JIT after it is disabled via the pool configuration.
 %hook _WKProcessPoolConfiguration
 - (void)setJITEnabled:(BOOL)enabled {
     if (enabled && (applyDisableJIT || applyDisableJIT15)) return;
@@ -742,581 +763,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 }
 %end
 
-// =========================================================
-// IN-APP SETTINGS OVERLAY
-// Three-finger double-tap on any screen → modal settings panel.
-// Writes TargetRules_<bundleID> and marks the process as
-// restricted so rules are picked up on next app launch.
-// =========================================================
-
-static BOOL ads_ui_gesture_installed = NO;
-
-static UIWindow *ads_ui_key_window(void) {
-    if (@available(iOS 13, *)) {
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            UIWindowScene *ws = (UIWindowScene *)scene;
-            if (ws.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *w in ws.windows) {
-                    if (w.isKeyWindow) return w;
-                }
-            }
-        }
-    }
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    return [UIApplication sharedApplication].keyWindow;
-#pragma clang diagnostic pop
-}
-
-static UIViewController *ads_ui_top_vc(UIViewController *root) {
-    while (root.presentedViewController) root = root.presentedViewController;
-    return root;
-}
-
-static NSArray<NSDictionary *> *ads_ui_setting_rows(void) {
-    NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
-    NSMutableArray *rows = [NSMutableArray array];
-    [rows addObject:@{@"title":   @"Spoof User Agent",
-                      @"detail":  @"Masks the real browser fingerprint",
-                      @"key":     @"spoofUA",
-                      @"enabled": @YES}];
-    if (major >= 16) {
-        [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
-                          @"detail":  @"Enables WebKit lockdown mode (iOS 16+)",
-                          @"key":     @"disableJIT",
-                          @"enabled": @YES}];
-    } else if (major >= 15) {
-        [rows addObject:@{@"title":   @"Block JIT",
-                          @"detail":  @"Disables JIT via pool config (iOS 15)",
-                          @"key":     @"disableJIT15",
-                          @"enabled": @YES}];
-    } else {
-        [rows addObject:@{@"title":   @"Block JIT",
-                          @"detail":  @"Not available on iOS 14 and below",
-                          @"key":     @"disableJIT15",
-                          @"enabled": @NO}];
-    }
-
-    [rows addObject:@{@"title":   @"Block JavaScript",
-                      @"detail":  @"Prevents JS execution in WebViews",
-                      @"key":     @"disableJS",
-                      @"enabled": @YES}];
-    [rows addObject:@{@"title":   @"Block Media Autoplay",
-                      @"detail":  @"Stops drive-by audio/video loading",
-                      @"key":     @"disableMedia",
-                      @"enabled": @YES}];
-    [rows addObject:@{@"title":   @"Block WebGL / WebRTC",
-                      @"detail":  @"Disables GPU and peer-connection APIs",
-                      @"key":     @"disableRTC",
-                      @"enabled": @YES}];
-    [rows addObject:@{@"title":   @"Block file:// Access",
-                      @"detail":  @"Prevents local file exfiltration",
-                      @"key":     @"disableFileAccess",
-                      @"enabled": @YES}];
-    [rows addObject:@{@"title":   @"Block iMessage Downloads",
-                      @"detail":  @"Blocks auto-download of iMessage attachments",
-                      @"key":     @"disableIMessageDL",
-                      @"enabled": @YES}];
-    return rows;
-}
-
-// All defaults OFF — preset-matched apps already get smart defaults from the tier system.
-static BOOL ads_ui_default_value_for_key(NSString *key) {
-    (void)key;
-    return NO;
-}
-
-static void ads_ui_write_prefs(NSDictionary *prefs) {
-    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    for (NSString *key in prefs) {
-        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)(prefs[key]), appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    }
-    CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-
-    // Fallback disk write
-    NSString *path = ads_prefs_path();
-    NSString *dir  = [path stringByDeletingLastPathComponent];
-    [[NSFileManager defaultManager] createDirectoryAtPath:dir
-                              withIntermediateDirectories:YES
-                                               attributes:nil
-                                                    error:nil];
-    [prefs writeToFile:path atomically:YES];
-}
-
-static BOOL ads_is_app_in_preset(NSString *target) {
-    NSArray *tier1 = @[
-        @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-        @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news",
-        @"com.apple.podcasts", @"com.apple.stocks",
-        @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-        @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
-    ];
-    NSArray *tier2 = @[
-        @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
-        @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
-        @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
-        @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
-        @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile",
-        @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser",
-        @"com.duckduckgo.mobile.ios", @"pinterest", @"com.tumblr.tumblr",
-        @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram",
-        @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit",
-        @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini",
-        @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-        @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-        @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
-        @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
-        @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
-        @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
-        @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
-        @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile",
-        @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile",
-        @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone",
-        @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
-        @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
-    ];
-    return [tier1 containsObject:target] || [tier2 containsObject:target];
-}
-
-@interface ADSUISettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
-@property (nonatomic, strong) UITableView             *tableView;
-@property (nonatomic, strong) NSMutableDictionary     *pendingRules;
-@property (nonatomic, strong) NSMutableDictionary     *pendingPrefs;
-@property (nonatomic, copy)   NSString                *currentBundleID;
-@property (nonatomic, strong) NSArray<NSDictionary *> *rows;
-@property (nonatomic)         BOOL                     jsLocked;
-@end
-
-@implementation ADSUISettingsViewController
-
-- (instancetype)init {
-    if (!(self = [super init])) return nil;
-    self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
-    self.rows = ads_ui_setting_rows();
-
-    NSDictionary *existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    if (!existing) {
-        CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (kl) {
-            CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (d) existing = (__bridge_transfer NSDictionary *)d;
-            CFRelease(kl);
-        }
-    }
-    self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
-
-    NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
-    NSDictionary *savedRules = self.pendingPrefs[rulesKey];
-    self.pendingRules = [savedRules isKindOfClass:[NSDictionary class]]
-        ? [savedRules mutableCopy]
-        : [NSMutableDictionary dictionary];
-
-    id savedJS = self.pendingRules[@"disableJS"];
-    self.jsLocked = savedJS ? [savedJS boolValue] : ads_ui_default_value_for_key(@"disableJS");
-    return self;
-}
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-
-    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
-    UIVisualEffectView *bgView = [[UIVisualEffectView alloc] initWithEffect:blur];
-    bgView.frame = self.view.bounds;
-    bgView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:bgView];
-    UITapGestureRecognizer *dismissTap = [[UITapGestureRecognizer alloc]
-        initWithTarget:self action:@selector(tappedBackground:)];
-    dismissTap.numberOfTouchesRequired = 1;
-    [bgView addGestureRecognizer:dismissTap];
-    UIView *shadowWrapper = [[UIView alloc] init];
-    shadowWrapper.translatesAutoresizingMaskIntoConstraints = NO;
-    shadowWrapper.backgroundColor    = [UIColor clearColor];
-    shadowWrapper.layer.cornerRadius = 18;
-    shadowWrapper.layer.shadowColor  = [UIColor blackColor].CGColor;
-    shadowWrapper.layer.shadowOpacity = 0.45;
-    shadowWrapper.layer.shadowRadius = 16;
-    shadowWrapper.layer.shadowOffset = CGSizeMake(0, 6);
-    [self.view addSubview:shadowWrapper];
-    UIView *card = [[UIView alloc] init];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor     = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
-    card.layer.cornerRadius  = 18;
-    card.layer.masksToBounds = YES;
-    [shadowWrapper addSubview:card];
-
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text          = @"AntiDarkSword";
-    titleLabel.font          = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
-    titleLabel.textColor     = [UIColor whiteColor];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    [card addSubview:titleLabel];
-
-    UILabel *subLabel = [[UILabel alloc] init];
-    subLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    subLabel.text                      = self.currentBundleID;
-    subLabel.font                      = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightRegular];
-    subLabel.textColor                 = [UIColor colorWithWhite:0.5 alpha:1];
-    subLabel.textAlignment             = NSTextAlignmentCenter;
-    subLabel.adjustsFontSizeToFitWidth = YES;
-    subLabel.minimumScaleFactor        = 0.7;
-    [card addSubview:subLabel];
-
-    UIView *masterRow = [[UIView alloc] init];
-    masterRow.translatesAutoresizingMaskIntoConstraints = NO;
-    [card addSubview:masterRow];
-
-    UIView *separator = [[UIView alloc] init];
-    separator.translatesAutoresizingMaskIntoConstraints = NO;
-    separator.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
-    [masterRow addSubview:separator];
-
-    UILabel *masterLabel = [[UILabel alloc] init];
-    masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text      = @"Enable Rule";
-    masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    masterLabel.textColor = [UIColor whiteColor];
-    [masterRow addSubview:masterLabel];
-    
-    UISwitch *masterSwitch = [[UISwitch alloc] init];
-    masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    masterSwitch.onTintColor = [UIColor systemGreenColor];
-    masterSwitch.tag         = NSIntegerMax;
-    
-    // Read the ACTUAL live protection status straight from the tweak engine
-    BOOL isMasterEnabled     = currentProcessRestricted;
-    masterSwitch.on          = isMasterEnabled;
-    masterRow.backgroundColor = isMasterEnabled
-        ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
-        : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
-        
-    // If the Global switch in Settings is OFF, disable this switch entirely
-    if (!globalTweakEnabled) {
-        masterSwitch.enabled = NO;
-        masterLabel.text = @"Rule (Globally Disabled)";
-        masterLabel.textColor = [UIColor colorWithWhite:0.6 alpha:1];
-        masterRow.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
-    }
-    
-    [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
-    [masterRow addSubview:masterSwitch];
-
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tableView.dataSource      = self;
-    self.tableView.delegate        = self;
-    self.tableView.backgroundColor = [UIColor clearColor];
-    self.tableView.separatorColor  = [UIColor colorWithWhite:0.22 alpha:1];
-    self.tableView.separatorInset  = UIEdgeInsetsMake(0, 16, 0, 0);
-    self.tableView.scrollEnabled   = YES;
-    self.tableView.bounces         = NO;
-    self.tableView.tableFooterView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 1)];
-    [card addSubview:self.tableView];
-
-    UIView *buttonBar = [[UIView alloc] init];
-    buttonBar.translatesAutoresizingMaskIntoConstraints = NO;
-    buttonBar.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1];
-    [card addSubview:buttonBar];
-    UIView *btnSep = [[UIView alloc] init];
-    btnSep.translatesAutoresizingMaskIntoConstraints = NO;
-    btnSep.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1];
-    [buttonBar addSubview:btnSep];
-    UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
-    [cancelBtn setTitleColor:[UIColor colorWithWhite:0.55 alpha:1] forState:UIControlStateNormal];
-    cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15];
-    [cancelBtn addTarget:self action:@selector(cancel) forControlEvents:UIControlEventTouchUpInside];
-    [buttonBar addSubview:cancelBtn];
-
-    UIButton *saveBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    saveBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [saveBtn setTitle:@"Save & Restart" forState:UIControlStateNormal];
-    [saveBtn setTitleColor:[UIColor systemBlueColor] forState:UIControlStateNormal];
-    saveBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    [saveBtn addTarget:self action:@selector(saveAndRestart) forControlEvents:UIControlEventTouchUpInside];
-    [buttonBar addSubview:saveBtn];
-    UIView *btnDivider = [[UIView alloc] init];
-    btnDivider.translatesAutoresizingMaskIntoConstraints = NO;
-    btnDivider.backgroundColor = [UIColor colorWithWhite:0.28 alpha:1];
-    [buttonBar addSubview:btnDivider];
-    CGFloat rowH  = 52.0;
-    CGFloat maxTH = rowH * (CGFloat)self.rows.count;
-    [NSLayoutConstraint activateConstraints:@[
-        [shadowWrapper.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [shadowWrapper.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [shadowWrapper.widthAnchor   constraintEqualToAnchor:self.view.widthAnchor multiplier:0.88],
-        [shadowWrapper.heightAnchor  constraintLessThanOrEqualToAnchor:self.view.heightAnchor multiplier:0.84],
-
-        [card.topAnchor      constraintEqualToAnchor:shadowWrapper.topAnchor],
-        [card.leadingAnchor  constraintEqualToAnchor:shadowWrapper.leadingAnchor],
-        [card.trailingAnchor constraintEqualToAnchor:shadowWrapper.trailingAnchor],
-        [card.bottomAnchor   constraintEqualToAnchor:shadowWrapper.bottomAnchor],
-
-        [titleLabel.topAnchor      constraintEqualToAnchor:card.topAnchor constant:18],
-        [titleLabel.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-
-        [subLabel.topAnchor      constraintEqualToAnchor:titleLabel.bottomAnchor constant:3],
-        [subLabel.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [subLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-
-        [masterRow.topAnchor      constraintEqualToAnchor:subLabel.bottomAnchor constant:14],
-        [masterRow.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
-        [masterRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [masterRow.heightAnchor   constraintEqualToConstant:52],
-
-        [masterLabel.leadingAnchor constraintEqualToAnchor:masterRow.leadingAnchor constant:16],
-        [masterLabel.centerYAnchor constraintEqualToAnchor:masterRow.centerYAnchor],
-
-        [masterSwitch.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor constant:-16],
-        [masterSwitch.centerYAnchor  constraintEqualToAnchor:masterRow.centerYAnchor],
-
-        [separator.leadingAnchor  constraintEqualToAnchor:masterRow.leadingAnchor],
-        [separator.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor],
-        [separator.bottomAnchor   constraintEqualToAnchor:masterRow.bottomAnchor],
-        [separator.heightAnchor   constraintEqualToConstant:0.5],
-
-        [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
-        [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 382)],
-
-        [buttonBar.topAnchor      constraintEqualToAnchor:self.tableView.bottomAnchor],
-        [buttonBar.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
-        [buttonBar.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [buttonBar.bottomAnchor   constraintEqualToAnchor:card.bottomAnchor],
-        [buttonBar.heightAnchor   constraintEqualToConstant:54],
-
-        [btnSep.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor],
-        [btnSep.leadingAnchor  constraintEqualToAnchor:buttonBar.leadingAnchor],
-        [btnSep.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
-        [btnSep.heightAnchor   constraintEqualToConstant:0.5],
-
-        [cancelBtn.leadingAnchor constraintEqualToAnchor:buttonBar.leadingAnchor],
-        [cancelBtn.topAnchor     constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
-        [cancelBtn.bottomAnchor  constraintEqualToAnchor:buttonBar.bottomAnchor],
-        [cancelBtn.widthAnchor   constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
-
-        [saveBtn.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
-        [saveBtn.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
-        [saveBtn.bottomAnchor   constraintEqualToAnchor:buttonBar.bottomAnchor],
-        [saveBtn.widthAnchor    constraintEqualToAnchor:buttonBar.widthAnchor multiplier:0.5],
-
-        [btnDivider.centerXAnchor constraintEqualToAnchor:buttonBar.centerXAnchor],
-        [btnDivider.topAnchor     constraintEqualToAnchor:buttonBar.topAnchor constant:10],
-        [btnDivider.bottomAnchor  constraintEqualToAnchor:buttonBar.bottomAnchor constant:-10],
-        [btnDivider.widthAnchor   constraintEqualToConstant:0.5],
-    ]];
-}
-
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return (NSInteger)self.rows.count;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ads_ui_cell"];
-    if (!cell)
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ads_ui_cell"];
-
-    NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
-    NSString     *key = row[@"key"];
-
-    BOOL isJITRow   = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
-    BOOL rowEnabled = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
-    
-    if (!globalTweakEnabled) rowEnabled = NO;
-
-    cell.textLabel.text           = row[@"title"];
-    cell.textLabel.font           = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    cell.detailTextLabel.text     = row[@"detail"];
-    cell.detailTextLabel.font     = [UIFont systemFontOfSize:11];
-    cell.backgroundColor          = [UIColor colorWithWhite:0.13 alpha:1];
-    cell.selectionStyle           = UITableViewCellSelectionStyleNone;
-
-    if (rowEnabled) {
-        cell.textLabel.textColor       = [UIColor whiteColor];
-        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.48 alpha:1];
-        cell.userInteractionEnabled    = YES;
-    } else {
-        cell.textLabel.textColor       = [UIColor colorWithWhite:0.35 alpha:1];
-        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.30 alpha:1];
-        cell.userInteractionEnabled    = NO;
-    }
-
-    UISwitch *sw;
-    if ([cell.accessoryView isKindOfClass:[UISwitch class]]) {
-        sw = (UISwitch *)cell.accessoryView;
-    } else {
-        sw = [[UISwitch alloc] init];
-        [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
-        cell.accessoryView = sw;
-    }
-    sw.tag         = indexPath.row;
-    sw.enabled     = rowEnabled;
-    sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
-    id saved = self.pendingRules[key];
-    sw.on = saved ? [saved boolValue] : ads_ui_default_value_for_key(key);
-
-    return cell;
-}
-
-- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 52;
-}
-
-- (void)switchChanged:(UISwitch *)sender {
-    if (sender.tag == NSIntegerMax) {
-        self.pendingPrefs[@"_intendedMasterState"] = @(sender.on);
-        [UIView animateWithDuration:0.25 animations:^{
-            sender.superview.backgroundColor = sender.on
-                ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
-                : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
-        }];
-        return;
-    }
-
-    NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
-    self.pendingRules[key] = @(sender.on);
-    if ([key isEqualToString:@"disableJS"]) {
-        self.jsLocked = sender.on;
-        NSInteger jitIdx = -1;
-        for (NSUInteger i = 0; i < self.rows.count; i++) {
-            NSString *k = self.rows[i][@"key"];
-            if ([k isEqualToString:@"disableJIT"] || [k isEqualToString:@"disableJIT15"]) {
-                jitIdx = (NSInteger)i;
-                break;
-            }
-        }
-        if (jitIdx >= 0) {
-            NSString *jitKey = self.rows[(NSUInteger)jitIdx][@"key"];
-            self.pendingRules[jitKey] = @(sender.on);
-            [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:jitIdx inSection:0]]
-                                  withRowAnimation:UITableViewRowAnimationNone];
-        }
-    }
-}
-
-- (void)tappedBackground:(UITapGestureRecognizer *)tap {
-    [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-- (void)cancel {
-    [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-- (void)saveAndRestart {
-    NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
-    self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-    
-    // Apply changes to the master Enable Rule switch if the user toggled it
-    id intendedState = self.pendingPrefs[@"_intendedMasterState"];
-    if (intendedState) {
-        BOOL enable = [intendedState boolValue];
-        
-        if (ads_is_app_in_preset(self.currentBundleID)) {
-            id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
-            NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
-                                        ? [existingDisabled mutableCopy] 
-                                        : [NSMutableArray array];
-            if (enable) [disabled removeObject:self.currentBundleID];
-            else if (![disabled containsObject:self.currentBundleID]) [disabled addObject:self.currentBundleID];
-            
-            self.pendingPrefs[@"disabledPresetRules"] = disabled;
-        } else {
-            NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-            self.pendingPrefs[restrictKey] = @(enable);
-            
-            id legacyAppsRaw = self.pendingPrefs[@"restrictedApps"];
-            if ([legacyAppsRaw isKindOfClass:[NSDictionary class]]) {
-                NSMutableDictionary *legacyApps = [legacyAppsRaw mutableCopy];
-                if (legacyApps[self.currentBundleID]) {
-                    [legacyApps removeObjectForKey:self.currentBundleID];
-                    self.pendingPrefs[@"restrictedApps"] = legacyApps;
-                }
-            }
-        }
-        
-        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
-    }
-
-    ads_ui_write_prefs(self.pendingPrefs);
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
-                                         NULL, NULL, YES);
-    UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:@"Settings Saved"
-        message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
-        preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction *a) { exit(0);
-    }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Later"
-                                              style:UIAlertActionStyleCancel
-                                            handler:^(UIAlertAction *a) {
-        [self dismissViewControllerAnimated:YES completion:nil];
-    }]];
-
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-@end
-
-// Persistent singleton target — UITapGestureRecognizer holds a weak reference,
-// so the target must outlive the gesture recognizer.
-@interface ADSUIGestureHandler : NSObject
-+ (instancetype)shared;
-- (void)handleTap:(UITapGestureRecognizer *)sender;
-@end
-
-@implementation ADSUIGestureHandler
-+ (instancetype)shared {
-    static ADSUIGestureHandler *instance;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{ instance = [[self alloc] init]; });
-    return instance;
-}
-- (void)handleTap:(UITapGestureRecognizer *)sender {
-    if (sender.state != UIGestureRecognizerStateEnded) return;
-    UIWindow *win = ads_ui_key_window();
-    UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
-    if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
-    ADSUISettingsViewController *vc = [[ADSUISettingsViewController alloc] init];
-    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
-    [top presentViewController:vc animated:YES completion:nil];
-}
-@end
-
-static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win || ads_ui_gesture_installed) return;
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
-        initWithTarget:[ADSUIGestureHandler shared]
-                action:@selector(handleTap:)];
-    tap.numberOfTapsRequired    = 2;
-    tap.numberOfTouchesRequired = 3;
-    tap.cancelsTouchesInView    = NO;
-    [win addGestureRecognizer:tap];
-    ads_ui_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
-}
-
-%hook UIWindow
-- (void)makeKeyAndVisible {
-    %orig;
-    ads_ui_install_gesture(self);
-}
-%end
-
 %ctor {
     // Set rootless flag first — ads_prefs_path() and loadPrefs() both depend on it.
     isRootlessJB = (access("/var/jb", F_OK) == 0);
@@ -1332,6 +778,7 @@ static void ads_ui_install_gesture(UIWindow *win) {
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
     // Globally ignore all App Extensions to prevent sandbox read errors
     if ([path hasSuffix:@".appex"]) return;
+    
     // 1. Path-based whitelist
     BOOL isUserApp      = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
@@ -1377,8 +824,10 @@ static void ads_ui_install_gesture(UIWindow *win) {
     }
 
     if (!isUserApp && !isSystemOrJBApp && !isAllowedService && !isManualOverride) return;
+    
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
+    
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
         (CFNotificationCallback)reloadPrefsNotification,
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
