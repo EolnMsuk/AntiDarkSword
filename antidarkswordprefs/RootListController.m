@@ -941,8 +941,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
 
         NSUInteger insertIndexAuto = [specs indexOfObjectPassingTest:^BOOL(PSSpecifier *obj, NSUInteger idx, BOOL *stop) { return [[obj propertyForKey:@"id"] isEqualToString:@"AutoProtectLevelSegment"]; }];
         
-        if (systemOptionsIndex != NSNotFound) insertIndexAuto = systemOptionsIndex;
-        
         if (insertIndexAuto != NSNotFound) {
             insertIndexAuto++;
             PSSpecifier *groupSpec = [PSSpecifier preferenceSpecifierNamed:@"Current Preset Rules" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
