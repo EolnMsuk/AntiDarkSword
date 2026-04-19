@@ -251,7 +251,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         }
 
         PSSpecifier *globalGroup = [PSSpecifier preferenceSpecifierNamed:@"Global Mitigation Rules (BETA)" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [globalGroup setProperty:@"Enable specific mitigations system-wide. Requires Level 3." forKey:@"footerText"];
+        [globalGroup setProperty:@"⚠︎ Global rules can break almost anything, for advanced users only." forKey:@"footerText"];
         [specs addObject:globalGroup];
 
         NSArray *globals = @[
