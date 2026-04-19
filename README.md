@@ -21,7 +21,7 @@ A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices 
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
 2. Download `AntiDarkSword.dylib` from the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
 3. Open TrollFools → select an app → inject the `.dylib`.
-4. Enable **Mitigation Shortcut** in **Settings → AntiDarkSword**, then **three-finger double-tap** inside the app to open the settings overlay.
+4. Use the **Mitigation Shortcut** - **three-finger double-tap** inside the app to open the settings overlay.
 
 ## 📱 Compatibility
 
