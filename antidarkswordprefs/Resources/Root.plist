@@ -8,7 +8,7 @@
             <key>cell</key>
             <string>PSGroupCell</string>
             <key>label</key>
-            <string>Global Settings</string>
+            <string>Global Setting</string>
             <key>footerText</key>
             <string>You must also enable a preset level or custom rules below to protect your device.</string>
         </dict>
@@ -143,7 +143,7 @@
             <key>id</key>
             <string>AppPermissionsGroup</string>
             <key>label</key>
-            <string>Manual Rules</string>
+            <string>Custom Rules</string>
             <key>footerText</key>
             <string>Manually protect apps that are not in the current Level preset.</string>
         </dict>
@@ -189,7 +189,7 @@
             <key>id</key>
             <string>AdvancedRestrictionsGroup</string>
             <key>label</key>
-            <string>Advanced Custom Rules</string>
+            <string>Advanced Rules</string>
             <key>footerText</key>
             <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
         </dict>
