@@ -1,5 +1,5 @@
 Package: com.eolnmsuk.antidarksword
-Name: AntiDarkSword 🛡️
+Name: AntiDarkSword ⛉
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 4.5.2
 Architecture: iphoneos-arm
