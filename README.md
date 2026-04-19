@@ -1,5 +1,4 @@
-# AntiDarkSword ⚔️
-
+# AntiDarkSword ⛉
 A jailbreak tweak and TrollFools dylib that hardens iOS 13.X - iOS 17.0 devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self-abort.
 
 ---
