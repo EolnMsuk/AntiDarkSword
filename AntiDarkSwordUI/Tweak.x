@@ -6,6 +6,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -63,7 +64,6 @@ static NSString *ads_prefs_path(void) {
 static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static _Atomic BOOL currentProcessIsPreset   = NO;
-static _Atomic BOOL mitigationShortcutEnabled = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
@@ -360,8 +360,6 @@ static void loadPrefs() {
         globalDisableFileAccess   = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]    ? [prefs[@"globalDisableFileAccess"] boolValue]    : NO;
         globalDisableIMessageDL   = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]   ? [prefs[@"globalDisableIMessageDL"] boolValue]    : NO;
         autoProtectLevel          = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]        ? [prefs[@"autoProtectLevel"] integerValue]        : 1;
-        mitigationShortcutEnabled = [prefs[@"mitigationShortcutEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"mitigationShortcutEnabled"] boolValue]  : NO;
-
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
@@ -783,7 +781,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // restricted so rules are picked up on next app launch.
 // =========================================================
 
-static BOOL ads_ui_gesture_installed = NO;
+static const char kADSGestureInstalledKey = 0;
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
@@ -1317,7 +1315,20 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    if (!globalTweakEnabled || !mitigationShortcutEnabled) return;
+
+    // Live CFPreferences read — avoids stale in-process state across all apps.
+    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
+    CFPropertyListRef rawEnabled = CFPreferencesCopyValue(CFSTR("enabled"),
+        appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    CFPropertyListRef rawShortcut = CFPreferencesCopyValue(CFSTR("mitigationShortcutEnabled"),
+        appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    BOOL liveEnabled  = rawEnabled  ? CFBooleanGetValue((CFBooleanRef)rawEnabled)  : NO;
+    BOOL liveShortcut = rawShortcut ? CFBooleanGetValue((CFBooleanRef)rawShortcut) : NO;
+    if (rawEnabled)  CFRelease(rawEnabled);
+    if (rawShortcut) CFRelease(rawShortcut);
+
+    if (!liveEnabled || !liveShortcut) return;
+
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1330,7 +1341,8 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win || ads_ui_gesture_installed) return;
+    if (!win) return;
+    if (objc_getAssociatedObject(win, &kADSGestureInstalledKey)) return;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
@@ -1338,8 +1350,8 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
-    ads_ui_gesture_installed = YES;
-    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
+    objc_setAssociatedObject(win, &kADSGestureInstalledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ADSLog(@"[INIT] AntiDarkSword gesture installed on window: %@", [win class]);
 }
 
 %hook UIWindow
