@@ -1,6 +1,6 @@
 {
     "minVersion": "0.1",
-    "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/header.png",
+    "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
     "tintColor": "#2CB1BE",
     "class": "DepictionTabView",
     "tabs": [

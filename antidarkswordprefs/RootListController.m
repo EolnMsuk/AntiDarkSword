@@ -1165,7 +1165,7 @@ static NSDictionary *ads_daemon_alias_map(void) {
                 
                 NSString *jbType = @"Rootless";
                 if (access("/Library/MobileSubstrate/DynamicLibraries", F_OK) == 0) jbType = @"Rootful";
-				if (dlsym(RTLD_DEFAULT, "jbroot")) jbType = @"Roothide";
+                if (dlsym(RTLD_DEFAULT, "jbroot")) jbType = @"Roothide";
                 
                 NSString *footerString = [NSString stringWithFormat:@"AntiDarkSword v%@ (iOS %@ %@)", version, osVersion, jbType];
                 [s setProperty:footerString forKey:@"footerText"];
@@ -1272,17 +1272,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
                 resetBtn->action = @selector(resetProbeCounter);
                 [specs insertObject:resetBtn atIndex:infoIdx++];
             }
-
-            PSSpecifier *shortcutGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-            [shortcutGroup setProperty:@"Three-finger double-tap to access the in-app protection overlay. Only activates when Enable Protection is also on." forKey:@"footerText"];
-            [specs insertObject:shortcutGroup atIndex:infoIdx++];
-
-            PSSpecifier *shortcutToggle = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Shortcut"
-                target:self
-                set:@selector(setMitigationShortcut:specifier:)
-                get:@selector(getMitigationShortcut:)
-                detail:nil cell:PSSwitchCell edit:nil];
-            [specs insertObject:shortcutToggle atIndex:infoIdx++];
         }
 
         _specifiers = [specs copy];
@@ -1631,23 +1620,15 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
             waitpid(pid, NULL, 0);
 
-        // Clear via CFPreferences API (same path the in-app overlay uses to write),
-        // then also via NSUserDefaults for belt-and-suspenders coverage.
-        CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-        CFArrayRef cfKeyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (cfKeyList) {
-            CFPreferencesSetMultiple(NULL, cfKeyList, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            CFRelease(cfKeyList);
-        }
-
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
-
-        // Delete the physical plist to clear the overlay's fallback write path
+        
+        // Explicitly delete the physical file to catch the UI overlay's fallback writes
         NSString *plistPathOnDisk = ads_root_path(@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
-        [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:plistPathOnDisk]) {
+            [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
+        }
 
         ads_post_notification();
 
@@ -1663,7 +1644,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
     
     NSString *title = @"Save";
-    NSString *msg = needsReboot ? @"Apply with userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
+    NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?";
     NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
@@ -1699,24 +1680,11 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     NSUserDefaults *defaults = ads_defaults();
     [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
     [defaults synchronize];
-    [self flagSaveRequirement];
     ads_post_notification();
     dispatch_async(dispatch_get_main_queue(), ^{
         self->_specifiers = nil;
         [self reloadSpecifiers];
     });
-}
-
-- (id)getMitigationShortcut:(PSSpecifier *)spec {
-    return @([ads_defaults() boolForKey:@"mitigationShortcutEnabled"]);
-}
-
-- (void)setMitigationShortcut:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults();
-    [defaults setBool:[value boolValue] forKey:@"mitigationShortcutEnabled"];
-    [defaults synchronize];
-    [self flagSaveRequirement];
-    ads_post_notification();
 }
 
 - (void)resetProbeCounter {

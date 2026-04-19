@@ -22,7 +22,6 @@ static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
 // Relies on isRootlessJB being set in %ctor before first use.
-// RootHide: the Patcher patches the /var/jb/ string literal in the compiled binary.
 static NSString *ads_prefs_path(void) {
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
@@ -71,23 +70,19 @@ static void loadPrefs() {
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
-
-    // CFPreferences first — same rationale as AntiDarkSwordUI/loadPrefs().
-    // cfprefsd survives a respring and holds the authoritative live state; the
-    // physical plist can be stale if cfprefsd hasn't flushed recent writes to disk.
-    CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    if (keyList) {
-        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-        CFRelease(keyList);
+    NSString *prefsFilePath = ads_prefs_path();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
     }
 
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        NSString *prefsFilePath = ads_prefs_path();
-        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
-            prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keyList) {
+            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+            CFRelease(keyList);
         }
     }
 

@@ -6,7 +6,6 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
-#include <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -51,7 +50,6 @@ static BOOL isRootlessJB = NO;
 
 // Returns the correct prefs path for the active jailbreak type.
 // Relies on isRootlessJB being set in %ctor before first use.
-// RootHide: the Patcher patches the /var/jb/ string literal in the compiled binary.
 static NSString *ads_prefs_path(void) {
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
@@ -317,28 +315,19 @@ static void loadPrefs() {
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
-
-    // CFPreferences is always authoritative: cfprefsd survives a respring and holds
-    // the latest writes from the Settings bundle regardless of whether the physical
-    // plist has been flushed to disk yet. Reading the plist first can return a stale
-    // file that lacks keys written after the plist was last flushed (e.g. `enabled`
-    // set by PSListController right before a respring), which silently prevents the
-    // CFPreferences fallback from being tried because the file IS a valid dictionary.
-    CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    if (keyList) {
-        CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                         kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-        CFRelease(keyList);
+    NSString *prefsFilePath = ads_prefs_path();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
+        prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
     }
 
-    // Physical plist fallback — used only when cfprefsd has no data for this domain
-    // (e.g. a genuinely fresh install where no preferences have been written at all).
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
-        NSString *prefsFilePath = ads_prefs_path();
-        if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
-            prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keyList) {
+            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
+            CFRelease(keyList);
         }
     }
 
@@ -360,6 +349,7 @@ static void loadPrefs() {
         globalDisableFileAccess   = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]    ? [prefs[@"globalDisableFileAccess"] boolValue]    : NO;
         globalDisableIMessageDL   = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]   ? [prefs[@"globalDisableIMessageDL"] boolValue]    : NO;
         autoProtectLevel          = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]        ? [prefs[@"autoProtectLevel"] integerValue]        : 1;
+
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
 
@@ -781,7 +771,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 // restricted so rules are picked up on next app launch.
 // =========================================================
 
-static const char kADSGestureInstalledKey = 0;
+static BOOL ads_ui_gesture_installed = NO;
 
 static UIWindow *ads_ui_key_window(void) {
     if (@available(iOS 13, *)) {
@@ -866,35 +856,21 @@ static BOOL ads_ui_default_value_for_key(NSString *key) {
     return NO;
 }
 
-// Writes only the keys in `updatesOnly` to cfprefsd — never the full prefs dict.
-// Passing only the overlay-managed keys prevents stale snapshots of global settings
-// (enabled, autoProtectLevel, etc.) from being silently written back.
-static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
+static void ads_ui_write_prefs(NSDictionary *prefs) {
     CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    for (NSString *key in updatesOnly) {
-        CFPreferencesSetValue((__bridge CFStringRef)key,
-                              (__bridge CFPropertyListRef)(updatesOnly[key]),
-                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    for (NSString *key in prefs) {
+        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)(prefs[key]), appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     }
     CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 
-    // Fallback disk write — use the FULL merged state from cfprefsd so the plist
-    // remains a complete snapshot, not just a partial overlay-key subset.
+    // Fallback disk write
     NSString *path = ads_prefs_path();
     NSString *dir  = [path stringByDeletingLastPathComponent];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
-    CFArrayRef kl = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    NSDictionary *fullPrefs = nil;
-    if (kl) {
-        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, appID,
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (d) fullPrefs = (__bridge_transfer NSDictionary *)d;
-        CFRelease(kl);
-    }
-    [(fullPrefs ?: updatesOnly) writeToFile:path atomically:YES];
+    [prefs writeToFile:path atomically:YES];
 }
 
 @interface ADSUISettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
@@ -914,20 +890,17 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
     self.currentBundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"unknown";
     self.rows = ads_ui_setting_rows();
 
-    // CFPreferences first so the overlay initializes from live cfprefsd state, not a
-    // potentially-stale plist that may be missing keys (e.g. `enabled`) written after
-    // the last plist flush. A stale init causes saveAndRestart to write back an
-    // incomplete dict that wipes those keys from cfprefsd.
-    NSDictionary *existing = nil;
-    CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    if (kl) {
-        CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (d) existing = (__bridge_transfer NSDictionary *)d;
-        CFRelease(kl);
+    NSDictionary *existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (!existing) {
+        CFArrayRef kl = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                 kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (kl) {
+            CFDictionaryRef d = CFPreferencesCopyMultiple(kl, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                          kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (d) existing = (__bridge_transfer NSDictionary *)d;
+            CFRelease(kl);
+        }
     }
-    if (!existing) existing = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     self.pendingPrefs = existing ? [existing mutableCopy] : [NSMutableDictionary dictionary];
 
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
@@ -1001,7 +974,7 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 
     UILabel *masterLabel = [[UILabel alloc] init];
     masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text      = @"Enable Rule";
+    masterLabel.text      = @"Enable Protection";
     masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
@@ -1010,15 +983,23 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
-
+    
     // Read the ACTUAL live protection status straight from the tweak engine
     BOOL isMasterEnabled     = currentProcessRestricted;
     masterSwitch.on          = isMasterEnabled;
-
+    
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
-
+        
+    // If the Global switch in Settings is OFF, disable this switch entirely
+    if (!globalTweakEnabled) {
+        masterSwitch.enabled = NO;
+        masterLabel.text = @"Protection (Globally Disabled)";
+        masterLabel.textColor = [UIColor colorWithWhite:0.6 alpha:1];
+        masterRow.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
+    }
+    
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
 
@@ -1234,47 +1215,41 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 }
 
 - (void)saveAndRestart {
-    // Build a minimal dict of ONLY the keys this overlay is allowed to change.
-    // Never write the full pendingPrefs — it contains a snapshot of global settings
-    // (enabled, autoProtectLevel, globalDisableJS, etc.) that could silently overwrite
-    // changes the user made in Settings.app while this app was already running.
-    NSMutableDictionary *updates = [NSMutableDictionary dictionary];
-
-    // Per-app feature rules for the current bundle ID
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
-    updates[rulesKey] = [self.pendingRules copy];
-
-    // Handle "Enable Rule" toggle if the user changed it
+    self.pendingPrefs[rulesKey] = [self.pendingRules copy];
+    
+    // Apply changes to the master Enable Protection switch if the user toggled it
     id intendedState = self.pendingPrefs[@"_intendedMasterState"];
     if (intendedState) {
         BOOL enable = [intendedState boolValue];
-
-        // Read disabledPresetRules fresh from cfprefsd so we don't overwrite
-        // concurrent Settings.app changes to that array.
-        id freshDisabledRaw = (__bridge_transfer id)CFPreferencesCopyValue(
-            CFSTR("disabledPresetRules"), CFSTR("com.eolnmsuk.antidarkswordprefs"),
-            kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        NSMutableArray *disabled = [freshDisabledRaw isKindOfClass:[NSArray class]]
-            ? [freshDisabledRaw mutableCopy] : [NSMutableArray array];
-
+        
+        // 1. Update preset rules array (unrestricts preset apps if disabled)
+        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
+        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
+                                    ? [existingDisabled mutableCopy] 
+                                    : [NSMutableArray array];
         if (enable) {
             [disabled removeObject:self.currentBundleID];
         } else {
-            if (![disabled containsObject:self.currentBundleID]) [disabled addObject:self.currentBundleID];
+            if (![disabled containsObject:self.currentBundleID]) {
+                [disabled addObject:self.currentBundleID];
+            }
         }
-        updates[@"disabledPresetRules"] = disabled;
-
-        // Non-preset apps: write the restrictedApps- key so the app gets into the
-        // restricted list. Preset apps are controlled exclusively via disabledPresetRules;
-        // writing restrictedApps-<bundleID> for a preset app would cause loadPrefs() to
-        // treat it as a manually-added app (isPresetMatch = NO), bypassing smart defaults.
+        self.pendingPrefs[@"disabledPresetRules"] = disabled;
+        
+        // 2. Update custom apps key only for non-preset apps.
+        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
+        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
+        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
         if (!currentProcessIsPreset) {
             NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
-            updates[restrictKey] = @(enable);
+            self.pendingPrefs[restrictKey] = @(enable);
         }
+        
+        [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
     }
 
-    ads_ui_write_prefs(updates);
+    ads_ui_write_prefs(self.pendingPrefs);
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);
@@ -1315,20 +1290,6 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-
-    // Live CFPreferences read — avoids stale in-process state across all apps.
-    CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-    CFPropertyListRef rawEnabled = CFPreferencesCopyValue(CFSTR("enabled"),
-        appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    CFPropertyListRef rawShortcut = CFPreferencesCopyValue(CFSTR("mitigationShortcutEnabled"),
-        appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    BOOL liveEnabled  = rawEnabled  ? CFBooleanGetValue((CFBooleanRef)rawEnabled)  : NO;
-    BOOL liveShortcut = rawShortcut ? CFBooleanGetValue((CFBooleanRef)rawShortcut) : NO;
-    if (rawEnabled)  CFRelease(rawEnabled);
-    if (rawShortcut) CFRelease(rawShortcut);
-
-    if (!liveEnabled || !liveShortcut) return;
-
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1341,8 +1302,7 @@ static void ads_ui_write_prefs(NSDictionary *updatesOnly) {
 @end
 
 static void ads_ui_install_gesture(UIWindow *win) {
-    if (!win) return;
-    if (objc_getAssociatedObject(win, &kADSGestureInstalledKey)) return;
+    if (!win || ads_ui_gesture_installed) return;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
         initWithTarget:[ADSUIGestureHandler shared]
                 action:@selector(handleTap:)];
@@ -1350,8 +1310,8 @@ static void ads_ui_install_gesture(UIWindow *win) {
     tap.numberOfTouchesRequired = 3;
     tap.cancelsTouchesInView    = NO;
     [win addGestureRecognizer:tap];
-    objc_setAssociatedObject(win, &kADSGestureInstalledKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    ADSLog(@"[INIT] AntiDarkSword gesture installed on window: %@", [win class]);
+    ads_ui_gesture_installed = YES;
+    ADSLog(@"[INIT] AntiDarkSword three-finger double-tap gesture installed.");
 }
 
 %hook UIWindow
@@ -1390,11 +1350,12 @@ static void ads_ui_install_gesture(UIWindow *win) {
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
-    // 3. Manual override check — CFPreferences first (authoritative live state),
-    //    plist fallback for the edge case where cfprefsd has no data for the domain.
+    // 3. Manual override check — try the on-disk plist first, then fall back to
+    //    CFPreferences so that Roothide installs and fresh installs where the plist
+    //    has not been flushed to disk yet are handled correctly.
     BOOL isManualOverride = NO;
-    NSDictionary *prefs = nil;
-    {
+    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (!prefs) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
                                                       kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
@@ -1403,7 +1364,6 @@ static void ads_ui_install_gesture(UIWindow *win) {
             if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
             CFRelease(keyList);
         }
-        if (!prefs) prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     }
     if (prefs) {
         NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
