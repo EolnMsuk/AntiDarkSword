@@ -1701,7 +1701,9 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
 }
 
 - (id)getMitigationShortcut:(PSSpecifier *)spec {
-    return @([ads_defaults() boolForKey:@"mitigationShortcutEnabled"]);
+    NSUserDefaults *defaults = ads_defaults();
+    if ([defaults objectForKey:@"mitigationShortcutEnabled"] == nil) return @YES;
+    return @([defaults boolForKey:@"mitigationShortcutEnabled"]);
 }
 
 - (void)setMitigationShortcut:(id)value specifier:(PSSpecifier *)spec {

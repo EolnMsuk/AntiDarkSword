@@ -371,7 +371,7 @@ static void loadPrefs() {
         globalDisableRTC          = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)]           ? [prefs[@"globalDisableRTC"] boolValue]           : NO;
         globalDisableFileAccess   = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]    ? [prefs[@"globalDisableFileAccess"] boolValue]    : NO;
         globalDisableIMessageDL         = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]       ? [prefs[@"globalDisableIMessageDL"] boolValue]        : NO;
-        globalMitigationShortcutEnabled = [prefs[@"mitigationShortcutEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"mitigationShortcutEnabled"] boolValue]      : NO;
+        globalMitigationShortcutEnabled = [prefs[@"mitigationShortcutEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"mitigationShortcutEnabled"] boolValue]      : YES;
         autoProtectLevel                = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]        ? [prefs[@"autoProtectLevel"] integerValue]             : 1;
 
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
