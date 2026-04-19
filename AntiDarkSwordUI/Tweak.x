@@ -88,6 +88,7 @@ static BOOL disableMedia           = NO;
 static BOOL disableRTC             = NO;
 static BOOL disableFileAccess      = NO;
 static BOOL disableIMessageDL      = NO;
+static BOOL currentProcessSpoofUARule = NO;
 
 // Final Evaluated States
 static _Atomic BOOL applyDisableJIT        = NO;
@@ -458,7 +459,7 @@ static void loadPrefs() {
     disableMedia      = NO;
     disableRTC        = NO;
     disableIMessageDL = NO;
-    BOOL spoofUARule  = NO;
+    currentProcessSpoofUARule = NO;
     disableJIT        = NO;
     disableJIT15      = NO;
     disableJS         = NO;
@@ -499,20 +500,20 @@ static void loadPrefs() {
             disableRTC        = YES;
             disableFileAccess = YES;
             if ([iMessageUIApps containsObject:matchedID]) disableIMessageDL = YES;
-            if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
+            if (![matchedID hasPrefix:@"com.apple."]) currentProcessSpoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
             if ([matchedID isEqualToString:@"com.apple.mobilesafari"] ||
                 [matchedID isEqualToString:@"com.apple.SafariViewService"]) {
-                spoofUARule = YES;
+                currentProcessSpoofUARule = YES;
             } else {
-                spoofUARule = (autoProtectLevel >= 2);
+                currentProcessSpoofUARule = (autoProtectLevel >= 2);
             }
             if (autoProtectLevel >= 3) {
                 disableRTC   = YES;
                 disableMedia = YES;
             }
         } else if (![matchedID containsString:@"daemon"] && ![matchedID hasPrefix:@"com.apple."]) {
-            spoofUARule = (autoProtectLevel >= 2);
+            currentProcessSpoofUARule = (autoProtectLevel >= 2);
         }
     }
 
@@ -528,7 +529,7 @@ static void loadPrefs() {
             if ([appRules[@"disableRTC"] respondsToSelector:@selector(boolValue)])         disableRTC         = [appRules[@"disableRTC"] boolValue];
             if ([appRules[@"disableFileAccess"] respondsToSelector:@selector(boolValue)]) disableFileAccess  = [appRules[@"disableFileAccess"] boolValue];
             if ([appRules[@"disableIMessageDL"] respondsToSelector:@selector(boolValue)]) disableIMessageDL  = [appRules[@"disableIMessageDL"] boolValue];
-            if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)])            spoofUARule        = [appRules[@"spoofUA"] boolValue];
+            if ([appRules[@"spoofUA"] respondsToSelector:@selector(boolValue)])            currentProcessSpoofUARule = [appRules[@"spoofUA"] boolValue];
         }
     }
 
@@ -544,7 +545,7 @@ static void loadPrefs() {
     if (globalTweakEnabled) {
         if (globalUASpoofingEnabled && customUAString && customUAString.length > 0) {
             shouldSpoofUA = YES;
-        } else if (currentProcessRestricted && spoofUARule && customUAString && customUAString.length > 0) {
+        } else if (currentProcessRestricted && currentProcessSpoofUARule && customUAString && customUAString.length > 0) {
             shouldSpoofUA = YES;
         }
     }
@@ -854,9 +855,17 @@ static NSArray<NSDictionary *> *ads_ui_setting_rows(void) {
     return rows;
 }
 
-// All defaults OFF — preset-matched apps already get smart defaults from the tier system.
-static BOOL ads_ui_default_value_for_key(NSString *key) {
-    (void)key;
+// Retrieves the active evaluated rule if a user hasn't explicitly set it
+// ensuring the UI reflects smart defaults accurately.
+static BOOL ads_ui_get_active_rule(NSString *key) {
+    if ([key isEqualToString:@"disableJIT"]) return disableJIT;
+    if ([key isEqualToString:@"disableJIT15"]) return disableJIT15;
+    if ([key isEqualToString:@"disableJS"]) return disableJS;
+    if ([key isEqualToString:@"disableMedia"]) return disableMedia;
+    if ([key isEqualToString:@"disableRTC"]) return disableRTC;
+    if ([key isEqualToString:@"disableFileAccess"]) return disableFileAccess;
+    if ([key isEqualToString:@"disableIMessageDL"]) return disableIMessageDL;
+    if ([key isEqualToString:@"spoofUA"]) return currentProcessSpoofUARule;
     return NO;
 }
 
@@ -884,7 +893,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 @property (nonatomic, strong) NSMutableDictionary     *pendingPrefs;
 @property (nonatomic, copy)   NSString                *currentBundleID;
 @property (nonatomic, strong) NSArray<NSDictionary *> *rows;
-@property (nonatomic)         BOOL                     jsLocked;
+@property (nonatomic, assign) BOOL                     jsLocked;
+@property (nonatomic, assign) BOOL                     masterRuleEnabled;
 @end
 
 @implementation ADSUISettingsViewController
@@ -925,7 +935,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         : [NSMutableDictionary dictionary];
 
     id savedJS = self.pendingRules[@"disableJS"];
-    self.jsLocked = savedJS ? [savedJS boolValue] : ads_ui_default_value_for_key(@"disableJS");
+    self.jsLocked = savedJS ? [savedJS boolValue] : ads_ui_get_active_rule(@"disableJS");
+    self.masterRuleEnabled = currentProcessRestricted;
 
     return self;
 }
@@ -999,12 +1010,9 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
+    masterSwitch.on          = self.masterRuleEnabled;
 
-    // Read the ACTUAL live protection status straight from the tweak engine
-    BOOL isMasterEnabled     = currentProcessRestricted;
-    masterSwitch.on          = isMasterEnabled;
-
-    masterRow.backgroundColor = isMasterEnabled
+    masterRow.backgroundColor = self.masterRuleEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
 
@@ -1147,8 +1155,18 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
     NSString     *key = row[@"key"];
 
+    BOOL isGlobalOverride = NO;
+    if ([key isEqualToString:@"disableJIT"]) isGlobalOverride = globalDisableJIT;
+    if ([key isEqualToString:@"disableJIT15"]) isGlobalOverride = globalDisableJIT15;
+    if ([key isEqualToString:@"disableJS"]) isGlobalOverride = globalDisableJS;
+    if ([key isEqualToString:@"disableMedia"]) isGlobalOverride = globalDisableMedia;
+    if ([key isEqualToString:@"disableRTC"]) isGlobalOverride = globalDisableRTC;
+    if ([key isEqualToString:@"disableFileAccess"]) isGlobalOverride = globalDisableFileAccess;
+    if ([key isEqualToString:@"disableIMessageDL"]) isGlobalOverride = globalDisableIMessageDL;
+    if ([key isEqualToString:@"spoofUA"]) isGlobalOverride = globalUASpoofingEnabled;
+
     BOOL isJITRow   = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
-    BOOL rowEnabled = globalTweakEnabled && [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
+    BOOL rowEnabled = globalTweakEnabled && self.masterRuleEnabled && [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked) && !isGlobalOverride;
 
     cell.textLabel.text           = row[@"title"];
     cell.textLabel.font           = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -1180,7 +1198,8 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
 
     id saved = self.pendingRules[key];
-    sw.on = saved ? [saved boolValue] : ads_ui_default_value_for_key(key);
+    BOOL isOn = isGlobalOverride ? YES : (saved ? [saved boolValue] : ads_ui_get_active_rule(key));
+    sw.on = isOn;
 
     return cell;
 }
@@ -1192,11 +1211,14 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 - (void)switchChanged:(UISwitch *)sender {
     if (sender.tag == NSIntegerMax) {
         self.pendingPrefs[@"_intendedMasterState"] = @(sender.on);
+        self.masterRuleEnabled = sender.on;
+        
         [UIView animateWithDuration:0.25 animations:^{
             sender.superview.backgroundColor = sender.on
                 ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
                 : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
         }];
+        [self.tableView reloadData];
         return;
     }
 
@@ -1231,48 +1253,46 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 
 - (void)saveAndRestart {
+    // 1. Sync the granular feature rules back to TargetRules_
     NSString *rulesKey = [NSString stringWithFormat:@"TargetRules_%@", self.currentBundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
     
-    // Apply changes to the master Enable Rule switch if the user toggled it
+    // 2. Sync the Master Enable Rule toggle correctly to match Settings App arrays
     id intendedState = self.pendingPrefs[@"_intendedMasterState"];
     if (intendedState) {
         BOOL enable = [intendedState boolValue];
 
-        // 1. Update preset rules array (unrestricts preset apps if disabled)
-        id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
-        NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
-                                    ? [existingDisabled mutableCopy] 
-                                    : [NSMutableArray array];
-        
-        if (enable) {
-            [disabled removeObject:self.currentBundleID];
-        } else {
-            if (![disabled containsObject:self.currentBundleID]) {
-                [disabled addObject:self.currentBundleID];
+        if (currentProcessIsPreset) {
+            // It's a known preset app matching the current level -> handle disabledPresetRules array
+            id existingDisabled = self.pendingPrefs[@"disabledPresetRules"];
+            NSMutableArray *disabled = [existingDisabled isKindOfClass:[NSArray class]] 
+                                        ? [existingDisabled mutableCopy] 
+                                        : [NSMutableArray array];
+            
+            if (enable) {
+                [disabled removeObject:self.currentBundleID];
+            } else {
+                if (![disabled containsObject:self.currentBundleID]) {
+                    [disabled addObject:self.currentBundleID];
+                }
             }
-        }
-        self.pendingPrefs[@"disabledPresetRules"] = disabled;
-
-        // 2. Update custom apps key only for non-preset apps.
-        // Preset apps (tier1/tier2) are controlled exclusively via disabledPresetRules above.
-        // Writing restrictedApps-<bundleID> for a preset app causes loadPrefs() to match it
-        // as a manually-added app (isPresetMatch = NO), bypassing the smart-defaults block.
-        if (!currentProcessIsPreset) {
+            self.pendingPrefs[@"disabledPresetRules"] = disabled;
+        } else {
+            // It's a manually selected app (or unselected app) -> handle restrictedApps-<bundleID> key
             NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
             self.pendingPrefs[restrictKey] = @(enable);
             
-            // Mirror RootListController's behavior: Clean up legacy dictionary key to avoid conflicts
+            // Mirror RootListController's cleanup: Also write it to the legacy/AltList restrictedApps dict
             id existingDictRaw = self.pendingPrefs[@"restrictedApps"];
-            if ([existingDictRaw isKindOfClass:[NSDictionary class]]) {
-                NSMutableDictionary *appsDict = [existingDictRaw mutableCopy];
-                if (enable) {
-                    appsDict[self.currentBundleID] = @YES;
-                } else if (appsDict[self.currentBundleID]) {
-                    [appsDict removeObjectForKey:self.currentBundleID];
-                }
-                self.pendingPrefs[@"restrictedApps"] = appsDict;
+            NSMutableDictionary *appsDict = [existingDictRaw isKindOfClass:[NSDictionary class]] 
+                                            ? [existingDictRaw mutableCopy] 
+                                            : [NSMutableDictionary dictionary];
+            if (enable) {
+                appsDict[self.currentBundleID] = @YES;
+            } else {
+                [appsDict removeObjectForKey:self.currentBundleID];
             }
+            self.pendingPrefs[@"restrictedApps"] = appsDict;
         }
         
         [self.pendingPrefs removeObjectForKey:@"_intendedMasterState"];
