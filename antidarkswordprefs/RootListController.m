@@ -1616,39 +1616,30 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
         NSString *launchctl = ads_root_path(@"/usr/bin/launchctl");
         NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
         
-        // 1. Unload Corellium decoy daemon if present
         const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
         if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0)
             waitpid(pid, NULL, 0);
 
-        // 2. Annihilate the live cfprefsd cache for the AnyHost domain (used by the overlay)
-        CFStringRef appID = CFSTR("com.eolnmsuk.antidarkswordprefs");
-        CFArrayRef keyList = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
         if (keyList) {
-            // Setting values to NULL removes them
-            CFPreferencesSetMultiple(NULL, keyList, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            CFPreferencesSetMultiple(NULL, keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
             CFRelease(keyList);
         }
-        CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        CFPreferencesSynchronize(CFSTR("com.eolnmsuk.antidarkswordprefs"), kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 
-        // 3. Annihilate the CurrentHost domain (used by Settings App)
         NSUserDefaults *defaults = ads_defaults();
         [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
         [defaults synchronize];
         
-        // 4. Explicitly delete the physical file to catch any fallback writes
         NSString *plistPathOnDisk = ads_root_path(@"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
         if ([[NSFileManager defaultManager] fileExistsAtPath:plistPathOnDisk]) {
             [[NSFileManager defaultManager] removeItemAtPath:plistPathOnDisk error:nil];
         }
 
-        // 5. Notify tweak hooks of the reset before the reboot kills us
         ads_post_notification();
 
-        // 6. Userspace Reboot
         const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL};
         posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
-        // No waitpid — the reboot kills this process.
     }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
