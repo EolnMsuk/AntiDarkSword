@@ -36,16 +36,21 @@ Registered with `launchd` so `corelliumd` starts at boot and is restarted if it 
 
 ### 3. File-path spoofing (daemon tweak — rootless only)
 
-On a rootless jailbreak the binary lives under `/var/jb/`, not at the rootful path `/usr/libexec/corelliumd`. A payload checking the bare rootful path would find nothing. The `AntiDarkSwordDaemon` tweak closes this gap by hooking the four most common existence checks in the processes it injects into:
+On a rootless jailbreak the binary lives under `/var/jb/`, not at the rootful path `/usr/libexec/corelliumd`. A payload checking the bare rootful path would find nothing. The `AntiDarkSwordDaemon` tweak closes this gap by hooking the five most common existence checks in the processes it injects into:
 
 | Hook | What it intercepts |
 |---|---|
 | `access("/usr/libexec/corelliumd", ...)` | Returns `0` (exists) |
-| `stat("/usr/libexec/corelliumd", ...)` | Fills in a fake `stat` buffer (regular file, 755, ~34 KB) |
+| `stat("/usr/libexec/corelliumd", ...)` | Fills in a plausible `stat` buffer (regular file, 755, ~34 KB, uid=0, gid=0) |
 | `lstat("/usr/libexec/corelliumd", ...)` | Same as `stat` |
 | `[NSFileManager fileExistsAtPath:"/usr/libexec/corelliumd"]` | Returns `YES` |
+| `[NSFileManager fileExistsAtPath:"/usr/libexec/corelliumd" isDirectory:]` | Returns `YES`, sets `*isDirectory = NO` |
 
 These hooks only activate when `globalDecoyEnabled` is `YES` — they pass through to the real syscall otherwise, so there is no overhead on a rootful install or when the feature is disabled.
+
+### 4. Probe counter
+
+Every intercepted probe increments a persistent `corelliumProbeCount` counter in CFPreferences, visible as a live-updating cell in the Settings.app preferences panel. The counter is debounced (2-second window) to collapse the rapid multi-syscall burst a single probe generates into one count. Writes are dispatched asynchronously on a private serial queue to avoid deadlocking `apsd`'s synchronous cfprefsd calls. A separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) is posted after each increment so Settings.app refreshes the counter cell independently of a full prefs reload.
 
 ---
 

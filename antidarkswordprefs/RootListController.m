@@ -1282,7 +1282,6 @@ static NSDictionary *ads_daemon_alias_map(void) {
                 set:@selector(setMitigationShortcut:specifier:)
                 get:@selector(getMitigationShortcut:)
                 detail:nil cell:PSSwitchCell edit:nil];
-            [shortcutToggle setProperty:@"mitigationShortcutEnabled" forKey:@"key"];
             [specs insertObject:shortcutToggle atIndex:infoIdx++];
         }
 
@@ -1701,9 +1700,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
 }
 
 - (id)getMitigationShortcut:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults();
-    if ([defaults objectForKey:@"mitigationShortcutEnabled"] == nil) return @YES;
-    return @([defaults boolForKey:@"mitigationShortcutEnabled"]);
+    return @([ads_defaults() boolForKey:@"mitigationShortcutEnabled"]);
 }
 
 - (void)setMitigationShortcut:(id)value specifier:(PSSpecifier *)spec {

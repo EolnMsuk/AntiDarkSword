@@ -77,14 +77,14 @@ Both are also private `WKPreferences` keys.
 
 Replaces the real device UA with a configured string to break fingerprinting used by exploits that only target specific device/OS combinations (DarkSword and Coruna both check UA before deploying payloads).
 
-Three hooks combine to make the spoof stick:
+Four hooks combine to make the spoof stick:
 
 1. **`WKWebView.customUserAgent` setter** — intercepts any attempt to set a custom UA and forces it to the spoofed string.
 2. **`WKWebViewConfiguration.applicationNameForUserAgent` setter** — cleared to an empty string to prevent the app name from leaking into the real UA.
-3. **JS navigator override** — a `WKUserScript` injected at document start uses `Object.defineProperty` to override `navigator.userAgent`, `navigator.appVersion`, `navigator.platform`, and `navigator.vendor`. This means even JS that reads `navigator.userAgent` directly gets the spoofed value, not the real one.
+3. **JS navigator override** — a `WKUserScript` injected at document start uses `Object.defineProperty` to override `navigator.userAgent`, `navigator.appVersion`, `navigator.platform`, `navigator.vendor`, and `navigator.userAgentData` (the Client Hints API, iOS 16+). This means even JS that reads these properties directly gets the spoofed values.
 4. **HTTP header override in `loadRequest:`** — if the outgoing request already has a `User-Agent` header that doesn't match the spoofed string, the request is mutated before it goes out.
 
-The `navigator.platform` and `navigator.vendor` values are inferred from the UA string (e.g., a Chrome Android UA gets `"Linux aarch64"` / `"Google Inc."`), so the JS environment is internally consistent rather than a half-spoofed mix.
+The `navigator.platform`, `navigator.vendor`, and `navigator.userAgentData.brands` values are all derived from the UA string (e.g., a Chrome Android UA gets `"Linux aarch64"` / `"Google Inc."` / a Chromium brands array), so the entire JS navigator environment is internally consistent rather than a half-spoofed mix.
 
 ### iMessage UI-Layer Blocking
 
@@ -95,6 +95,27 @@ Hooks `IMFileTransfer` (from IMCore) and `CKAttachmentMessagePartChatItem` (from
 - `CKAttachmentMessagePartChatItem._needsPreviewGeneration` → `NO`
 
 This is a second layer of defense. The daemon tweak hooks the same `IMFileTransfer` methods at the `imagent`/`IMDPersistenceAgent` level before content ever reaches the UI. If the daemon layer is bypassed or not active, these UI-layer hooks are a fallback that stops the attachment from being processed in the UI process.
+
+---
+
+## In-App Settings Overlay
+
+A modal settings panel is accessible from inside any protected app — no Settings.app required.
+
+**Trigger:** Double-tap with three fingers anywhere on screen.
+
+The overlay is implemented as `ADSUISettingsViewController`, presented over the top-most view controller with a cross-dissolve transition. A persistent `ADSUIGestureHandler` singleton is the gesture target (prevents the recognizer's weak reference from being deallocated). The gesture is installed on the first `UIWindow` that calls `makeKeyAndVisible`.
+
+**What the overlay shows:**
+- Current app's bundle ID (monospaced subtitle)
+- **Enable Protection** master toggle — background is green when protection is active, red when inactive. Grayed out if the global tweak switch is OFF in Settings.app.
+- Per-feature toggle rows: Spoof User Agent, Block JIT / Lockdown Mode (iOS 16+) or Block JIT (iOS 15) or grayed-out (iOS 14−), Block JavaScript, Block Media Autoplay, Block WebGL / WebRTC, Block `file://` Access, Block iMessage Downloads
+
+**JS + JIT coupling:** Enabling "Block JavaScript" automatically forces "Block JIT" on and locks it. This reflects the fact that JIT-based exploits require JS execution — blocking JS without blocking JIT provides no additional protection in that threat model.
+
+**Saving:** "Save & Restart" writes the current toggle state as `TargetRules_<bundleID>` into CFPreferences and the physical plist, then posts the `com.eolnmsuk.antidarkswordprefs/saved` Darwin notification so all injected tweak instances hot-reload immediately. A UIAlertController prompts to restart (`exit(0)`) or defer — WebKit configuration changes only take effect on a full process restart.
+
+The overlay reads live state from CFPreferences (same priority order as `loadPrefs()`) so it always reflects the current cfprefsd state, not a potentially stale plist snapshot.
 
 ---
 
@@ -148,3 +169,4 @@ Hook methods can fire on any thread. All flags that hooks read at call time (`ap
 | `IMFileTransfer -isAutoDownloadable` | iMessage attachment auto-download (UI layer) |
 | `IMFileTransfer -canAutoDownload` | iMessage attachment auto-download (UI layer) |
 | `CKAttachmentMessagePartChatItem -_needsPreviewGeneration` | Attachment preview generation |
+| `UIWindow -makeKeyAndVisible` | Installs three-finger double-tap gesture for in-app settings overlay |

@@ -46,27 +46,31 @@
 - (BOOL)_needsPreviewGeneration;
 @end
 
-// Returns the correct prefs plist path for the detected jailbreak type.
-// Priority: RootHide jbroot() > standard rootless /var/jb/ > rootful.
+// Set once in %ctor; used by ads_prefs_path() at all subsequent call sites.
+static BOOL isRootlessJB = NO;
+
+// Returns the correct prefs path for the active jailbreak type.
+// Supports rootful, rootless (/var/jb prefix), and RootHide (jbroot() remap).
 static NSString *ads_prefs_path(void) {
-    static NSString *path = nil;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        void *jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
+    static void *jbrootFn = NULL;
+    static BOOL jbrootIsReal = NO;
+    static dispatch_once_t jbrootOnce;
+    dispatch_once(&jbrootOnce, ^{
+        jbrootFn = dlsym(RTLD_DEFAULT, "jbroot");
         if (jbrootFn) {
             typedef char *(*jbroot_fn)(const char *);
             char *test = ((jbroot_fn)jbrootFn)("/");
-            if (test && strcmp(test, "/") != 0) {
-                char *resolved = ((jbroot_fn)jbrootFn)("/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
-                if (resolved) { path = @(resolved); return; }
-            }
+            jbrootIsReal = (test != NULL && strcmp(test, "/") != 0);
         }
-        if (access("/var/jb", F_OK) == 0)
-            path = @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
-        else
-            path = @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
     });
-    return path;
+    if (jbrootIsReal) {
+        typedef char *(*jbroot_fn)(const char *);
+        char *resolved = ((jbroot_fn)jbrootFn)("/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist");
+        if (resolved) return @(resolved);
+    }
+    return isRootlessJB
+        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
+        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
 }
 
 // Runtime State Variables
@@ -75,6 +79,7 @@ static NSString *ads_prefs_path(void) {
 static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL currentProcessRestricted = NO;
 static _Atomic BOOL currentProcessIsPreset   = NO;
+static _Atomic BOOL mitigationShortcutEnabled = NO;
 static BOOL globalTweakEnabled     = NO;
 static BOOL globalUASpoofingEnabled = NO;
 static NSString *customUAString = @"";
@@ -110,7 +115,6 @@ static _Atomic BOOL applyDisableMedia      = NO;
 static _Atomic BOOL applyDisableRTC        = NO;
 static _Atomic BOOL applyDisableFileAccess = NO;
 static _Atomic BOOL applyDisableIMessageDL = NO;
-static _Atomic BOOL globalMitigationShortcutEnabled = NO;
 
 // =========================================================
 // HELPERS
@@ -370,9 +374,9 @@ static void loadPrefs() {
         globalDisableMedia        = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)]         ? [prefs[@"globalDisableMedia"] boolValue]         : NO;
         globalDisableRTC          = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)]           ? [prefs[@"globalDisableRTC"] boolValue]           : NO;
         globalDisableFileAccess   = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]    ? [prefs[@"globalDisableFileAccess"] boolValue]    : NO;
-        globalDisableIMessageDL         = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]       ? [prefs[@"globalDisableIMessageDL"] boolValue]        : NO;
-        globalMitigationShortcutEnabled = [prefs[@"mitigationShortcutEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"mitigationShortcutEnabled"] boolValue]      : YES;
-        autoProtectLevel                = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]        ? [prefs[@"autoProtectLevel"] integerValue]             : 1;
+        globalDisableIMessageDL   = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]   ? [prefs[@"globalDisableIMessageDL"] boolValue]    : NO;
+        autoProtectLevel          = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]        ? [prefs[@"autoProtectLevel"] integerValue]        : 1;
+        mitigationShortcutEnabled = [prefs[@"mitigationShortcutEnabled"] respondsToSelector:@selector(boolValue)] ? [prefs[@"mitigationShortcutEnabled"] boolValue]  : NO;
 
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
@@ -1001,7 +1005,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 
     UILabel *masterLabel = [[UILabel alloc] init];
     masterLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    masterLabel.text      = @"Enable Protection";
+    masterLabel.text      = @"Enable Rule";
     masterLabel.font      = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     masterLabel.textColor = [UIColor whiteColor];
     [masterRow addSubview:masterLabel];
@@ -1010,11 +1014,11 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
-    
+
     // Read the ACTUAL live protection status straight from the tweak engine
     BOOL isMasterEnabled     = currentProcessRestricted;
     masterSwitch.on          = isMasterEnabled;
-    
+
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
@@ -1309,7 +1313,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (sender.state != UIGestureRecognizerStateEnded) return;
-    if (!globalTweakEnabled || !globalMitigationShortcutEnabled) return;
+    if (!globalTweakEnabled || !mitigationShortcutEnabled) return;
     UIWindow *win = ads_ui_key_window();
     UIViewController *top = win ? ads_ui_top_vc(win.rootViewController) : nil;
     if (!top || [top isKindOfClass:[ADSUISettingsViewController class]]) return;
@@ -1342,6 +1346,9 @@ static void ads_ui_install_gesture(UIWindow *win) {
 %end
 
 %ctor {
+    // Set rootless flag first — ads_prefs_path() and loadPrefs() both depend on it.
+    isRootlessJB = (access("/var/jb", F_OK) == 0);
+
     NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
 

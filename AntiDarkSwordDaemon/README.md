@@ -39,15 +39,26 @@ On a rootless jailbreak, the Corellium decoy binary lives at `/var/jb/usr/libexe
 | Hook | What it intercepts |
 |---|---|
 | `access("/usr/libexec/corelliumd", ...)` | Returns `0` (file exists) |
-| `stat("/usr/libexec/corelliumd", ...)` | Returns `0`, fills a plausible `stat` buffer (regular file, mode `755`, ~34 KB) |
+| `stat("/usr/libexec/corelliumd", ...)` | Returns `0`, fills a plausible `stat` buffer (regular file, mode `755`, ~34 KB, `uid=0`, `gid=0`, plausible inode) |
 | `lstat("/usr/libexec/corelliumd", ...)` | Same as `stat` |
 | `NSFileManager -fileExistsAtPath:` | Returns `YES` |
+| `NSFileManager -fileExistsAtPath:isDirectory:` | Returns `YES`, sets `*isDirectory = NO` |
 
 The `stat` and `lstat` hooks fill the buffer with `uid=0`, `gid=0`, `nlink=1` — consistent with a real root-owned system binary.
 
 On a rootful install these hooks are also installed, but their bodies are gated by `isRootlessJB`. If the device is rootful, the binary is already at `/usr/libexec/corelliumd` for real, so the hooks pass straight through to the original syscall with no overhead.
 
-The POSIX hooks (`access`, `stat`, `lstat`) use `MSHookFunction` from CydiaSubstrate/ElleKit — C-function interposition, not ObjC method swizzling — because these are C library calls, not Objective-C methods. The `NSFileManager` hook uses the standard `%hook` mechanism.
+The POSIX hooks (`access`, `stat`, `lstat`) use `MSHookFunction` from CydiaSubstrate/ElleKit — C-function interposition, not ObjC method swizzling — because these are C library calls, not Objective-C methods. The `NSFileManager` hooks use the standard `%hook` mechanism.
+
+### Corellium Probe Counter
+
+Every time a Corellium-path probe is intercepted (across all four hook types), a debounced counter increments the `corelliumProbeCount` key in CFPreferences. This counter is displayed in the Settings.app preferences panel so spyware probe attempts are visible to the user.
+
+**Debouncing:** A 2-second atomic compare-and-swap window collapses the rapid `access`+`stat`+`lstat` burst that a single probe event generates into one count increment.
+
+**Async dispatch:** The CFPreferences write is dispatched asynchronously on a dedicated serial queue (`com.eolnmsuk.ads.counter`). This is required because `apsd` calls cfprefsd synchronously for APNs configuration — a synchronous CFPreferences write from inside a hooked POSIX call would cause `apsd` to wait on cfprefsd while cfprefsd waits on `apsd`, resulting in a deadlock that breaks push notification delivery. The queue is created in `%ctor` before any POSIX hooks are installed.
+
+After writing, the counter posts a separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) so Settings.app can refresh the counter cell without triggering a full prefs reload in all other injected tweak instances.
 
 ---
 
@@ -120,8 +131,8 @@ Hook functions can be called from any thread. All flags read at hook call time (
 |---|---|
 | `IMFileTransfer -isAutoDownloadable` | iMessage attachment auto-download query |
 | `IMFileTransfer -canAutoDownload` | iMessage attachment download eligibility query |
-| `NSFileManager -fileExistsAtPath:` | ObjC-level file existence check for Corellium path |
-| `NSFileManager -fileExistsAtPath:isDirectory:` | ObjC-level file existence check (directory variant) |
+| `NSFileManager -fileExistsAtPath:` | ObjC-level file existence check for Corellium path; also triggers probe counter |
+| `NSFileManager -fileExistsAtPath:isDirectory:` | ObjC-level file existence + directory check; also triggers probe counter |
 | `access` (C function via `MSHookFunction`) | POSIX existence check for Corellium path |
 | `stat` (C function via `MSHookFunction`) | POSIX metadata query for Corellium path |
 | `lstat` (C function via `MSHookFunction`) | POSIX metadata query (symlink-aware) for Corellium path |
