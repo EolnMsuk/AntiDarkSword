@@ -758,8 +758,13 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     self.pendingRules = [savedRules isKindOfClass:[NSDictionary class]] ? [savedRules mutableCopy] : [NSMutableDictionary dictionary];
 
     id savedJS = self.pendingRules[@"disableJS"];
-    self.jsLocked = savedJS ? [savedJS boolValue] : [self isOnForKey:@"disableJS" masterOn:currentProcessRestricted];
+    self.jsLocked = savedJS ? [savedJS boolValue] : [self isOnForKey:@"disableJS" masterOn:[self isMasterRuleEnabled]];
     return self;
+}
+
+- (BOOL)isGlobalTweakEnabled {
+    id val = self.pendingPrefs[@"enabled"];
+    return val ? [val boolValue] : NO;
 }
 
 - (BOOL)isPresetApp {
@@ -769,6 +774,29 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSArray *tier2 = @[@"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph", @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio", @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line", @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios", @"pinterest", @"com.tumblr.tumblr", @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram", @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit", @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini", @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod", @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza", @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient", @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust", @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase", @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking", @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking", @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile", @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile", @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone", @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb", @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"];
     if ([tier1 containsObject:target]) return YES;
     if (autoProtectLevel >= 2 && [tier2 containsObject:target]) return YES;
+    return NO;
+}
+
+- (BOOL)isMasterRuleEnabled {
+    id intendedState = self.pendingPrefs[@"_intendedMasterState"];
+    if (intendedState) return [intendedState boolValue];
+    
+    if (![self isGlobalTweakEnabled]) return NO;
+    
+    NSArray *customDaemons = self.pendingPrefs[@"activeCustomDaemonIDs"] ?: self.pendingPrefs[@"customDaemonIDs"] ?: @[];
+    if ([customDaemons containsObject:self.currentBundleID]) return YES;
+    
+    NSString *restrictKey = [NSString stringWithFormat:@"restrictedApps-%@", self.currentBundleID];
+    if (self.pendingPrefs[restrictKey] != nil) {
+        return [self.pendingPrefs[restrictKey] boolValue];
+    }
+    
+    NSDictionary *restrictedAppsDict = self.pendingPrefs[@"restrictedApps"];
+    if ([restrictedAppsDict isKindOfClass:[NSDictionary class]] && [restrictedAppsDict[self.currentBundleID] boolValue]) return YES;
+    
+    NSArray *disabledPresets = self.pendingPrefs[@"disabledPresetRules"] ?: @[];
+    if ([self isPresetApp] && ![disabledPresets containsObject:self.currentBundleID]) return YES;
+    
     return NO;
 }
 
@@ -809,7 +837,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
 }
 
 - (BOOL)isOnForKey:(NSString *)key masterOn:(BOOL)masterOn {
-    if (!globalTweakEnabled) return NO;
+    if (![self isGlobalTweakEnabled]) return NO;
     if ([self isGlobalOverrideForKey:key]) return YES;
     if (!masterOn) return NO;
 
@@ -891,13 +919,15 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     masterSwitch.onTintColor = [UIColor systemGreenColor];
     masterSwitch.tag         = NSIntegerMax;
 
-    BOOL isMasterEnabled = currentProcessRestricted;
+    BOOL isGlobalON = [self isGlobalTweakEnabled];
+    BOOL isMasterEnabled = [self isMasterRuleEnabled];
+    
     masterSwitch.on = isMasterEnabled;
     masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0]
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
 
-    if (!globalTweakEnabled) {
+    if (!isGlobalON) {
         masterSwitch.enabled = NO;
         masterSwitch.on = NO;
         masterLabel.text = @"Enable Rule (Globally Disabled)";
@@ -1032,13 +1062,14 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
     NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
     NSString *key = row[@"key"];
 
-    id intendedState = self.pendingPrefs[@"_intendedMasterState"];
-    BOOL masterOn = intendedState ? [intendedState boolValue] : currentProcessRestricted;
+    BOOL isGlobalON = [self isGlobalTweakEnabled];
+    BOOL isMasterON = [self isMasterRuleEnabled];
     BOOL isGlobalOverride = [self isGlobalOverrideForKey:key];
-    BOOL rowEnabled = globalTweakEnabled && masterOn && !isGlobalOverride && [row[@"enabled"] boolValue];
+    
+    BOOL rowEnabled = isGlobalON && isMasterON && !isGlobalOverride && [row[@"enabled"] boolValue];
     BOOL isJITRow = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
 
-    BOOL isOn = [self isOnForKey:key masterOn:masterOn];
+    BOOL isOn = [self isOnForKey:key masterOn:isMasterON];
     if ([key isEqualToString:@"disableJS"]) self.jsLocked = isOn;
 
     if (isJITRow && self.jsLocked && !isGlobalOverride) {
@@ -1046,7 +1077,7 @@ static void ads_ui_write_prefs(NSDictionary *prefs) {
         rowEnabled = NO;
     }
 
-    if (!globalTweakEnabled || !masterOn) {
+    if (!isGlobalON || !isMasterON) {
         isOn = NO;
         rowEnabled = NO;
     } else if (isGlobalOverride) {
