@@ -1482,7 +1482,9 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     NSInteger newLevel = [value integerValue];
     
     [defaults setObject:value forKey:@"autoProtectLevel"];
-    if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:NO];
+    
+    // FORCE = YES overwrites stale TargetRules_<bundleID> dictionaries
+    if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:YES];
     
     if (oldLevel >= 3 || newLevel >= 3) {
         [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
@@ -1491,11 +1493,6 @@ static void ProbeCounterNotification(CFNotificationCenterRef center __unused, vo
     if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
         [defaults setBool:YES forKey:@"corelliumDecoyEnabled"];
 
-        // Same logic as setCorelliumEnabled:specifier: — ensure all four daemons are
-        // active so the POSIX spoofing hooks fire in every daemon context.  Without this,
-        // a user who had previously disabled daemons, dropped to Level 2, then returned
-        // to Level 3 would have Corellium re-enabled but the daemons still disabled,
-        // leaving the spoofing hooks inactive.
         NSDictionary *aliasMap = ads_daemon_alias_map();
         NSArray *daemonShortNames = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
