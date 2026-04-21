@@ -21,6 +21,21 @@ SDK_14="$THEOS/sdks/iPhoneOS14.5.sdk"
 SDK_16="$THEOS/sdks/iPhoneOS16.5.sdk"
 
 # ==========================================
+# LEGACY TARGETS (iOS 13 - 14) → Native arm64
+# ==========================================
+swap_altlist "Old"
+
+if command -v lipo >/dev/null 2>&1; then
+    lipo vendor/AltList.framework/AltList -thin arm64 -output vendor/AltList.framework/AltList
+fi
+
+# Rootful Legacy
+make clean
+rm -rf packages/*
+make package FINALPACKAGE=1 SYSROOT="$SDK_14" TARGET="iphone:clang:14.5:13.0" ARCHS="arm64"
+mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_legacy_iphoneos-arm.deb"
+
+# ==========================================
 # MODERN TARGETS (iOS 15+) → WSL MUST BE arm64 ONLY
 # ==========================================
 swap_altlist "New"
@@ -44,21 +59,6 @@ make FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm
 DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
 cp "$DYLIB" "../output/AntiDarkSword_${VERSION}_TrollFools.dylib"
 cd ..
-
-# ==========================================
-# LEGACY TARGETS (iOS 13 - 14) → Native arm64
-# ==========================================
-swap_altlist "Old"
-
-if command -v lipo >/dev/null 2>&1; then
-    lipo vendor/AltList.framework/AltList -thin arm64 -output vendor/AltList.framework/AltList
-fi
-
-# Rootful Legacy
-make clean
-rm -rf packages/*
-make package FINALPACKAGE=1 SYSROOT="$SDK_14" TARGET="iphone:clang:14.5:13.0" ARCHS="arm64"
-mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_legacy_iphoneos-arm.deb"
 
 echo "Build complete → output/"
 ls -1 output/
