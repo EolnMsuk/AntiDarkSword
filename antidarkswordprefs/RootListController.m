@@ -254,7 +254,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
 
         PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [decoyGroup setProperty:@"Spoofs the Corellium environment to cause exploits (like Coruna) to self-abort. All four daemons are re-enabled and locked when this is on" forKey:@"footerText"];
+        [decoyGroup setProperty:@"Spoofs Corellium environment to cause exploits (like Coruna) to self-abort. All four daemons are force enabled when this is on" forKey:@"footerText"];
         [specs addObject:decoyGroup];
 
         PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -264,7 +264,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         NSInteger probeCount = [defaults integerForKey:@"corelliumProbeCount"];
 
         PSSpecifier *counterGroup = [PSSpecifier preferenceSpecifierNamed:@"Attack Statistics" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [counterGroup setProperty:@"Counts Corellium environment probe attempts detected in system daemons." forKey:@"footerText"];
+        [counterGroup setProperty:@"Counts Corellium environment probe attempts detected by system daemons." forKey:@"footerText"];
         [specs addObject:counterGroup];
 
         PSSpecifier *counterToggle = [PSSpecifier preferenceSpecifierNamed:@"Enable Attack Counter" target:self set:@selector(setCountersEnabled:specifier:) get:@selector(getCountersEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -282,7 +282,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         }
 
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [group setProperty:@"Restricting a daemon bypasses all zero-click mitigations for that process. Disable Corellium Honeypot to unlock." forKey:@"footerText"];
+        [group setProperty:@"Restricting a daemon bypasses all zero-click mitigations for that process." forKey:@"footerText"];
         [specs addObject:group];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
@@ -293,8 +293,8 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
             [specs addObject:spec];
         }
 
-        PSSpecifier *globalGroup = [PSSpecifier preferenceSpecifierNamed:@"Global Mitigation Rules (BETA)" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [globalGroup setProperty:@"⚠︎ Global rules can break almost anything, for advanced users only." forKey:@"footerText"];
+        PSSpecifier *globalGroup = [PSSpecifier preferenceSpecifierNamed:@"⚠︎  Global Rules (BETA) ⚠︎ " target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+        [globalGroup setProperty:@"Global rules can break almost anything, for advanced users only." forKey:@"footerText"];
         [specs addObject:globalGroup];
 
         NSArray *globals = @[
@@ -955,18 +955,18 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) s.detailControllerClass = [AntiDarkSwordAltListController class];
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
-                if (autoProtectLevel == 1) footerText = @"Level 1: Protects all native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
+                if (autoProtectLevel == 1) footerText = @"Level 1: Protects native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum lockdown. Restricts system background daemons.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum protection. Restricts system background daemons, configure in Level 3 Settings.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
                 if (autoProtectLevel < 3) {
                     [s setProperty:@NO forKey:@"enabled"];
-                    s.name = @"⛨ Settings 🔒︎ (Level 3)";
+                    s.name = @"Level 3 Settings 🔒";
                 } else {
                     [s setProperty:@YES forKey:@"enabled"];
-                    s.name = @"⛨ Settings 🔓";
+                    s.name = @"Level 3 Settings 🔓";
                 }
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {

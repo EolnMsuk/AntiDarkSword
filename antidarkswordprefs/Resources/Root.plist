@@ -10,7 +10,7 @@
             <key>label</key>
             <string>Global Setting</string>
             <key>footerText</key>
-            <string>You must also enable a preset level or custom rules below to protect your device.</string>
+            <string>This globally enables or disables all currently selected protections.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -37,7 +37,7 @@
             <key>label</key>
             <string>User Agent Configuration</string>
             <key>footerText</key>
-            <string>Spoofing User Agent bypasses known payloads via browser detection for Coruna and DarkSword.</string>
+            <string>Configure which profile to spoof while browsing (8.1 is safe).</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -228,14 +228,6 @@
         </dict>
         <dict>
             <key>cell</key>
-            <string>PSLinkCell</string>
-            <key>label</key>
-            <string>👨🏻‍💻  Credits</string>
-            <key>detail</key>
-            <string>AntiDarkSwordCreditsController</string>
-        </dict>
-        <dict>
-            <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
             <string>💸  Donate</string>
@@ -250,7 +242,15 @@
             <key>action</key>
             <string>openGitHub</string>
         </dict>
-
+        <dict>
+            <key>cell</key>
+            <string>PSLinkCell</string>
+            <key>label</key>
+            <string>👨🏻‍💻  Credits</string>
+            <key>detail</key>
+            <string>AntiDarkSwordCreditsController</string>
+        </dict>
+		
         <dict>
             <key>cell</key>
             <string>PSGroupCell</string>
