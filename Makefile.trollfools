@@ -1,0 +1,19 @@
+# Makefile.trollfools
+# Builds a standalone AntiDarkSword.dylib for use with TrollFools / TrollStore.
+#
+# Usage:
+#   make -f Makefile.trollfools
+#
+# The finished dylib is at:
+#   .theos/obj/AntiDarkSwordTF/AntiDarkSword.dylib
+#
+# Then import that .dylib into TrollFools and inject it per-app.
+# No respring or jailbreak required.
+
+ARCHS ?= arm64 arm64e
+TARGET ?= iphone:clang:16.5:13.0
+
+include $(THEOS)/makefiles/common.mk
+
+SUBPROJECTS += AntiDarkSwordTF
+include $(THEOS_MAKE_PATH)/aggregate.mk

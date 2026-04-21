@@ -1,0 +1,103 @@
+name: Compile & Release Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-sdks: 'https://github.com/theos/sdks'
+
+      - name: Download Patched SDKs (Direct)
+        run: |
+          mkdir -p $THEOS/sdks
+          curl -LO https://github.com/theos/sdks/releases/latest/download/iPhoneOS14.5.sdk.tar.xz
+          curl -LO https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
+          tar -xf iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks/
+          tar -xf iPhoneOS16.5.sdk.tar.xz -C $THEOS/sdks/
+          rm *.tar.xz
+
+      - name: Fix Script Permissions
+        run: |
+          chmod +x layout/DEBIAN/prerm || true
+          chmod +x layout/DEBIAN/postinst || true
+
+      - name: Extract Tweak Version
+        id: get_version
+        run: |
+          VERSION=$(grep -i '^Version:' control | awk '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Prepare Output Directory
+        run: mkdir -p output
+
+      - name: Build Modern Targets (iOS 15+)
+        run: |
+          rm -rf vendor/AltList.framework
+          cp -R vendor/AltList_New.framework vendor/AltList.framework
+          
+          make clean
+          make package FINALPACKAGE=1 SYSROOT=$THEOS/sdks/iPhoneOS16.5.sdk TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_modern_iphoneos-arm.deb
+          
+          make clean
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless SYSROOT=$THEOS/sdks/iPhoneOS16.5.sdk TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_modern_iphoneos-arm64.deb
+          
+          cd AntiDarkSwordTF
+          make clean
+          make FINALPACKAGE=1 SYSROOT=$THEOS/sdks/iPhoneOS16.5.sdk TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+          DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
+          cp "$DYLIB" "../output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib"
+
+      - name: Build Legacy Target (iOS 13-14)
+        run: |
+          rm -rf vendor/AltList.framework
+          cp -R vendor/AltList_Old.framework vendor/AltList.framework
+          
+          lipo vendor/AltList.framework/AltList -thin arm64 -output vendor/AltList.framework/AltList
+          
+          make clean
+          make package FINALPACKAGE=1 SYSROOT=$THEOS/sdks/iPhoneOS14.5.sdk TARGET="iphone:clang:14.5:13.0" ARCHS="arm64"
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_legacy_iphoneos-arm.deb
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntiDarkSword-Builds
+          path: output/*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}-b${{ github.run_number }}
+          name: "AntiDarkSword v${{ env.VERSION }}"
+          files: output/*
+          draft: true
+          body: |
+            Automated builds of AntiDarkSword v${{ env.VERSION }}.
+
+            | File | For |
+            |---|---|
+            | `modern_iphoneos-arm64.deb` | Modern Rootless (iOS 15+) |
+            | `modern_iphoneos-arm.deb` | Modern Rootful (iOS 15+) |
+            | `legacy_iphoneos-arm.deb` | Legacy Rootful (iOS 13-14) |
+            | `TrollFools.dylib` | TrollStore / Jailed |
+
+            ### Compatibility Guide
+            * **Modern Rootless:** → iOS 15 - 16 (Dopamine, palera1n rootless, NathanLR). Standard format for modern devices.
+            * **Modern Rootful:** → iOS 15+ (palera1n fakefs). Only use if running a legacy bindfs/fakefs setup on modern firmware.
+            * **Legacy Rootful:** → iOS 13 - 14 (unc0ver, Taurine, checkra1n, Odyssey).
+            * **TrollFools:** → Non-jailbroken devices. Inject `.dylib` into target applications via TrollFools/TrollStore.
