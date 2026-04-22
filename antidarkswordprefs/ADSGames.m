@@ -606,17 +606,19 @@ static int rop_blocks[7][4][4][2] = {
                         int nyTop = startY + rop_blocks[_bType][_bRot][i][1];
                         
                         CGFloat height = (nyTop - nyBot) * kRopGrid + (kRopGrid - 1);
-                        SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(nx * kRopGrid, nyBot * kRopGrid, kRopGrid - 1, height)];
+                        SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopGrid - 1, height)];
+                        trail.position = CGPointMake(self->_gameLayer.position.x + nx * kRopGrid, self->_gameLayer.position.y + nyBot * kRopGrid);
                         trail.fillColor = [c colorWithAlphaComponent:0.6];
                         trail.lineWidth = 0;
-                        [self->_gameLayer addChild:trail];
+                        trail.zPosition = 5;
+                        [self addChild:trail];
                         
-                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.25], [SKAction removeFromParent]]]];
+                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.35], [SKAction removeFromParent]]]];
                     }
                     
-                    SKAction *sLeft = [SKAction moveByX:-6 y:-4 duration:0.025];
-                    SKAction *sRight = [SKAction moveByX:12 y:8 duration:0.025];
-                    SKAction *sCenter = [SKAction moveByX:-6 y:-4 duration:0.025];
+                    SKAction *sLeft = [SKAction moveByX:-2 y:-1 duration:0.02];
+                    SKAction *sRight = [SKAction moveByX:4 y:2 duration:0.02];
+                    SKAction *sCenter = [SKAction moveByX:-2 y:-1 duration:0.02];
                     [self->_gameLayer runAction:[SKAction sequence:@[sLeft, sRight, sCenter]]];
                     
                     _lastTick = 0; 
@@ -847,6 +849,17 @@ static int rop_blocks[7][4][4][2] = {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
             });
+        } else {
+            SKAction *s1 = [SKAction moveByX:-4 y:2 duration:0.04];
+            SKAction *s2 = [SKAction moveByX:8 y:-4 duration:0.04];
+            SKAction *s3 = [SKAction moveByX:-4 y:2 duration:0.04];
+            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s1, s2, s3]]];
+            
+            SKAction *colorHighlight = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; }];
+            SKAction *scaleUp = [SKAction scaleTo:1.5 duration:0.15];
+            SKAction *scaleDown = [SKAction scaleTo:1.0 duration:0.15];
+            SKAction *colorNormal = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor whiteColor]; }];
+            [self->_scoreLbl runAction:[SKAction sequence:@[colorHighlight, scaleUp, scaleDown, colorNormal]]];
         }
     }
 }
