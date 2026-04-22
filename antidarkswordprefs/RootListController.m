@@ -159,15 +159,29 @@ static inline NSString *ads_root_path(NSString *path) {
 @interface AntiDarkSwordCreditsController : PSListController
 @end
 
+typedef NS_ENUM(NSInteger, ADSGameState) {
+    ADSGameStateMenu,
+    ADSGameStatePlaying,
+    ADSGameStatePaused,
+    ADSGameStateDead
+};
+
 // --- EXPLOIT EATER SCENE ---
 @interface ADSExploitEaterScene : SKScene
+@property (nonatomic, assign) ADSGameState gameState;
 @property (nonatomic, strong) NSMutableArray<NSValue *> *snake;
 @property (nonatomic, assign) CGPoint food;
 @property (nonatomic, assign) CGVector direction;
 @property (nonatomic, assign) NSTimeInterval lastTick;
-@property (nonatomic, assign) BOOL isDead;
+
 @property (nonatomic, strong) SKNode *gameLayer;
 @property (nonatomic, strong) SKEffectNode *bloomNode;
+
+@property (nonatomic, strong) SKLabelNode *titleLbl;
+@property (nonatomic, strong) SKLabelNode *startBtn;
+@property (nonatomic, strong) SKLabelNode *pauseBtn;
+@property (nonatomic, strong) SKLabelNode *closeBtn;
+
 @property (nonatomic, copy) void (^exitHandler)(void);
 @end
 
@@ -179,8 +193,8 @@ static const CGFloat kGridSize = 20.0;
     
     self.bloomNode = [[SKEffectNode alloc] init];
     CIFilter *bloom = [CIFilter filterWithName:@"CIBloom"];
-    [bloom setValue:@0.5 forKey:@"inputRadius"];
-    [bloom setValue:@1.2 forKey:@"inputIntensity"];
+    [bloom setValue:@0.8 forKey:@"inputRadius"];
+    [bloom setValue:@1.5 forKey:@"inputIntensity"];
     self.bloomNode.filter = bloom;
     self.bloomNode.shouldEnableEffects = YES;
     [self addChild:self.bloomNode];
@@ -189,8 +203,41 @@ static const CGFloat kGridSize = 20.0;
     [self.bloomNode addChild:self.gameLayer];
     
     [self setupGestures:view];
+    [self setupUI];
     [self drawWalls];
-    [self resetGame];
+    
+    self.gameState = ADSGameStateMenu;
+    self.snake = [NSMutableArray array];
+}
+
+- (void)setupUI {
+    self.titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.titleLbl.text = @"AntiDarkSnake";
+    self.titleLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    self.titleLbl.fontSize = 24;
+    self.titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 35);
+    [self.bloomNode addChild:self.titleLbl];
+
+    self.startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.startBtn.text = @"▶ START";
+    self.startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    self.startBtn.fontSize = 40;
+    self.startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 15);
+    [self.bloomNode addChild:self.startBtn];
+
+    self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.pauseBtn.text = @"⏸";
+    self.pauseBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    self.pauseBtn.fontSize = 24;
+    self.pauseBtn.position = CGPointMake(30, self.size.height - 35);
+    [self.bloomNode addChild:self.pauseBtn];
+
+    self.closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.closeBtn.text = @"❌";
+    self.closeBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    self.closeBtn.fontSize = 20;
+    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 35);
+    [self.bloomNode addChild:self.closeBtn];
 }
 
 - (void)setupGestures:(SKView *)view {
@@ -201,33 +248,55 @@ static const CGFloat kGridSize = 20.0;
         swipe.direction = dir.integerValue;
         [view addGestureRecognizer:swipe];
     }
-    UITapGestureRecognizer *doubleTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleDoubleTap:)];
-    doubleTap.numberOfTapsRequired = 2;
-    [view addGestureRecognizer:doubleTap];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint loc = [touch locationInNode:self];
+
+    if ([self.closeBtn containsPoint:loc]) {
+        if (self.exitHandler) self.exitHandler();
+        return;
+    }
+
+    if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
+        if ([self.startBtn containsPoint:loc]) {
+            [self resetGame];
+        }
+    } else if (self.gameState == ADSGameStatePlaying) {
+        if ([self.pauseBtn containsPoint:loc]) {
+            self.gameState = ADSGameStatePaused;
+            self.startBtn.text = @"▶ RESUME";
+            self.startBtn.hidden = NO;
+        }
+    } else if (self.gameState == ADSGameStatePaused) {
+        if ([self.startBtn containsPoint:loc]) {
+            self.gameState = ADSGameStatePlaying;
+            self.startBtn.hidden = YES;
+        }
+    }
 }
 
 - (void)handleSwipe:(UISwipeGestureRecognizer *)sender {
-    if (self.isDead) { [self resetGame]; return; }
+    if (self.gameState != ADSGameStatePlaying) return;
+    
     if (sender.direction == UISwipeGestureRecognizerDirectionUp && self.direction.dy == 0) self.direction = CGVectorMake(0, 1);
     else if (sender.direction == UISwipeGestureRecognizerDirectionDown && self.direction.dy == 0) self.direction = CGVectorMake(0, -1);
     else if (sender.direction == UISwipeGestureRecognizerDirectionLeft && self.direction.dx == 0) self.direction = CGVectorMake(-1, 0);
     else if (sender.direction == UISwipeGestureRecognizerDirectionRight && self.direction.dx == 0) self.direction = CGVectorMake(1, 0);
 }
 
-- (void)handleDoubleTap:(UITapGestureRecognizer *)sender {
-    if (self.exitHandler) self.exitHandler();
-}
-
 - (void)drawWalls {
     SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(self.size.width - kGridSize*2, self.size.height - kGridSize*4)];
-    border.position = CGPointMake(self.size.width/2, self.size.height/2);
-    border.strokeColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    border.position = CGPointMake(self.size.width/2, self.size.height/2 - 10);
+    border.strokeColor = [UIColor colorWithRed:0.2 green:0.2 blue:1.0 alpha:1.0];
     border.lineWidth = 4.0;
     [self.bloomNode addChild:border];
 }
 
 - (void)resetGame {
-    self.isDead = NO;
+    self.gameState = ADSGameStatePlaying;
+    self.startBtn.hidden = YES;
     self.direction = CGVectorMake(1, 0);
     self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake(10, 10)]];
     [self spawnFood];
@@ -238,13 +307,13 @@ static const CGFloat kGridSize = 20.0;
     int maxX = (self.size.width - kGridSize*4) / kGridSize;
     int maxY = (self.size.height - kGridSize*6) / kGridSize;
     int x = (arc4random_uniform(maxX) + 2);
-    int y = (arc4random_uniform(maxY) + 3);
+    int y = (arc4random_uniform(maxY) + 2);
     self.food = CGPointMake(x, y);
 }
 
 - (void)update:(NSTimeInterval)currentTime {
-    if (self.isDead) return;
-    if (currentTime - self.lastTick < 0.15) return;
+    if (self.gameState != ADSGameStatePlaying) return;
+    if (currentTime - self.lastTick < 0.30) return;
     self.lastTick = currentTime;
     
     CGPoint head = self.snake.firstObject.CGPointValue;
@@ -252,7 +321,8 @@ static const CGFloat kGridSize = 20.0;
     
     int maxX = (self.size.width - kGridSize*2) / kGridSize;
     int maxY = (self.size.height - kGridSize*4) / kGridSize;
-    if (next.x < 1 || next.x >= maxX || next.y < 2 || next.y >= maxY) { [self die]; return; }
+    
+    if (next.x < 1 || next.x >= maxX || next.y < 1 || next.y >= maxY) { [self die]; return; }
     
     for (NSValue *val in self.snake) {
         if (CGPointEqualToPoint(val.CGPointValue, next)) { [self die]; return; }
@@ -271,7 +341,10 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)die {
-    self.isDead = YES;
+    self.gameState = ADSGameStateDead;
+    self.startBtn.text = @"↻ RESTART";
+    self.startBtn.hidden = NO;
+    
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeWarning];
     
@@ -286,8 +359,13 @@ static const CGFloat kGridSize = 20.0;
     [self.gameLayer removeAllChildren];
     
     SKShapeNode *fNode = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(kGridSize-2, kGridSize-2)];
-    fNode.fillColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.2 alpha:1.0];
+    fNode.fillColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     fNode.position = CGPointMake(self.food.x * kGridSize, self.food.y * kGridSize);
+    
+    SKAction *pulseUp = [SKAction scaleTo:1.2 duration:0.3];
+    SKAction *pulseDown = [SKAction scaleTo:0.8 duration:0.3];
+    [fNode runAction:[SKAction repeatActionForever:[SKAction sequence:@[pulseUp, pulseDown]]]];
+    
     [self.gameLayer addChild:fNode];
     
     for (NSValue *val in self.snake) {
@@ -322,8 +400,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)motionEnded:(UIEventSubtype)motion withEvent:(UIEvent *)event {
     if (motion == UIEventSubtypeMotionShake) {
-        if (self.gameView) [self teardownGame];
-        else [self launchGame];
+        if (!self.gameView) [self launchGame]; 
     }
 }
 
@@ -360,20 +437,22 @@ static const CGFloat kGridSize = 20.0;
     } completion:^(BOOL finished) {
         CGRect footerRect = [table convertRect:table.tableFooterView.bounds fromView:table.tableFooterView];
         [table scrollRectToVisible:footerRect animated:YES];
+        table.scrollEnabled = NO;
     }];
 }
 
 - (void)teardownGame {
     if (!self.gameView) return;
     
+    UITableView *table = (UITableView *)[self valueForKey:@"_table"];
+    if (table) table.scrollEnabled = YES;
+
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 0.0;
     } completion:^(BOOL finished) {
         [self.gameView presentScene:nil];
         [self.gameView removeFromSuperview];
         self.gameView = nil;
-        
-        UITableView *table = (UITableView *)[self valueForKey:@"_table"];
         if (table) table.tableFooterView = nil;
     }];
 }
