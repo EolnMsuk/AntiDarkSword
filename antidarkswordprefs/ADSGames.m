@@ -613,8 +613,6 @@ static int rop_blocks[7][4][4][2] = {
                         
                         [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.25], [SKAction removeFromParent]]]];
                     }
-                    
-                    _lastTick = 0; 
                 }
             }
         }
