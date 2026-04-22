@@ -276,14 +276,14 @@ static const CGFloat kGridSize = 20.0;
     self.pauseBtn.text = @"⏸";
     self.pauseBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.pauseBtn.fontSize = 24;
-    self.pauseBtn.position = CGPointMake(30, self.size.height - 40); // Aligned with score
+    self.pauseBtn.position = CGPointMake(30, self.size.height - 40); 
     [self.bloomNode addChild:self.pauseBtn];
 
     self.closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.closeBtn.text = @"❌";
     self.closeBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.closeBtn.fontSize = 20;
-    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); // Aligned with score
+    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); 
     [self.bloomNode addChild:self.closeBtn];
     
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -313,7 +313,6 @@ static const CGFloat kGridSize = 20.0;
     self.leaderboardNode.zPosition = 100;
     self.leaderboardNode.alpha = 0;
     
-    // Invisible fullscreen touch blocker guarantees taps are caught
     SKShapeNode *blocker = [SKShapeNode shapeNodeWithRectOfSize:self.size];
     blocker.position = CGPointMake(self.size.width/2, self.size.height/2);
     blocker.fillColor = [UIColor clearColor];
@@ -358,7 +357,7 @@ static const CGFloat kGridSize = 20.0;
 
     if (self.leaderboardNode) {
         SKNode *node = self.leaderboardNode;
-        self.leaderboardNode = nil; // Immediate nil = no tap glitches
+        self.leaderboardNode = nil; 
         [node runAction:[SKAction sequence:@[
             [SKAction fadeOutWithDuration:0.2],
             [SKAction removeFromParent]
@@ -419,7 +418,7 @@ static const CGFloat kGridSize = 20.0;
     self.gameState = ADSGameStatePlaying;
     self.startBtn.hidden = YES;
     self.restartOverlay.hidden = YES;
-    self.highScoreBtn.hidden = YES; // Hide high score during gameplay
+    self.highScoreBtn.hidden = YES; 
     self.score = 0;
     self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
@@ -469,7 +468,6 @@ static const CGFloat kGridSize = 20.0;
         self.score += 10;
         self.scoreLbl.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
         
-        // Haptic feedback updated to Rigid
         UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleRigid];
         [feed impactOccurred];
         
@@ -485,7 +483,7 @@ static const CGFloat kGridSize = 20.0;
     self.startBtn.text = @"↻ RE-EXECUTE";
     self.startBtn.hidden = NO;
     self.restartOverlay.hidden = NO;
-    self.highScoreBtn.hidden = NO; // Reveal high score when game ends
+    self.highScoreBtn.hidden = NO; 
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeWarning];
@@ -547,20 +545,18 @@ static const CGFloat kGridSize = 20.0;
     BOOL _isDead, _isPlaying, _isPaused;
 }
 
-// Increased grid size to make the playing area take up maximum room
 static const CGFloat kRopGrid = 17.0; 
 static const int kRopCols = 10;
 static const int kRopRows = 20;
 
-// Hardcoded 4-state rotations to prevent "shimmying"
 static int rop_blocks[7][4][4][2] = {
-    // 0: I - Toggles perfectly horizontal/vertical around a fixed center
+    // 0: I 
     { {{-1,0}, {0,0}, {1,0}, {2,0}}, {{0,1}, {0,0}, {0,-1}, {0,-2}}, {{-1,0}, {0,0}, {1,0}, {2,0}}, {{0,1}, {0,0}, {0,-1}, {0,-2}} },
     // 1: J
     { {{-1,1}, {-1,0}, {0,0}, {1,0}}, {{1,1}, {0,1}, {0,0}, {0,-1}}, {{1,-1}, {1,0}, {0,0}, {-1,0}}, {{-1,-1}, {0,-1}, {0,0}, {0,1}} },
     // 2: L
     { {{1,1}, {-1,0}, {0,0}, {1,0}}, {{1,-1}, {0,1}, {0,0}, {0,-1}}, {{-1,-1}, {1,0}, {0,0}, {-1,0}}, {{-1,1}, {0,-1}, {0,0}, {0,1}} },
-    // 3: O - Doesn't rotate
+    // 3: O 
     { {{0,1}, {1,1}, {0,0}, {1,0}}, {{0,1}, {1,1}, {0,0}, {1,0}}, {{0,1}, {1,1}, {0,0}, {1,0}}, {{0,1}, {1,1}, {0,0}, {1,0}} },
     // 4: S
     { {{0,1}, {1,1}, {-1,0}, {0,0}}, {{0,1}, {0,0}, {1,0}, {1,-1}}, {{0,1}, {1,1}, {-1,0}, {0,0}}, {{0,1}, {0,0}, {1,0}, {1,-1}} },
@@ -586,7 +582,6 @@ static int rop_blocks[7][4][4][2] = {
     
     CGFloat boardWidth = kRopCols * kRopGrid;
     CGFloat boardHeight = kRopRows * kRopGrid;
-    // Center adjusted for larger frame height
     _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 15);
     [self addChild:_gameLayer];
     
@@ -595,7 +590,6 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (void)setupUI {
-    // Score Label (Centered bottom)
     _scoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _scoreLbl.text = @"STACKS CLEARED: 0";
     _scoreLbl.fontSize = 14;
@@ -603,7 +597,6 @@ static int rop_blocks[7][4][4][2] = {
     _scoreLbl.position = CGPointMake(self.size.width / 2, 20);
     [self addChild:_scoreLbl];
 
-    // Pause Button (Top Left)
     _pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _pauseBtn.text = @"⏸";
     _pauseBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -611,7 +604,6 @@ static int rop_blocks[7][4][4][2] = {
     _pauseBtn.position = CGPointMake(25, self.size.height - 25);
     [self addChild:_pauseBtn];
 
-    // Close Button (Top Right)
     _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _closeBtn.text = @"❌";
     _closeBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
@@ -619,7 +611,6 @@ static int rop_blocks[7][4][4][2] = {
     _closeBtn.position = CGPointMake(self.size.width - 25, self.size.height - 25);
     [self addChild:_closeBtn];
     
-    // High Score Button (Top Center)
     _highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _highScoreBtn.text = @"🏆 HIGH SCORES";
     _highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -627,7 +618,6 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBtn.position = CGPointMake(self.size.width / 2, self.size.height - 25);
     [self addChild:_highScoreBtn];
 
-    // Large Restart Overlay (matches Exploit Eater but golden theme)
     CGFloat overlayW = self.size.width - 60;
     CGFloat overlayH = self.size.height - 120;
     _restartOverlay = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
@@ -639,7 +629,6 @@ static int rop_blocks[7][4][4][2] = {
     _restartOverlay.hidden = YES;
     [self addChild:_restartOverlay];
 
-    // Start / Retry / Resume Button
     _startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _startBtn.text = @"▶ INJECT PAYLOAD";
     _startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -650,12 +639,9 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (void)setupGestures:(SKView *)view {
-    NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionDown), @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
-    for (NSNumber *dir in dirs) {
-        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
-        swipe.direction = dir.integerValue;
-        [view addGestureRecognizer:swipe];
-    }
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    [view addGestureRecognizer:pan];
+    
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
     [view addGestureRecognizer:tap];
 }
@@ -776,7 +762,7 @@ static int rop_blocks[7][4][4][2] = {
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
-    if (_bType == 3) return; // O block doesn't rotate
+    if (_bType == 3) return; 
     int nextRot = (_bRot + 1) % 4;
     if ([self isValidX:_bX y:_bY rot:nextRot type:_bType]) _bRot = nextRot;
     [self render];
@@ -822,7 +808,6 @@ static int rop_blocks[7][4][4][2] = {
     _bX = kRopCols / 2;
     _bY = kRopRows - 2;
     
-    // Death Condition: If the space we are spawning into is already blocked, game over.
     if (![self isValidX:_bX y:_bY rot:_bRot type:_bType]) {
         [self die];
     }
@@ -894,7 +879,6 @@ static int rop_blocks[7][4][4][2] = {
         _scoreLbl.text = [NSString stringWithFormat:@"STACKS CLEARED: %ld", (long)_score];
         _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
         
-        // --- 4 ROW CELEBRATION ANIMATION ---
         if (linesCleared == 4) {
             SKLabelNode *msg = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
             msg.text = @"ROP CHAIN SECURED!";
@@ -929,7 +913,6 @@ static int rop_blocks[7][4][4][2] = {
     border.lineWidth = 2.0;
     [_gameLayer addChild:border];
     
-    // Draw locked blocks
     for (NSString *key in _board) {
         NSArray *comps = [key componentsSeparatedByString:@","];
         int x = [comps[0] intValue], y = [comps[1] intValue];
@@ -939,7 +922,6 @@ static int rop_blocks[7][4][4][2] = {
         [_gameLayer addChild:node];
     }
     
-    // Draw current block
     if (_isPlaying && !_isDead) {
         UIColor *c = [self colorForType:_bType];
         for (int i=0; i<4; i++) {
