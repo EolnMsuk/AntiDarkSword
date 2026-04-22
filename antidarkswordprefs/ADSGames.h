@@ -41,7 +41,7 @@ typedef NS_ENUM(NSInteger, ADSGameState) {
 @property (nonatomic, strong) SKLabelNode *scoreLbl;
 @property (nonatomic, strong) SKLabelNode *startBtn;
 @property (nonatomic, strong) SKLabelNode *pauseBtn;
-@property (nonatomic, strong) SKLabelNode *closeBtn;
+@property (nonatomic, strong) SKLabelNode *menuBtn;
 @property (nonatomic, strong) SKLabelNode *highScoreBtn;
 
 @property (nonatomic, copy) void (^exitHandler)(void);
