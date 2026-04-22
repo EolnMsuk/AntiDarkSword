@@ -341,11 +341,6 @@ static const CGFloat kGridSize = 20.0;
     SKLabelNode *_restartBtn;
     SKShapeNode *_restartOverlay;
     
-    SKLabelNode *_deathScoreLbl;
-    SKLabelNode *_deathHighLbl;
-    SKLabelNode *_deathRestartIcon;
-    SKAudioNode *_bgmNode;
-    
     BOOL _isDead, _isPlaying, _isPaused;
 }
 
@@ -391,11 +386,6 @@ static int rop_blocks[7][4][4][2] = {
     
     [self setupUI];
     [self setupGestures:view];
-    
-    _bgmNode = [SKAudioNode nodeWithFileNamed:@"bgm.mp3"];
-    _bgmNode.autoplayLooped = YES;
-    [_bgmNode runAction:[SKAction changeVolumeTo:0.2 duration:0]];
-    [self addChild:_bgmNode];
 }
 
 - (void)setupUI {
@@ -403,7 +393,7 @@ static int rop_blocks[7][4][4][2] = {
     _scoreLbl.text = @"STACKS CLEARED: 0";
     _scoreLbl.fontSize = 14;
     _scoreLbl.fontColor = [UIColor whiteColor];
-    _scoreLbl.position = CGPointMake(self.size.width / 2, 10);
+    _scoreLbl.position = CGPointMake(self.size.width / 2, 2);
     [self addChild:_scoreLbl];
 
     _pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -424,7 +414,7 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBtn.text = @"🏆 HIGH SCORES";
     _highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _highScoreBtn.fontSize = 14;
-    _highScoreBtn.position = CGPointMake(self.size.width / 2, self.size.height - 15);
+    _highScoreBtn.position = CGPointMake(self.size.width / 2, self.size.height - 25);
     [self addChild:_highScoreBtn];
     
     _previewNode = [SKNode node];
@@ -460,28 +450,6 @@ static int rop_blocks[7][4][4][2] = {
     _restartBtn.fontSize = 22;
     _restartBtn.position = CGPointMake(30, 20);
     [self addChild:_restartBtn];
-    
-    _deathScoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _deathScoreLbl.fontSize = 24;
-    _deathScoreLbl.fontColor = [UIColor whiteColor];
-    _deathScoreLbl.position = CGPointMake(0, 20);
-    _deathScoreLbl.hidden = YES;
-    [_restartOverlay addChild:_deathScoreLbl];
-
-    _deathHighLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _deathHighLbl.fontSize = 18;
-    _deathHighLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    _deathHighLbl.position = CGPointMake(0, -20);
-    _deathHighLbl.hidden = YES;
-    [_restartOverlay addChild:_deathHighLbl];
-
-    _deathRestartIcon = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _deathRestartIcon.text = @"↺";
-    _deathRestartIcon.fontSize = 30;
-    _deathRestartIcon.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    _deathRestartIcon.position = CGPointMake(-(_restartOverlay.frame.size.width/2) + 30, 0);
-    _deathRestartIcon.hidden = YES;
-    [_restartOverlay addChild:_deathRestartIcon];
 }
 
 - (void)setupGestures:(SKView *)view {
@@ -564,12 +532,7 @@ static int rop_blocks[7][4][4][2] = {
         return;
     }
 
-    if (_isDead) {
-        [self resetGame];
-        return;
-    }
-
-    if (!_isPlaying) {
+    if (!_isPlaying || _isDead) {
         if ([_startBtn containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])) {
             [self resetGame];
         }
@@ -580,9 +543,6 @@ static int rop_blocks[7][4][4][2] = {
                 _startBtn.text = @"▶ RESUME";
                 _startBtn.hidden = NO;
                 _restartOverlay.hidden = NO;
-                _deathScoreLbl.hidden = YES;
-                _deathHighLbl.hidden = YES;
-                _deathRestartIcon.hidden = YES;
             } else {
                 _startBtn.hidden = YES;
                 _restartOverlay.hidden = YES;
@@ -707,9 +667,6 @@ static int rop_blocks[7][4][4][2] = {
     _startBtn.hidden = YES;
     _restartOverlay.hidden = YES;
     _highScoreBtn.hidden = YES;
-    _deathScoreLbl.hidden = YES;
-    _deathHighLbl.hidden = YES;
-    _deathRestartIcon.hidden = YES;
     [_board removeAllObjects];
     _score = 0;
     _tickRate = 0.5;
@@ -722,33 +679,20 @@ static int rop_blocks[7][4][4][2] = {
 - (void)die {
     _isDead = YES;
     _isPlaying = NO;
-    _startBtn.hidden = YES;
+    _startBtn.text = @"↻ KERNEL PANIC";
+    _startBtn.hidden = NO;
     _restartOverlay.hidden = NO;
-    _highScoreBtn.hidden = YES;
-    _deathScoreLbl.hidden = NO;
-    _deathHighLbl.hidden = NO;
-    _deathRestartIcon.hidden = NO;
-    
-    [self runAction:[SKAction playSoundFileNamed:@"die.wav" waitForCompletion:NO]];
+    _highScoreBtn.hidden = NO;
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeError];
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_ROPHighScore"];
-    BOOL isNewHigh = NO;
     if (_score > best) {
-        best = _score;
         [def setInteger:_score forKey:@"ADS_ROPHighScore"];
         [def synchronize];
-        isNewHigh = YES;
-    }
-    
-    _deathScoreLbl.text = [NSString stringWithFormat:@"SCORE: %ld", (long)_score];
-    _deathHighLbl.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
-    
-    if (isNewHigh) {
-        [self runAction:[SKAction sequence:@[[SKAction waitForDuration:0.5], [SKAction playSoundFileNamed:@"highscore.wav" waitForCompletion:NO]]]];
+        [self showLeaderboard];
     }
 }
 
@@ -756,7 +700,7 @@ static int rop_blocks[7][4][4][2] = {
     _bType = _nextType;
     _nextType = arc4random_uniform(7);
     _bRot = 0;
-    _bX = (kRopCols / 2) - 1;
+    _bX = kRopCols / 2;
     _bY = kRopRows - 2;
     
     if (![self isValidX:_bX y:_bY rot:_bRot type:_bType]) {
@@ -841,8 +785,6 @@ static int rop_blocks[7][4][4][2] = {
         if (linesCleared == 4) {
             _isPaused = YES;
             
-            [self runAction:[SKAction playSoundFileNamed:@"clear4.wav" waitForCompletion:NO]];
-            
             SKAction *s1 = [SKAction moveByX:-10 y:10 duration:0.04];
             SKAction *s2 = [SKAction moveByX:20 y:-20 duration:0.04];
             SKAction *s3 = [SKAction moveByX:-20 y:20 duration:0.04];
@@ -860,34 +802,34 @@ static int rop_blocks[7][4][4][2] = {
             
             SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
             bg.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; 
-            bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+            bg.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             bg.lineWidth = 3.0;
             [msgContainer addChild:bg];
             
             SKShapeNode *glow = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
             glow.fillColor = [UIColor clearColor];
-            glow.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:0.8];
+            glow.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:0.8];
             glow.lineWidth = 8.0;
             [msgContainer addChild:glow];
             [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.1 duration:0.3], [SKAction fadeAlphaTo:0.2 duration:0.3], [SKAction scaleTo:1.0 duration:0.3], [SKAction fadeAlphaTo:0.8 duration:0.3]]]]];
             
             SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
             line1.text = @"[ KERNEL OVERRIDE ]";
-            line1.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+            line1.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             line1.fontSize = 22;
             line1.position = CGPointMake(0, 10);
             [msgContainer addChild:line1];
             
             SKLabelNode *line2 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
             line2.text = @"100%";
-            line2.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+            line2.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             line2.fontSize = 34;
             line2.position = CGPointMake(0, -28);
             [msgContainer addChild:line2];
             
             SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
             flash.position = CGPointMake(self.size.width/2, self.size.height/2);
-            flash.fillColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+            flash.fillColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             flash.alpha = 0.0;
             flash.zPosition = 99;
             [self addChild:flash];
@@ -909,8 +851,6 @@ static int rop_blocks[7][4][4][2] = {
                 [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
             });
         } else {
-            [self runAction:[SKAction playSoundFileNamed:@"clear.wav" waitForCompletion:NO]];
-            
             SKAction *s1 = [SKAction moveByX:-4 y:2 duration:0.04];
             SKAction *s2 = [SKAction moveByX:8 y:-4 duration:0.04];
             SKAction *s3 = [SKAction moveByX:-8 y:4 duration:0.04];
@@ -1029,7 +969,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_btnTetris];
     
     SKLabelNode *tetrisLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    tetrisLbl.text = @"🧱 Jail-Tris";
+    tetrisLbl.text = @"🧱 ROP STACKER";
     tetrisLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     tetrisLbl.fontSize = 18;
     tetrisLbl.position = CGPointMake(0, -6);
