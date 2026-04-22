@@ -13,10 +13,13 @@ typedef struct {
 
 @interface ADSPyEaterScene ()
 @property (nonatomic, strong) SKLabelNode *musicBtn;
+@property (nonatomic, strong) SKShapeNode *musicBtnBg;
+@property (nonatomic, strong) SKNode *deathContainer;
 @end
 
 @interface ADSJailTrisScene ()
 @property (nonatomic, strong) SKLabelNode *musicBtn;
+@property (nonatomic, strong) SKShapeNode *musicBtnBg;
 @end
 
 // --- PYEATER SCENE ---
@@ -84,12 +87,12 @@ static const CGFloat kGridSize = 20.0;
     
     _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
         float *outBuf = (float *)outputData->mBuffers[0].mData;
-        float pyeaterTune[] = { 261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 261.63, 196.00 }; 
+        float pyeaterTune[] = { 440.00, 523.25, 659.25, 880.00, 783.99, 659.25, 523.25, 587.33 }; 
         for (AVAudioFrameCount i = 0; i < frameCount; i++) {
             float bgmSamp = 0;
             if (state->playBGM) {
                 state->bgmTime += 1.0/44100.0;
-                if (state->bgmTime > 0.15) {
+                if (state->bgmTime > 0.12) {
                     state->bgmTime = 0;
                     state->bgmIdx = (state->bgmIdx + 1) % 8;
                 }
@@ -156,10 +159,10 @@ static const CGFloat kGridSize = 20.0;
     [self.bloomNode addChild:self.startBtn];
 
     self.menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.menuBtn.text = @"< Menu";
-    self.menuBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    self.menuBtn.fontSize = 20;
-    self.menuBtn.position = CGPointMake(45, self.size.height - 40);
+    self.menuBtn.text = @"<";
+    self.menuBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    self.menuBtn.fontSize = 36;
+    self.menuBtn.position = CGPointMake(20, self.size.height - 40);
     [self.bloomNode addChild:self.menuBtn];
 
     self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -169,10 +172,17 @@ static const CGFloat kGridSize = 20.0;
     self.pauseBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); 
     [self.bloomNode addChild:self.pauseBtn];
     
+    self.musicBtnBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(90, 26) cornerRadius:13];
+    self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    self.musicBtnBg.fillColor = [UIColor clearColor];
+    self.musicBtnBg.lineWidth = 2.0;
+    self.musicBtnBg.position = CGPointMake(self.size.width - 55, 20);
+    [self.bloomNode addChild:self.musicBtnBg];
+    
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.musicBtn.fontSize = 12;
-    self.musicBtn.position = CGPointMake(self.size.width - 45, 15); 
-    [self.bloomNode addChild:self.musicBtn];
+    self.musicBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
+    [self.musicBtnBg addChild:self.musicBtn];
     [self updateMusicBtn];
     
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -273,7 +283,7 @@ static const CGFloat kGridSize = 20.0;
         return;
     }
     
-    if ([self.musicBtn containsPoint:loc]) {
+    if ([self.musicBtnBg containsPoint:loc]) {
         _musicEnabled = !_musicEnabled;
         [self updateMusicBtn];
         return;
@@ -287,20 +297,20 @@ static const CGFloat kGridSize = 20.0;
     if (self.gameState == ADSGameStateMenu) {
         [self resetGame];
     } else if (self.gameState == ADSGameStateDead) {
-        if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
-            [self resetGame];
-        }
+        [self resetGame];
     } else if (self.gameState == ADSGameStatePlaying) {
         if ([self.pauseBtn containsPoint:loc]) {
             self.gameState = ADSGameStatePaused;
             self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO;
+            self.restartOverlay.hidden = NO;
             if (_synthState) _synthState->playBGM = 0;
         }
     } else if (self.gameState == ADSGameStatePaused) {
-        if ([self.startBtn containsPoint:loc]) {
+        if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
             self.gameState = ADSGameStatePlaying;
             self.startBtn.hidden = YES;
+            self.restartOverlay.hidden = YES;
             if (_synthState && _musicEnabled) _synthState->playBGM = 1;
         }
     }
@@ -330,6 +340,8 @@ static const CGFloat kGridSize = 20.0;
     self.startBtn.hidden = YES;
     self.restartOverlay.hidden = YES;
     self.highScoreBtn.hidden = YES; 
+    [self.deathContainer removeFromParent];
+    self.deathContainer = nil;
     self.score = 0;
     self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
@@ -393,10 +405,6 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)die {
     self.gameState = ADSGameStateDead;
-    self.startBtn.text = @"↻ RE-EXECUTE";
-    self.startBtn.hidden = NO;
-    self.restartOverlay.hidden = NO;
-    self.highScoreBtn.hidden = NO; 
     if (_synthState) _synthState->playBGM = 0;
     
     [self playSFX:150.0 dur:0.5];
@@ -413,10 +421,51 @@ static const CGFloat kGridSize = 20.0;
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
     if (self.score > best) {
-        [def setInteger:self.score forKey:@"ADS_SnakeHighScore"];
+        best = self.score;
+        [def setInteger:best forKey:@"ADS_SnakeHighScore"];
         [def synchronize];
-        [self showLeaderboard];
     }
+    
+    self.deathContainer = [SKNode node];
+    self.deathContainer.zPosition = 60;
+    [self.bloomNode addChild:self.deathContainer];
+    
+    CGFloat overlayW = self.size.width - 60;
+    CGFloat overlayH = (self.size.height - 120) / 2.0;
+    SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
+    bg.position = CGPointMake(self.size.width / 2, self.size.height / 2);
+    bg.fillColor = [UIColor colorWithWhite:0.0 alpha:0.9];
+    bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    bg.lineWidth = 4.0;
+    [self.deathContainer addChild:bg];
+    
+    SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    lblScore.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
+    lblScore.fontColor = [UIColor whiteColor];
+    lblScore.fontSize = 24;
+    lblScore.position = CGPointMake(0, 10);
+    [bg addChild:lblScore];
+    
+    SKLabelNode *lblHigh = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    lblHigh.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
+    lblHigh.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    lblHigh.fontSize = 18;
+    lblHigh.position = CGPointMake(0, -20);
+    [bg addChild:lblHigh];
+    
+    SKLabelNode *lblIcon = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    lblIcon.text = @"↻";
+    lblIcon.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    lblIcon.fontSize = 72;
+    lblIcon.position = CGPointMake(-overlayW/2 + 50, -25);
+    [bg addChild:lblIcon];
+    
+    SKLabelNode *lblTap = [SKLabelNode labelNodeWithFontNamed:@"Courier"];
+    lblTap.text = @"Tap anywhere to restart";
+    lblTap.fontColor = [UIColor grayColor];
+    lblTap.fontSize = 12;
+    lblTap.position = CGPointMake(0, -overlayH/2 + 15);
+    [bg addChild:lblTap];
 }
 
 - (void)render {
@@ -579,20 +628,27 @@ static int rop_blocks[7][4][4][2] = {
     _pauseBtn.text = @"⏸";
     _pauseBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _pauseBtn.fontSize = 22;
-    _pauseBtn.position = CGPointMake(self.size.width - 25, self.size.height - 13);
+    _pauseBtn.position = CGPointMake(self.size.width - 25, self.size.height - 35);
     [self addChild:_pauseBtn];
 
     _menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _menuBtn.text = @"< Menu";
-    _menuBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    _menuBtn.fontSize = 20;
-    _menuBtn.position = CGPointMake(45, self.size.height - 13);
+    _menuBtn.text = @"<";
+    _menuBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    _menuBtn.fontSize = 36;
+    _menuBtn.position = CGPointMake(20, self.size.height - 35);
     [self addChild:_menuBtn];
+    
+    self.musicBtnBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(90, 26) cornerRadius:13];
+    self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    self.musicBtnBg.fillColor = [UIColor clearColor];
+    self.musicBtnBg.lineWidth = 2.0;
+    self.musicBtnBg.position = CGPointMake(self.size.width / 2, 25);
+    [self addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.musicBtn.fontSize = 12;
-    self.musicBtn.position = CGPointMake(self.size.width - 45, 15);
-    [self addChild:self.musicBtn];
+    self.musicBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
+    [self.musicBtnBg addChild:self.musicBtn];
     [self updateMusicBtn];
     
     _highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -727,7 +783,7 @@ static int rop_blocks[7][4][4][2] = {
         return;
     }
     
-    if ([self.musicBtn containsPoint:loc]) {
+    if ([self.musicBtnBg containsPoint:loc]) {
         _musicEnabled = !_musicEnabled;
         [self updateMusicBtn];
         return;
@@ -753,7 +809,7 @@ static int rop_blocks[7][4][4][2] = {
             [self resetGame];
         }
     } else if (_isPlaying && !_isDead) {
-        if ([_pauseBtn containsPoint:loc] || (_isPaused && [_startBtn containsPoint:loc])) {
+        if ([_pauseBtn containsPoint:loc] || (_isPaused && ([_startBtn containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])))) {
             _isPaused = !_isPaused;
             if (_isPaused) {
                 _startBtn.text = @"▶ RESUME";
@@ -853,7 +909,7 @@ static int rop_blocks[7][4][4][2] = {
     CGPoint viewLoc = [sender locationInView:sender.view];
     CGPoint loc = [self convertPointFromView:viewLoc];
     
-    if ([_pauseBtn containsPoint:loc] || [_menuBtn containsPoint:loc] || [self.musicBtn containsPoint:loc] || [_restartBtn containsPoint:loc]) {
+    if ([_pauseBtn containsPoint:loc] || [_menuBtn containsPoint:loc] || [self.musicBtnBg containsPoint:loc] || [_restartBtn containsPoint:loc]) {
         return;
     }
     
