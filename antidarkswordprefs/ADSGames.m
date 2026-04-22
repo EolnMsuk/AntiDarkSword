@@ -419,8 +419,8 @@ static int rop_blocks[7][4][4][2] = {
     _previewNode = [SKNode node];
     CGFloat boardWidth = kRopCols * kRopGrid;
     CGFloat boardHeight = kRopRows * kRopGrid;
-    _previewNode.position = CGPointMake(_gameLayer.position.x + boardWidth - 30, 
-                                        _gameLayer.position.y + boardHeight - 25);
+    _previewNode.position = CGPointMake(_gameLayer.position.x + boardWidth - 42, 
+                                        _gameLayer.position.y + boardHeight - 37);
     _previewNode.alpha = 0.5;
     [self addChild:_previewNode];
 
@@ -755,6 +755,19 @@ static int rop_blocks[7][4][4][2] = {
     }
     
     if (_isPlaying && !_isDead) {
+        int ghostY = _bY;
+        while ([self isValidX:_bX y:ghostY-1 rot:_bRot type:_bType]) ghostY--;
+        
+        UIColor *gC = [UIColor colorWithWhite:0.3 alpha:0.5];
+        for (int i=0; i<4; i++) {
+            int nx = _bX + rop_blocks[_bType][_bRot][i][0];
+            int ny = ghostY + rop_blocks[_bType][_bRot][i][1];
+            SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, ny*kRopGrid, kRopGrid-1, kRopGrid-1)];
+            node.fillColor = gC;
+            node.lineWidth = 0;
+            [_gameLayer addChild:node];
+        }
+        
         UIColor *c = [self colorForType:_bType];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
@@ -777,6 +790,7 @@ static int rop_blocks[7][4][4][2] = {
         }
     }
 }
+
 @end
 
 // --- MENU SCENE ---
