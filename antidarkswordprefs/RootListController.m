@@ -10,6 +10,8 @@
 #import <dlfcn.h>
 #import <sys/sysctl.h>
 #import <signal.h>
+#import <SpriteKit/SpriteKit.h>
+#import <CoreImage/CoreImage.h>
 
 #import "../ADSLogging.h"
 
@@ -157,7 +159,225 @@ static inline NSString *ads_root_path(NSString *path) {
 @interface AntiDarkSwordCreditsController : PSListController
 @end
 
+// --- EXPLOIT EATER SCENE ---
+@interface ADSExploitEaterScene : SKScene
+@property (nonatomic, strong) NSMutableArray<NSValue *> *snake;
+@property (nonatomic, assign) CGPoint food;
+@property (nonatomic, assign) CGVector direction;
+@property (nonatomic, assign) NSTimeInterval lastTick;
+@property (nonatomic, assign) BOOL isDead;
+@property (nonatomic, strong) SKNode *gameLayer;
+@property (nonatomic, strong) SKEffectNode *bloomNode;
+@property (nonatomic, copy) void (^exitHandler)(void);
+@end
+
+@implementation ADSExploitEaterScene
+static const CGFloat kGridSize = 20.0;
+
+- (void)didMoveToView:(SKView *)view {
+    self.backgroundColor = [UIColor blackColor];
+    
+    self.bloomNode = [[SKEffectNode alloc] init];
+    CIFilter *bloom = [CIFilter filterWithName:@"CIBloom"];
+    [bloom setValue:@0.5 forKey:@"inputRadius"];
+    [bloom setValue:@1.2 forKey:@"inputIntensity"];
+    self.bloomNode.filter = bloom;
+    self.bloomNode.shouldEnableEffects = YES;
+    [self addChild:self.bloomNode];
+    
+    self.gameLayer = [SKNode node];
+    [self.bloomNode addChild:self.gameLayer];
+    
+    [self setupGestures:view];
+    [self drawWalls];
+    [self resetGame];
+}
+
+- (void)setupGestures:(SKView *)view {
+    NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionUp), @(UISwipeGestureRecognizerDirectionDown), 
+                      @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
+    for (NSNumber *dir in dirs) {
+        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
+        swipe.direction = dir.integerValue;
+        [view addGestureRecognizer:swipe];
+    }
+    UITapGestureRecognizer *doubleTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleDoubleTap:)];
+    doubleTap.numberOfTapsRequired = 2;
+    [view addGestureRecognizer:doubleTap];
+}
+
+- (void)handleSwipe:(UISwipeGestureRecognizer *)sender {
+    if (self.isDead) { [self resetGame]; return; }
+    if (sender.direction == UISwipeGestureRecognizerDirectionUp && self.direction.dy == 0) self.direction = CGVectorMake(0, 1);
+    else if (sender.direction == UISwipeGestureRecognizerDirectionDown && self.direction.dy == 0) self.direction = CGVectorMake(0, -1);
+    else if (sender.direction == UISwipeGestureRecognizerDirectionLeft && self.direction.dx == 0) self.direction = CGVectorMake(-1, 0);
+    else if (sender.direction == UISwipeGestureRecognizerDirectionRight && self.direction.dx == 0) self.direction = CGVectorMake(1, 0);
+}
+
+- (void)handleDoubleTap:(UITapGestureRecognizer *)sender {
+    if (self.exitHandler) self.exitHandler();
+}
+
+- (void)drawWalls {
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(self.size.width - kGridSize*2, self.size.height - kGridSize*4)];
+    border.position = CGPointMake(self.size.width/2, self.size.height/2);
+    border.strokeColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    border.lineWidth = 4.0;
+    [self.bloomNode addChild:border];
+}
+
+- (void)resetGame {
+    self.isDead = NO;
+    self.direction = CGVectorMake(1, 0);
+    self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake(10, 10)]];
+    [self spawnFood];
+    self.lastTick = 0;
+}
+
+- (void)spawnFood {
+    int maxX = (self.size.width - kGridSize*4) / kGridSize;
+    int maxY = (self.size.height - kGridSize*6) / kGridSize;
+    int x = (arc4random_uniform(maxX) + 2);
+    int y = (arc4random_uniform(maxY) + 3);
+    self.food = CGPointMake(x, y);
+}
+
+- (void)update:(NSTimeInterval)currentTime {
+    if (self.isDead) return;
+    if (currentTime - self.lastTick < 0.15) return;
+    self.lastTick = currentTime;
+    
+    CGPoint head = self.snake.firstObject.CGPointValue;
+    CGPoint next = CGPointMake(head.x + self.direction.dx, head.y + self.direction.dy);
+    
+    int maxX = (self.size.width - kGridSize*2) / kGridSize;
+    int maxY = (self.size.height - kGridSize*4) / kGridSize;
+    if (next.x < 1 || next.x >= maxX || next.y < 2 || next.y >= maxY) { [self die]; return; }
+    
+    for (NSValue *val in self.snake) {
+        if (CGPointEqualToPoint(val.CGPointValue, next)) { [self die]; return; }
+    }
+    
+    [self.snake insertObject:[NSValue valueWithCGPoint:next] atIndex:0];
+    
+    if (CGPointEqualToPoint(next, self.food)) {
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feed impactOccurred];
+        [self spawnFood];
+    } else {
+        [self.snake removeLastObject];
+    }
+    [self render];
+}
+
+- (void)die {
+    self.isDead = YES;
+    UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
+    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
+    
+    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
+    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
+    [self addChild:flash];
+    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
+}
+
+- (void)render {
+    [self.gameLayer removeAllChildren];
+    
+    SKShapeNode *fNode = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(kGridSize-2, kGridSize-2)];
+    fNode.fillColor = [UIColor colorWithRed:0.2 green:1.0 blue:0.2 alpha:1.0];
+    fNode.position = CGPointMake(self.food.x * kGridSize, self.food.y * kGridSize);
+    [self.gameLayer addChild:fNode];
+    
+    for (NSValue *val in self.snake) {
+        CGPoint p = val.CGPointValue;
+        SKShapeNode *sNode = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(kGridSize-2, kGridSize-2)];
+        sNode.fillColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+        sNode.position = CGPointMake(p.x * kGridSize, p.y * kGridSize);
+        [self.gameLayer addChild:sNode];
+    }
+}
+@end
+
+// --- CONTROLLER INTEGRATION ---
+@interface AntiDarkSwordCreditsController ()
+@property (nonatomic, strong) SKView *gameView;
+@end
+
 @implementation AntiDarkSwordCreditsController
+
+- (BOOL)canBecomeFirstResponder { return YES; }
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self becomeFirstResponder];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self resignFirstResponder];
+    [self teardownGame];
+}
+
+- (void)motionEnded:(UIEventSubtype)motion withEvent:(UIEvent *)event {
+    if (motion == UIEventSubtypeMotionShake) {
+        if (self.gameView) [self teardownGame];
+        else [self launchGame];
+    }
+}
+
+- (void)launchGame {
+    if (self.gameView) return;
+    
+    UITableView *table = (UITableView *)[self valueForKey:@"_table"];
+    if (!table) return;
+
+    CGFloat width = table.bounds.size.width;
+    CGFloat height = 350.0;
+    
+    UIView *footerContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, height + 40)];
+    footerContainer.backgroundColor = [UIColor clearColor];
+    
+    self.gameView = [[SKView alloc] initWithFrame:CGRectMake(16, 20, width - 32, height)];
+    self.gameView.layer.cornerRadius = 12.0;
+    self.gameView.clipsToBounds = YES;
+    self.gameView.alpha = 0.0;
+    
+    [footerContainer addSubview:self.gameView];
+    table.tableFooterView = footerContainer;
+    
+    ADSExploitEaterScene *scene = [[ADSExploitEaterScene alloc] initWithSize:self.gameView.bounds.size];
+    scene.scaleMode = SKSceneScaleModeAspectFill;
+    
+    __weak typeof(self) weakSelf = self;
+    scene.exitHandler = ^{ [weakSelf teardownGame]; };
+    
+    [self.gameView presentScene:scene];
+    
+    [UIView animateWithDuration:0.5 animations:^{
+        self.gameView.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        CGRect footerRect = [table convertRect:table.tableFooterView.bounds fromView:table.tableFooterView];
+        [table scrollRectToVisible:footerRect animated:YES];
+    }];
+}
+
+- (void)teardownGame {
+    if (!self.gameView) return;
+    
+    [UIView animateWithDuration:0.5 animations:^{
+        self.gameView.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        [self.gameView presentScene:nil];
+        [self.gameView removeFromSuperview];
+        self.gameView = nil;
+        
+        UITableView *table = (UITableView *)[self valueForKey:@"_table"];
+        if (table) table.tableFooterView = nil;
+    }];
+}
+
 - (UIImage *)resizeIcon:(UIImage *)image toSize:(CGSize)size {
     if (!image) return nil;
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size];
@@ -254,7 +474,7 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
         NSInteger autoProtectLevel = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
 
         PSSpecifier *decoyGroup = [PSSpecifier preferenceSpecifierNamed:@"Corellium Honeypot" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [decoyGroup setProperty:@"Spoofs Corellium environment to cause exploits (like Coruna) to self-abort. All four daemons are force enabled when this is on" forKey:@"footerText"];
+        [decoyGroup setProperty:@"Spoofs Corellium environment to cause exploits (like Coruna) to self-abort." forKey:@"footerText"];
         [specs addObject:decoyGroup];
 
         PSSpecifier *decoySpec = [PSSpecifier preferenceSpecifierNamed:@"Enable Corellium Honeypot" target:self set:@selector(setCorelliumEnabled:specifier:) get:@selector(getCorelliumEnabled:) detail:nil cell:PSSwitchCell edit:nil];
@@ -963,10 +1183,10 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
             if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
                 if (autoProtectLevel < 3) {
                     [s setProperty:@NO forKey:@"enabled"];
-                    s.name = @"⚙️ Level 3 Settings 🔒";
+                    s.name = @"🔒  Level 3 Settings";
                 } else {
                     [s setProperty:@YES forKey:@"enabled"];
-                    s.name = @"⚙️ Level 3 Settings";
+                    s.name = @"⚙️  Level 3 Settings";
                 }
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
