@@ -566,25 +566,42 @@ static int rop_blocks[7][4][4][2] = {
             }
         }
     } else if (sender.state == UIGestureRecognizerStateEnded) {
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
-                int steps = 0;
-                if (translation.x > 0) {
-                    while (steps < 3 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
-                } else {
-                    while (steps < 3 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
+                int dir = translation.x > 0 ? 1 : -1;
+                for (int i = 1; i <= 3; i++) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.03 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
+                            self->_bX += dir;
+                            [feed impactOccurred];
+                            [self render];
+                        }
+                    });
                 }
             } else {
                 if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
                 else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+                [self render];
             }
         } else {
             if (translation.y > 0 && velocity.y > 800) { 
-                while ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) _bY--;
-                _lastTick = 0; 
+                int drops = 0;
+                while ([self isValidX:_bX y:_bY - (drops + 1) rot:_bRot type:_bType]) drops++;
+                
+                for (int i = 1; i <= drops; i++) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.015 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        if ([self isValidX:self->_bX y:self->_bY - 1 rot:self->_bRot type:self->_bType]) {
+                            self->_bY--;
+                            [feed impactOccurred];
+                            [self render];
+                        }
+                        if (i == drops) self->_lastTick = 0; 
+                    });
+                }
             }
         }
-        [self render];
     }
 }
 
@@ -607,13 +624,17 @@ static int rop_blocks[7][4][4][2] = {
     
     if (!rotated) {
         if ([self isValidX:_bX y:_bY+1 rot:nextRot type:_bType]) {
-            _bY++; _bRot = nextRot;
+            _bY++; _bRot = nextRot; rotated = YES;
         } else if ([self isValidX:_bX y:_bY+2 rot:nextRot type:_bType]) {
-            _bY += 2; _bRot = nextRot;
+            _bY += 2; _bRot = nextRot; rotated = YES;
         }
     }
     
-    [self render];
+    if (rotated) {
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [feed impactOccurred];
+        [self render];
+    }
 }
 
 - (void)resetGame {
@@ -797,7 +818,7 @@ static int rop_blocks[7][4][4][2] = {
         int ghostY = _bY;
         while ([self isValidX:_bX y:ghostY-1 rot:_bRot type:_bType]) ghostY--;
         
-        UIColor *gC = [UIColor colorWithWhite:0.6 alpha:0.85];
+        UIColor *gC = [UIColor colorWithWhite:0.4 alpha:0.50];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
             int ny = ghostY + rop_blocks[_bType][_bRot][i][1];
