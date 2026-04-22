@@ -789,7 +789,7 @@ static int rop_blocks[7][4][4][2] = {
             SKAction *s2 = [SKAction moveByX:20 y:-20 duration:0.04];
             SKAction *s3 = [SKAction moveByX:-20 y:20 duration:0.04];
             SKAction *sCenter = [SKAction moveByX:10 y:-10 duration:0.04];
-            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, s2, sCenter]]];
+            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
             
             SKNode *msgContainer = [SKNode node];
             msgContainer.position = CGPointMake(self.size.width/2, self.size.height/2);
@@ -855,7 +855,7 @@ static int rop_blocks[7][4][4][2] = {
             SKAction *s2 = [SKAction moveByX:8 y:-4 duration:0.04];
             SKAction *s3 = [SKAction moveByX:-8 y:4 duration:0.04];
             SKAction *sCenter = [SKAction moveByX:4 y:-2 duration:0.04];
-            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, s2, sCenter]]];
+            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
             
             SKAction *colorHighlight = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; }];
             SKAction *scaleUp = [SKAction scaleTo:1.5 duration:0.15];
