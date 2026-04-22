@@ -623,8 +623,12 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_highScoreBtn];
     
     _previewNode = [SKNode node];
-    // Position preview relative to the top right to avoid overlap
-    _previewNode.position = CGPointMake(self.size.width - 40, self.size.height - 85);
+    // Position preview dynamically inside the top-right corner of the playable area
+    CGFloat boardWidth = kRopCols * kRopGrid;
+    CGFloat boardHeight = kRopRows * kRopGrid;
+    _previewNode.position = CGPointMake(_gameLayer.position.x + boardWidth - 60, 
+                                        _gameLayer.position.y + boardHeight - 50);
+    _previewNode.alpha = 0.5; // Slightly transparent so it doesn't obscure falling blocks
     [self addChild:_previewNode];
 
     CGFloat overlayW = self.size.width - 60;
@@ -754,10 +758,11 @@ static int rop_blocks[7][4][4][2] = {
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
                 int steps = 0;
+                // Increased steps from 2 to 3 to travel one extra block further
                 if (translation.x > 0) {
-                    while (steps < 2 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
+                    while (steps < 3 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
                 } else {
-                    while (steps < 2 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
+                    while (steps < 3 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
                 }
             } else {
                 if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
