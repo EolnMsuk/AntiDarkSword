@@ -4,7 +4,7 @@ TARGET ?= iphone:clang:latest:14.5
 include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = AntiDarkSwordPrefs
-AntiDarkSwordPrefs_FILES = RootListController.m
+AntiDarkSwordPrefs_FILES = RootListController.m ADSGames.m
 AntiDarkSwordPrefs_FRAMEWORKS = UIKit
 AntiDarkSwordPrefs_PRIVATE_FRAMEWORKS = Preferences
 AntiDarkSwordPrefs_EXTRA_FRAMEWORKS = AltList
