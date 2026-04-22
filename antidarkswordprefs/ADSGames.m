@@ -1300,7 +1300,7 @@ static int rop_blocks[7][4][4][2] = {
     title.text = @"SELECT GAME";
     title.fontColor = [UIColor whiteColor];
     title.fontSize = 22;
-    title.position = CGPointMake(self.size.width/2, self.size.height - 100); 
+    title.position = CGPointMake(self.size.width/2, self.size.height - 78); 
     [self addChild:title];
     
     _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -1310,7 +1310,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_closeBtn];
 
     _btnSnake = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 - 50);
+    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 - 28);
     _btnSnake.fillColor = [UIColor clearColor];
     _btnSnake.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _btnSnake.lineWidth = 3.0;
@@ -1324,7 +1324,7 @@ static int rop_blocks[7][4][4][2] = {
     [_btnSnake addChild:snakeLbl];
 
     _btnTetris = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 + 50);
+    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 + 72);
     _btnTetris.fillColor = [UIColor clearColor];
     _btnTetris.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _btnTetris.lineWidth = 3.0;
@@ -1341,7 +1341,7 @@ static int rop_blocks[7][4][4][2] = {
     _dedicationBtn.text = @"DEDICATED TO ⚫ ANDREW ";
     _dedicationBtn.fontColor = [UIColor colorWithWhite:0.8 alpha:1.0];
     _dedicationBtn.fontSize = 16;
-    _dedicationBtn.position = CGPointMake(self.size.width/2, 52);
+    _dedicationBtn.position = CGPointMake(self.size.width/2, 74);
     [self addChild:_dedicationBtn];
     
     SKShapeNode *glow = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 30) cornerRadius:15];
