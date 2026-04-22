@@ -556,18 +556,18 @@ static int rop_blocks[7][4][4][2] = {
     
     CGPoint translation = [sender translationInView:sender.view];
     CGPoint velocity = [sender velocityInView:sender.view];
+    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
 
     if (sender.state == UIGestureRecognizerStateChanged) {
         if (translation.y > 25 && fabs(translation.y) > fabs(translation.x)) {
             if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) {
                 _bY--;
+                [feed impactOccurred];
                 [sender setTranslation:CGPointZero inView:sender.view];
                 [self render];
             }
         }
     } else if (sender.state == UIGestureRecognizerStateEnded) {
-        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-        
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
                 int dir = translation.x > 0 ? 1 : -1;
@@ -581,8 +581,13 @@ static int rop_blocks[7][4][4][2] = {
                     });
                 }
             } else {
-                if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
-                else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+                if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) {
+                    _bX++;
+                    [feed impactOccurred];
+                } else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) {
+                    _bX--;
+                    [feed impactOccurred];
+                }
                 [self render];
             }
         } else {
@@ -762,13 +767,30 @@ static int rop_blocks[7][4][4][2] = {
         if (linesCleared == 4) {
             _isPaused = YES;
             
-            SKLabelNode *msg = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-            msg.text = @"[ KERNEL OVERRIDE 100% ]";
-            msg.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
-            msg.fontSize = 20;
-            msg.position = CGPointMake(self.size.width/2, self.size.height/2);
-            msg.zPosition = 100;
-            [self addChild:msg];
+            SKNode *msgContainer = [SKNode node];
+            msgContainer.position = CGPointMake(self.size.width/2, self.size.height/2);
+            msgContainer.zPosition = 100;
+            [self addChild:msgContainer];
+            
+            SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
+            bg.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; 
+            bg.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
+            bg.lineWidth = 3.0;
+            [msgContainer addChild:bg];
+            
+            SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+            line1.text = @"[ KERNEL OVERRIDE ]";
+            line1.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
+            line1.fontSize = 22;
+            line1.position = CGPointMake(0, 10);
+            [msgContainer addChild:line1];
+            
+            SKLabelNode *line2 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+            line2.text = @"100%";
+            line2.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
+            line2.fontSize = 34;
+            line2.position = CGPointMake(0, -28);
+            [msgContainer addChild:line2];
             
             SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
             flash.position = CGPointMake(self.size.width/2, self.size.height/2);
@@ -782,7 +804,7 @@ static int rop_blocks[7][4][4][2] = {
             SKAction *hold = [SKAction waitForDuration:1.5];
             SKAction *moveUp = [SKAction moveByX:0 y:50 duration:0.6];
             SKAction *fadeOut = [SKAction fadeOutWithDuration:0.6];
-            [msg runAction:[SKAction sequence:@[hold, [SKAction group:@[moveUp, fadeOut]], [SKAction removeFromParent], [SKAction runBlock:^{ self->_isPaused = NO; }]]]];
+            [msgContainer runAction:[SKAction sequence:@[hold, [SKAction group:@[moveUp, fadeOut]], [SKAction removeFromParent], [SKAction runBlock:^{ self->_isPaused = NO; }]]]];
             
             UINotificationFeedbackGenerator *successFeed = [[UINotificationFeedbackGenerator alloc] init];
             [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
@@ -906,9 +928,9 @@ static int rop_blocks[7][4][4][2] = {
     [_btnTetris addChild:tetrisLbl];
 
     _dedicationBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _dedicationBtn.text = @"DEDICATED TO ANDREW ⚫";
+    _dedicationBtn.text = @"DEDICATED TO ⚫ ANDREW ";
     _dedicationBtn.fontColor = [UIColor colorWithWhite:0.8 alpha:1.0];
-    _dedicationBtn.fontSize = 14;
+    _dedicationBtn.fontSize = 16;
     _dedicationBtn.position = CGPointMake(self.size.width/2, 30);
     [self addChild:_dedicationBtn];
     
