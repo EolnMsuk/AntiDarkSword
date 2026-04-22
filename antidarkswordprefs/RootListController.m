@@ -258,7 +258,7 @@ static const CGFloat kGridSize = 20.0;
     [self.bloomNode addChild:self.restartOverlay];
 
     self.startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.startBtn.text = @"▶ START";
+    self.startBtn.text = @"▶ EXECUTE";
     self.startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.startBtn.fontSize = 40;
     self.startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 15);
@@ -378,7 +378,7 @@ static const CGFloat kGridSize = 20.0;
     } else if (self.gameState == ADSGameStatePlaying) {
         if ([self.pauseBtn containsPoint:loc]) {
             self.gameState = ADSGameStatePaused;
-            self.startBtn.text = @"▶ RESUME";
+            self.startBtn.text = @"▶ RESUME INJECTION";
             self.startBtn.hidden = NO;
         }
     } else if (self.gameState == ADSGameStatePaused) {
@@ -475,7 +475,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)die {
     self.gameState = ADSGameStateDead;
-    self.startBtn.text = @"↻ RESTART";
+    self.startBtn.text = @"↻ RE-EXECUTE";
     self.startBtn.hidden = NO;
     self.restartOverlay.hidden = NO;
     self.highScoreBtn.hidden = NO; // Reveal high score when game ends
@@ -572,8 +572,8 @@ static int rop_blocks[7][4][4][2] = {
     
     CGFloat boardWidth = kRopCols * kRopGrid;
     CGFloat boardHeight = kRopRows * kRopGrid;
-    // Push the board down slightly to maximize space while leaving room for top UI
-    _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 - 5);
+    // Center adjusted for larger frame height
+    _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 15);
     [self addChild:_gameLayer];
     
     [self setupUI];
@@ -586,7 +586,7 @@ static int rop_blocks[7][4][4][2] = {
     _scoreLbl.text = @"STACKS CLEARED: 0";
     _scoreLbl.fontSize = 14;
     _scoreLbl.fontColor = [UIColor whiteColor];
-    _scoreLbl.position = CGPointMake(self.size.width / 2, 8);
+    _scoreLbl.position = CGPointMake(self.size.width / 2, 20);
     [self addChild:_scoreLbl];
 
     // Pause Button (Top Left)
@@ -1026,7 +1026,7 @@ static int rop_blocks[7][4][4][2] = {
     if (!table) return;
 
     CGFloat width = table.bounds.size.width;
-    CGFloat height = 350.0;
+    CGFloat height = 480.0; 
     
     UIView *footerContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, height + 40)];
     footerContainer.backgroundColor = [UIColor clearColor];
@@ -1039,29 +1039,41 @@ static int rop_blocks[7][4][4][2] = {
     [footerContainer addSubview:self.gameView];
     table.tableFooterView = footerContainer;
     
-    ADSGameMenuScene *menuScene = [[ADSGameMenuScene alloc] initWithSize:self.gameView.bounds.size];
-    menuScene.scaleMode = SKSceneScaleModeAspectFill;
-    
     __weak typeof(self) weakSelf = self;
-    menuScene.exitHandler = ^{ [weakSelf teardownGame]; };
+    __block void (^showMenuScene)(BOOL);
+    __block __weak void (^weakShowMenuScene)(BOOL);
     
-    menuScene.onSelectGame = ^(NSInteger gameIndex) {
-        SKScene *selectedScene;
-        if (gameIndex == 0) {
-            ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
-            s.exitHandler = ^{ [weakSelf teardownGame]; };
-            selectedScene = s;
+    showMenuScene = ^(BOOL animate) {
+        ADSGameMenuScene *menuScene = [[ADSGameMenuScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+        menuScene.scaleMode = SKSceneScaleModeAspectFill;
+        menuScene.exitHandler = ^{ [weakSelf teardownGame]; };
+        
+        menuScene.onSelectGame = ^(NSInteger gameIndex) {
+            SKScene *selectedScene;
+            if (gameIndex == 0) {
+                ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+                s.exitHandler = ^{ if (weakShowMenuScene) weakShowMenuScene(YES); };
+                selectedScene = s;
+            } else {
+                ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+                s.exitHandler = ^{ if (weakShowMenuScene) weakShowMenuScene(YES); };
+                selectedScene = s;
+            }
+            selectedScene.scaleMode = SKSceneScaleModeAspectFill;
+            SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionLeft duration:0.3];
+            [weakSelf.gameView presentScene:selectedScene transition:transition];
+        };
+        
+        if (animate) {
+            SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionRight duration:0.3];
+            [weakSelf.gameView presentScene:menuScene transition:transition];
         } else {
-            ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
-            s.exitHandler = ^{ [weakSelf teardownGame]; };
-            selectedScene = s;
+            [weakSelf.gameView presentScene:menuScene];
         }
-        selectedScene.scaleMode = SKSceneScaleModeAspectFill;
-        SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionLeft duration:0.3];
-        [weakSelf.gameView presentScene:selectedScene transition:transition];
     };
+    weakShowMenuScene = showMenuScene;
     
-    [self.gameView presentScene:menuScene];
+    showMenuScene(NO);
     
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 1.0;
