@@ -569,10 +569,18 @@ static int rop_blocks[7][4][4][2] = {
         }
     } else if (sender.state == UIGestureRecognizerStateEnded) {
         if (fabs(translation.x) > fabs(translation.y)) { 
-            if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
-                int dir = translation.x > 0 ? 1 : -1;
-                for (int i = 1; i <= 3; i++) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.03 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            int dir = translation.x > 0 ? 1 : -1;
+            int blocksToMove = 1;
+            
+            if (fabs(velocity.x) > 1500 || fabs(translation.x) > 120) {
+                blocksToMove = 4;
+            } else if (fabs(velocity.x) > 800 || fabs(translation.x) > 60) {
+                blocksToMove = 2;
+            }
+            
+            if (blocksToMove > 1) {
+                for (int i = 1; i <= blocksToMove; i++) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
                             self->_bX += dir;
                             [feed impactOccurred];
@@ -581,29 +589,42 @@ static int rop_blocks[7][4][4][2] = {
                     });
                 }
             } else {
-                if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) {
-                    _bX++;
-                    [feed impactOccurred];
-                } else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) {
-                    _bX--;
+                if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
+                    self->_bX += dir;
                     [feed impactOccurred];
                 }
                 [self render];
             }
         } else {
-            if (translation.y > 0 && velocity.y > 800) { 
+            if (translation.y > 0 && velocity.y > 350) { 
                 int drops = 0;
                 while ([self isValidX:_bX y:_bY - (drops + 1) rot:_bRot type:_bType]) drops++;
                 
-                for (int i = 1; i <= drops; i++) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.015 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        if ([self isValidX:self->_bX y:self->_bY - 1 rot:self->_bRot type:self->_bType]) {
-                            self->_bY--;
-                            [feed impactOccurred];
-                            [self render];
-                        }
-                        if (i == drops) self->_lastTick = 0; 
-                    });
+                if (drops > 0) {
+                    int startY = _bY;
+                    _bY -= drops;
+                    
+                    UIImpactFeedbackGenerator *heavyFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
+                    [heavyFeed impactOccurred];
+                    
+                    [self render];
+                    
+                    UIColor *c = [self colorForType:_bType];
+                    for (int i = 0; i < 4; i++) {
+                        int nx = _bX + rop_blocks[_bType][_bRot][i][0];
+                        int nyBot = _bY + rop_blocks[_bType][_bRot][i][1];
+                        int nyTop = startY + rop_blocks[_bType][_bRot][i][1];
+                        
+                        CGFloat height = (nyTop - nyBot) * kRopGrid + (kRopGrid - 1);
+                        SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(nx * kRopGrid, nyBot * kRopGrid, kRopGrid - 1, height)];
+                        trail.fillColor = [c colorWithAlphaComponent:0.6];
+                        trail.lineWidth = 0;
+                        [self->_gameLayer addChild:trail];
+                        
+                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.25], [SKAction removeFromParent]]]];
+                    }
+                    
+                    _lastTick = 0; 
                 }
             }
         }
