@@ -344,7 +344,7 @@ static const CGFloat kGridSize = 20.0;
     BOOL _isDead, _isPlaying, _isPaused;
 }
 
-static const CGFloat kRopGrid = 20.0; 
+static const CGFloat kRopGrid = 26.0; 
 static const int kRopCols = 10;
 static const int kRopRows = 20;
 
@@ -393,7 +393,7 @@ static int rop_blocks[7][4][4][2] = {
     _scoreLbl.text = @"STACKS CLEARED: 0";
     _scoreLbl.fontSize = 14;
     _scoreLbl.fontColor = [UIColor whiteColor];
-    _scoreLbl.position = CGPointMake(self.size.width / 2, 20);
+    _scoreLbl.position = CGPointMake(self.size.width / 2, 5);
     [self addChild:_scoreLbl];
 
     _pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -909,7 +909,7 @@ static int rop_blocks[7][4][4][2] = {
         }
         
         UIColor *nc = [self colorForType:_nextType];
-        CGFloat pGrid = 12.0; 
+        CGFloat pGrid = 16.0; 
         for (int i=0; i<4; i++) {
             int nx = rop_blocks[_nextType][0][i][0];
             int ny = rop_blocks[_nextType][0][i][1];
