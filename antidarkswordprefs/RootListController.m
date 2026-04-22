@@ -288,13 +288,11 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)setupGestures:(SKView *)view {
-    NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionUp), @(UISwipeGestureRecognizerDirectionDown), 
-                      @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
-    for (NSNumber *dir in dirs) {
-        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
-        swipe.direction = dir.integerValue;
-        [view addGestureRecognizer:swipe];
-    }
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    [view addGestureRecognizer:pan];
+    
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
+    [view addGestureRecognizer:tap];
 }
 
 - (void)showLeaderboard {
@@ -732,15 +730,32 @@ static int rop_blocks[7][4][4][2] = {
     }
 }
 
-- (void)handleSwipe:(UISwipeGestureRecognizer *)sender {
+- (void)handlePan:(UIPanGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
-    if (sender.direction == UISwipeGestureRecognizerDirectionLeft && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
-    if (sender.direction == UISwipeGestureRecognizerDirectionRight && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
-    if (sender.direction == UISwipeGestureRecognizerDirectionDown) {
-        while ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) _bY--;
-        _lastTick = 0; 
+    
+    if (sender.state == UIGestureRecognizerStateEnded) {
+        CGPoint velocity = [sender velocityInView:sender.view];
+        CGPoint translation = [sender translationInView:sender.view];
+        
+        if (fabs(translation.x) > fabs(translation.y)) { 
+            if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
+                if (translation.x > 0) {
+                    while ([self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
+                } else {
+                    while ([self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+                }
+            } else {
+                if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
+                else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+            }
+        } else {
+            if (translation.y > 0 && velocity.y > 300) { 
+                while ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) _bY--;
+                _lastTick = 0; 
+            }
+        }
+        [self render];
     }
-    [self render];
 }
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
@@ -1019,6 +1034,37 @@ static int rop_blocks[7][4][4][2] = {
     }
 }
 
+- (void)showMenuScene:(BOOL)animate {
+    if (!self.gameView) return;
+    ADSGameMenuScene *menuScene = [[ADSGameMenuScene alloc] initWithSize:self.gameView.bounds.size];
+    menuScene.scaleMode = SKSceneScaleModeAspectFill;
+    __weak typeof(self) weakSelf = self;
+    menuScene.exitHandler = ^{ [weakSelf teardownGame]; };
+    
+    menuScene.onSelectGame = ^(NSInteger gameIndex) {
+        SKScene *selectedScene;
+        if (gameIndex == 0) {
+            ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            s.exitHandler = ^{ [weakSelf showMenuScene:YES]; };
+            selectedScene = s;
+        } else {
+            ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            s.exitHandler = ^{ [weakSelf showMenuScene:YES]; };
+            selectedScene = s;
+        }
+        selectedScene.scaleMode = SKSceneScaleModeAspectFill;
+        SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionLeft duration:0.3];
+        [weakSelf.gameView presentScene:selectedScene transition:transition];
+    };
+    
+    if (animate) {
+        SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionRight duration:0.3];
+        [self.gameView presentScene:menuScene transition:transition];
+    } else {
+        [self.gameView presentScene:menuScene];
+    }
+}
+
 - (void)launchGame {
     if (self.gameView) return;
     
@@ -1039,41 +1085,7 @@ static int rop_blocks[7][4][4][2] = {
     [footerContainer addSubview:self.gameView];
     table.tableFooterView = footerContainer;
     
-    __weak typeof(self) weakSelf = self;
-    __block void (^showMenuScene)(BOOL);
-    __block __weak void (^weakShowMenuScene)(BOOL);
-    
-    showMenuScene = ^(BOOL animate) {
-        ADSGameMenuScene *menuScene = [[ADSGameMenuScene alloc] initWithSize:weakSelf.gameView.bounds.size];
-        menuScene.scaleMode = SKSceneScaleModeAspectFill;
-        menuScene.exitHandler = ^{ [weakSelf teardownGame]; };
-        
-        menuScene.onSelectGame = ^(NSInteger gameIndex) {
-            SKScene *selectedScene;
-            if (gameIndex == 0) {
-                ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
-                s.exitHandler = ^{ if (weakShowMenuScene) weakShowMenuScene(YES); };
-                selectedScene = s;
-            } else {
-                ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
-                s.exitHandler = ^{ if (weakShowMenuScene) weakShowMenuScene(YES); };
-                selectedScene = s;
-            }
-            selectedScene.scaleMode = SKSceneScaleModeAspectFill;
-            SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionLeft duration:0.3];
-            [weakSelf.gameView presentScene:selectedScene transition:transition];
-        };
-        
-        if (animate) {
-            SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionRight duration:0.3];
-            [weakSelf.gameView presentScene:menuScene transition:transition];
-        } else {
-            [weakSelf.gameView presentScene:menuScene];
-        }
-    };
-    weakShowMenuScene = showMenuScene;
-    
-    showMenuScene(NO);
+    [self showMenuScene:NO];
     
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 1.0;
