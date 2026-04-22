@@ -420,10 +420,12 @@ static const CGFloat kGridSize = 20.0;
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
+    BOOL isNewHigh = NO;
     if (self.score > best) {
         best = self.score;
         [def setInteger:best forKey:@"ADS_SnakeHighScore"];
         [def synchronize];
+        isNewHigh = YES;
     }
     
     self.deathContainer = [SKNode node];
@@ -440,9 +442,9 @@ static const CGFloat kGridSize = 20.0;
     [self.deathContainer addChild:bg];
     
     SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblScore.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
-    lblScore.fontColor = [UIColor whiteColor];
-    lblScore.fontSize = 24;
+    lblScore.text = isNewHigh ? @"NEW HIGH SCORE!" : [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
+    lblScore.fontColor = isNewHigh ? [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0] : [UIColor whiteColor];
+    lblScore.fontSize = isNewHigh ? 20 : 24;
     lblScore.position = CGPointMake(0, 10);
     [bg addChild:lblScore];
     
@@ -642,7 +644,7 @@ static int rop_blocks[7][4][4][2] = {
     self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.musicBtnBg.fillColor = [UIColor clearColor];
     self.musicBtnBg.lineWidth = 2.0;
-    self.musicBtnBg.position = CGPointMake(self.size.width / 2, 25);
+    self.musicBtnBg.position = CGPointMake(self.size.width - 55, 25);
     [self addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -868,7 +870,7 @@ static int rop_blocks[7][4][4][2] = {
                     int startY = _bY;
                     _bY -= drops;
                     
-                    [self playSFX:150.0 dur:0.15];
+                    [self playSFX:150.0 dur:0.05];
                     UIImpactFeedbackGenerator *heavyFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
                     [heavyFeed impactOccurred];
                     
@@ -979,10 +981,12 @@ static int rop_blocks[7][4][4][2] = {
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
+    BOOL isNewHigh = NO;
     if (_score > best) {
         best = _score;
         [def setInteger:best forKey:@"ADS_JailTrisHighScore"];
         [def synchronize];
+        isNewHigh = YES;
     }
     
     _deathContainer = [SKNode node];
@@ -999,9 +1003,9 @@ static int rop_blocks[7][4][4][2] = {
     [_deathContainer addChild:bg];
     
     SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblScore.text = [NSString stringWithFormat:@"SCORE: %ld", (long)_score];
-    lblScore.fontColor = [UIColor whiteColor];
-    lblScore.fontSize = 24;
+    lblScore.text = isNewHigh ? @"NEW HIGH SCORE!" : [NSString stringWithFormat:@"SCORE: %ld", (long)_score];
+    lblScore.fontColor = isNewHigh ? [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0] : [UIColor whiteColor];
+    lblScore.fontSize = isNewHigh ? 20 : 24;
     lblScore.position = CGPointMake(0, 10);
     [bg addChild:lblScore];
     
