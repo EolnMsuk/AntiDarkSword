@@ -727,7 +727,7 @@ static int rop_blocks[7][4][4][2] = {
             [self resetGame];
         }
     } else if (_isPlaying && !_isDead) {
-        if ([_pauseBtn containsPoint:loc]) {
+        if ([_pauseBtn containsPoint:loc] || (_isPaused && [_startBtn containsPoint:loc])) {
             _isPaused = !_isPaused;
             if (_isPaused) {
                 _startBtn.text = @"▶ RESUME";
@@ -741,6 +741,9 @@ static int rop_blocks[7][4][4][2] = {
     }
 }
 
+// In ADSROPStackerScene
+// FIND the entire handlePan: method and REPLACE WITH:
+
 - (void)handlePan:(UIPanGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
     
@@ -750,12 +753,11 @@ static int rop_blocks[7][4][4][2] = {
         
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
-                // BUG FIX: Limit fast swipe to 4 blocks
                 int steps = 0;
                 if (translation.x > 0) {
-                    while (steps < 4 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
+                    while (steps < 2 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
                 } else {
-                    while (steps < 4 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
+                    while (steps < 2 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
                 }
             } else {
                 if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
@@ -776,19 +778,24 @@ static int rop_blocks[7][4][4][2] = {
     if (_bType == 3) return; 
     
     int nextRot = (_bRot + 1) % 4;
-    // BUG FIX: Basic Wall Kicking (Try rotating, then try shifting left/right/up)
-    if ([self isValidX:_bX y:_bY rot:nextRot type:_bType]) {
-        _bRot = nextRot;
-    } else if ([self isValidX:_bX-1 y:_bY rot:nextRot type:_bType]) {
-        _bX--; _bRot = nextRot;
-    } else if ([self isValidX:_bX+1 y:_bY rot:nextRot type:_bType]) {
-        _bX++; _bRot = nextRot;
-    } else if (_bType == 0 && [self isValidX:_bX-2 y:_bY rot:nextRot type:_bType]) { // Long I-Piece Wall Kick Left
-        _bX -= 2; _bRot = nextRot;
-    } else if (_bType == 0 && [self isValidX:_bX+2 y:_bY rot:nextRot type:_bType]) { // Long I-Piece Wall Kick Right
-        _bX += 2; _bRot = nextRot;
-    } else if ([self isValidX:_bX y:_bY+1 rot:nextRot type:_bType]) { // Floor Kick
-        _bY++; _bRot = nextRot;
+    BOOL rotated = NO;
+    
+    int xOffsets[] = {0, -1, 1, -2, 2};
+    for (int i = 0; i < 5; i++) {
+        if ([self isValidX:_bX + xOffsets[i] y:_bY rot:nextRot type:_bType]) {
+            _bX += xOffsets[i];
+            _bRot = nextRot;
+            rotated = YES;
+            break;
+        }
+    }
+    
+    if (!rotated) {
+        if ([self isValidX:_bX y:_bY+1 rot:nextRot type:_bType]) {
+            _bY++; _bRot = nextRot;
+        } else if ([self isValidX:_bX y:_bY+2 rot:nextRot type:_bType]) {
+            _bY += 2; _bRot = nextRot;
+        }
     }
     
     [self render];
