@@ -36,29 +36,29 @@ make package FINALPACKAGE=1 SYSROOT="$SDK_14" TARGET="iphone:clang:14.5:13.0" AR
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_legacy_iphoneos-arm.deb"
 
 # ==========================================
-# MODERN TARGETS (iOS 15+) → WSL MUST BE arm64 ONLY
+# MODERN TARGETS (iOS 15+) → arm64 + arm64e
 # ==========================================
 swap_altlist "New"
 
-# Modern Rootful (Requires Patcher for local A12+ testing)
+# Modern Rootful
 make clean
 rm -rf packages/*
-make package FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
+# Changed ARCHS to include arm64e for A12+ support
+make package FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_modern_iphoneos-arm.deb"
 
-# Modern Rootless (Requires Patcher for local A12+ testing)
+# Modern Rootless
 make clean
 rm -rf packages/*
-make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
+# Changed ARCHS to include arm64e for A12+ support
+make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_modern_iphoneos-arm64.deb"
 
 # TrollFools Dylib
 cd AntiDarkSwordTF
 make clean
-make FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
+# Changed ARCHS to include arm64e for A12+ support
+make FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
 DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
 cp "$DYLIB" "../output/AntiDarkSword_${VERSION}_TrollFools.dylib"
 cd ..
-
-echo "Build complete → output/"
-ls -1 output/
