@@ -293,6 +293,15 @@ static const CGFloat kGridSize = 20.0;
     NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
     
     self.leaderboardNode = [SKNode node];
+    self.leaderboardNode.zPosition = 100;
+    self.leaderboardNode.alpha = 0;
+    
+    // Invisible fullscreen touch blocker guarantees taps are caught
+    SKShapeNode *blocker = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+    blocker.position = CGPointMake(self.size.width/2, self.size.height/2);
+    blocker.fillColor = [UIColor clearColor];
+    blocker.strokeColor = [UIColor clearColor];
+    [self.leaderboardNode addChild:blocker];
     
     SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(220, 140) cornerRadius:12];
     bg.fillColor = [UIColor colorWithWhite:0.1 alpha:0.95];
@@ -322,8 +331,6 @@ static const CGFloat kGridSize = 20.0;
     tap.position = CGPointMake(0, -50);
     [bg addChild:tap];
     
-    self.leaderboardNode.zPosition = 100;
-    self.leaderboardNode.alpha = 0;
     [self.bloomNode addChild:self.leaderboardNode];
     [self.leaderboardNode runAction:[SKAction fadeInWithDuration:0.2]];
 }
@@ -333,10 +340,12 @@ static const CGFloat kGridSize = 20.0;
     CGPoint loc = [touch locationInNode:self];
 
     if (self.leaderboardNode) {
-        [self.leaderboardNode runAction:[SKAction sequence:@[
+        SKNode *node = self.leaderboardNode;
+        self.leaderboardNode = nil; // Immediate nil = no tap glitches
+        [node runAction:[SKAction sequence:@[
             [SKAction fadeOutWithDuration:0.2],
             [SKAction removeFromParent]
-        ]] completion:^{ self.leaderboardNode = nil; }];
+        ]]];
         return;
     }
 
@@ -345,13 +354,14 @@ static const CGFloat kGridSize = 20.0;
         return;
     }
     
-    // Only register clicks if the button isn't hidden
     if (!self.highScoreBtn.hidden && [self.highScoreBtn containsPoint:loc]) {
         [self showLeaderboard];
         return;
     }
 
-    if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
+    if (self.gameState == ADSGameStateMenu) {
+        [self resetGame];
+    } else if (self.gameState == ADSGameStateDead) {
         if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
             [self resetGame];
         }
