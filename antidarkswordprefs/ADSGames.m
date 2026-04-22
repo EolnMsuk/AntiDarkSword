@@ -858,6 +858,7 @@ static int rop_blocks[7][4][4][2] = {
     SKLabelNode *_closeBtn;
     SKShapeNode *_btnSnake;
     SKShapeNode *_btnTetris;
+    SKLabelNode *_dedicationBtn;
 }
 
 - (void)didMoveToView:(SKView *)view {
@@ -903,6 +904,17 @@ static int rop_blocks[7][4][4][2] = {
     tetrisLbl.fontSize = 18;
     tetrisLbl.position = CGPointMake(0, -6);
     [_btnTetris addChild:tetrisLbl];
+
+    _dedicationBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _dedicationBtn.text = @"DEDICATED TO ANDREW ⚫";
+    _dedicationBtn.fontColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+    _dedicationBtn.fontSize = 14;
+    _dedicationBtn.position = CGPointMake(self.size.width/2, 30);
+    [self addChild:_dedicationBtn];
+    
+    SKAction *fadeDown = [SKAction fadeAlphaTo:0.4 duration:1.2];
+    SKAction *fadeUp = [SKAction fadeAlphaTo:1.0 duration:1.2];
+    [_dedicationBtn runAction:[SKAction repeatActionForever:[SKAction sequence:@[fadeDown, fadeUp]]]];
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -910,6 +922,14 @@ static int rop_blocks[7][4][4][2] = {
     
     if ([_closeBtn containsPoint:loc]) {
         if (self.exitHandler) self.exitHandler();
+        return;
+    }
+    
+    if ([_dedicationBtn containsPoint:loc]) {
+        NSURL *url = [NSURL URLWithString:@"https://github.com/00000000aaaaaaaa"];
+        if ([[UIApplication sharedApplication] canOpenURL:url]) {
+            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+        }
         return;
     }
     
