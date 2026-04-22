@@ -181,7 +181,7 @@ static const CGFloat kGridSize = 20.0;
     } else if (self.gameState == ADSGameStatePlaying) {
         if ([self.pauseBtn containsPoint:loc]) {
             self.gameState = ADSGameStatePaused;
-            self.startBtn.text = @"▶ RESUME INJECTION";
+            self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO;
         }
     } else if (self.gameState == ADSGameStatePaused) {
@@ -437,7 +437,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_restartOverlay];
 
     _startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _startBtn.text = @"▶ INJECT PAYLOAD";
+    _startBtn.text = @"▶ Start";
     _startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _startBtn.fontSize = 22;
     _startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 8);
@@ -679,7 +679,7 @@ static int rop_blocks[7][4][4][2] = {
 - (void)die {
     _isDead = YES;
     _isPlaying = NO;
-    _startBtn.text = @"↻ GAME OVER";
+    _startBtn.text = @"↻ Try Again?";
     _startBtn.hidden = NO;
     _restartOverlay.hidden = NO;
     _highScoreBtn.hidden = NO;
