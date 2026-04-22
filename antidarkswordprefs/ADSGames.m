@@ -909,7 +909,7 @@ static int rop_blocks[7][4][4][2] = {
         }
         
         UIColor *nc = [self colorForType:_nextType];
-        CGFloat pGrid = 16.0; 
+        CGFloat pGrid = 14.0; 
         for (int i=0; i<4; i++) {
             int nx = rop_blocks[_nextType][0][i][0];
             int ny = rop_blocks[_nextType][0][i][1];
