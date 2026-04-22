@@ -556,8 +556,7 @@ static int rop_blocks[7][4][4][2] = {
     
     CGPoint translation = [sender translationInView:sender.view];
     CGPoint velocity = [sender velocityInView:sender.view];
-    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-
+    
     if (sender.state == UIGestureRecognizerStateChanged) {
         if (translation.y > 25 && fabs(translation.y) > fabs(translation.x)) {
             if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) {
@@ -582,7 +581,8 @@ static int rop_blocks[7][4][4][2] = {
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                         if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
                             self->_bX += dir;
-                            [feed impactOccurred];
+                            UIImpactFeedbackGenerator *tickFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+                            [tickFeed impactOccurred];
                             [self render];
                         }
                     });
@@ -590,12 +590,13 @@ static int rop_blocks[7][4][4][2] = {
             } else {
                 if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
                     self->_bX += dir;
-                    [feed impactOccurred];
+                    UIImpactFeedbackGenerator *tickFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+                    [tickFeed impactOccurred];
                 }
                 [self render];
             }
         } else {
-            if (translation.y > 0 && velocity.y > 150) { 
+            if (translation.y > 0 && velocity.y > 50) { 
                 int drops = 0;
                 while ([self isValidX:_bX y:_bY - (drops + 1) rot:_bRot type:_bType]) drops++;
                 
