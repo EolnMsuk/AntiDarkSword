@@ -412,8 +412,23 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)spawnFood {
-    int x = [self minX] + arc4random_uniform([self maxX] - [self minX] + 1);
-    int y = [self minY] + arc4random_uniform([self maxY] - [self minY] + 1);
+    BOOL valid = NO;
+    int x = 0, y = 0;
+    
+    while (!valid) {
+        x = [self minX] + arc4random_uniform([self maxX] - [self minX] + 1);
+        y = [self minY] + arc4random_uniform([self maxY] - [self minY] + 1);
+        valid = YES;
+        
+        CGPoint testPoint = CGPointMake(x, y);
+        for (NSValue *val in self.snake) {
+            if (CGPointEqualToPoint(val.CGPointValue, testPoint)) {
+                valid = NO;
+                break;
+            }
+        }
+    }
+    
     self.food = CGPointMake(x, y);
 }
 
@@ -437,8 +452,10 @@ static const CGFloat kGridSize = 20.0;
         self.score += 10;
         self.scoreLbl.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
         
-        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        // Haptic feedback updated to Rigid
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleRigid];
         [feed impactOccurred];
+        
         [self spawnFood];
     } else {
         [self.snake removeLastObject];
