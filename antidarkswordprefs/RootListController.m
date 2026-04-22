@@ -963,10 +963,10 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
             if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
                 if (autoProtectLevel < 3) {
                     [s setProperty:@NO forKey:@"enabled"];
-                    s.name = @"Level 3 Settings 🔒";
+                    s.name = @"⚙️ Level 3 Settings 🔒";
                 } else {
                     [s setProperty:@YES forKey:@"enabled"];
-                    s.name = @"Level 3 Settings 🔓";
+                    s.name = @"⚙️ Level 3 Settings";
                 }
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"FooterGroup"]) {
