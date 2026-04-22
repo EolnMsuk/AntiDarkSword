@@ -613,6 +613,13 @@ static int rop_blocks[7][4][4][2] = {
                         
                         [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.25], [SKAction removeFromParent]]]];
                     }
+                    
+                    SKAction *sLeft = [SKAction moveByX:-6 y:-4 duration:0.025];
+                    SKAction *sRight = [SKAction moveByX:12 y:8 duration:0.025];
+                    SKAction *sCenter = [SKAction moveByX:-6 y:-4 duration:0.025];
+                    [self->_gameLayer runAction:[SKAction sequence:@[sLeft, sRight, sCenter]]];
+                    
+                    _lastTick = 0; 
                 }
             }
         }
@@ -776,16 +783,32 @@ static int rop_blocks[7][4][4][2] = {
         if (linesCleared == 4) {
             _isPaused = YES;
             
+            SKAction *s1 = [SKAction moveByX:-10 y:10 duration:0.04];
+            SKAction *s2 = [SKAction moveByX:20 y:-20 duration:0.04];
+            SKAction *s3 = [SKAction moveByX:-10 y:10 duration:0.04];
+            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s1, s2, s3]]];
+            
             SKNode *msgContainer = [SKNode node];
             msgContainer.position = CGPointMake(self.size.width/2, self.size.height/2);
             msgContainer.zPosition = 100;
+            msgContainer.xScale = 0.1;
+            msgContainer.yScale = 0.1;
             [self addChild:msgContainer];
+            
+            [msgContainer runAction:[SKAction sequence:@[[SKAction scaleTo:1.2 duration:0.2], [SKAction scaleTo:1.0 duration:0.1]]]];
             
             SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
             bg.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; 
             bg.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             bg.lineWidth = 3.0;
             [msgContainer addChild:bg];
+            
+            SKShapeNode *glow = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
+            glow.fillColor = [UIColor clearColor];
+            glow.strokeColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:0.8];
+            glow.lineWidth = 8.0;
+            [msgContainer addChild:glow];
+            [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.1 duration:0.3], [SKAction fadeAlphaTo:0.2 duration:0.3], [SKAction scaleTo:1.0 duration:0.3], [SKAction fadeAlphaTo:0.8 duration:0.3]]]]];
             
             SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
             line1.text = @"[ KERNEL OVERRIDE ]";
@@ -804,11 +827,12 @@ static int rop_blocks[7][4][4][2] = {
             SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
             flash.position = CGPointMake(self.size.width/2, self.size.height/2);
             flash.fillColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
-            flash.alpha = 0.8;
+            flash.alpha = 0.0;
             flash.zPosition = 99;
             [self addChild:flash];
             
-            [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.6], [SKAction removeFromParent]]]];
+            SKAction *strobe = [SKAction sequence:@[[SKAction fadeAlphaTo:0.9 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.7 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.5 duration:0.1], [SKAction fadeOutWithDuration:0.4]]];
+            [flash runAction:[SKAction sequence:@[strobe, [SKAction removeFromParent]]]];
             
             SKAction *hold = [SKAction waitForDuration:1.5];
             SKAction *moveUp = [SKAction moveByX:0 y:50 duration:0.6];
