@@ -901,7 +901,7 @@ static int rop_blocks[7][4][4][2] = {
     title.text = @"SELECT TARGET PAYLOAD";
     title.fontColor = [UIColor whiteColor];
     title.fontSize = 22;
-    title.position = CGPointMake(self.size.width/2, self.size.height - 60);
+    title.position = CGPointMake(self.size.width/2, self.size.height - 100); 
     [self addChild:title];
     
     _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
