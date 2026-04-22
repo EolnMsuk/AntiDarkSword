@@ -434,7 +434,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)update:(NSTimeInterval)currentTime {
     if (self.gameState != ADSGameStatePlaying) return;
-    if (currentTime - self.lastTick < 0.30) return;
+    if (currentTime - self.lastTick < 0.22) return;
     self.lastTick = currentTime;
     
     CGPoint head = self.snake.firstObject.CGPointValue;
