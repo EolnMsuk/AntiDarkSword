@@ -338,6 +338,7 @@ static const CGFloat kGridSize = 20.0;
     SKLabelNode *_startBtn;
     SKLabelNode *_pauseBtn;
     SKLabelNode *_closeBtn;
+    SKLabelNode *_restartBtn;
     SKShapeNode *_restartOverlay;
     
     BOOL _isDead, _isPlaying, _isPaused;
@@ -442,6 +443,13 @@ static int rop_blocks[7][4][4][2] = {
     _startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 8);
     _startBtn.zPosition = 51;
     [self addChild:_startBtn];
+
+    _restartBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _restartBtn.text = @"↺";
+    _restartBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    _restartBtn.fontSize = 22;
+    _restartBtn.position = CGPointMake(30, 20);
+    [self addChild:_restartBtn];
 }
 
 - (void)setupGestures:(SKView *)view {
@@ -519,6 +527,11 @@ static int rop_blocks[7][4][4][2] = {
         return;
     }
 
+    if ([_restartBtn containsPoint:loc]) {
+        [self resetGame];
+        return;
+    }
+
     if (!_isPlaying || _isDead) {
         if ([_startBtn containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])) {
             [self resetGame];
@@ -541,10 +554,18 @@ static int rop_blocks[7][4][4][2] = {
 - (void)handlePan:(UIPanGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
     
-    if (sender.state == UIGestureRecognizerStateEnded) {
-        CGPoint velocity = [sender velocityInView:sender.view];
-        CGPoint translation = [sender translationInView:sender.view];
-        
+    CGPoint translation = [sender translationInView:sender.view];
+    CGPoint velocity = [sender velocityInView:sender.view];
+
+    if (sender.state == UIGestureRecognizerStateChanged) {
+        if (translation.y > 25 && fabs(translation.y) > fabs(translation.x)) {
+            if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) {
+                _bY--;
+                [sender setTranslation:CGPointZero inView:sender.view];
+                [self render];
+            }
+        }
+    } else if (sender.state == UIGestureRecognizerStateEnded) {
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
                 int steps = 0;
@@ -558,7 +579,7 @@ static int rop_blocks[7][4][4][2] = {
                 else if (translation.x < 0 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
             }
         } else {
-            if (translation.y > 0 && velocity.y > 300) { 
+            if (translation.y > 0 && velocity.y > 800) { 
                 while ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) _bY--;
                 _lastTick = 0; 
             }
@@ -669,7 +690,15 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (UIColor *)colorForType:(int)type {
-    NSArray *colors = @[[UIColor cyanColor], [UIColor blueColor], [UIColor orangeColor], [UIColor yellowColor], [UIColor greenColor], [UIColor purpleColor], [UIColor redColor]];
+    NSArray *colors = @[
+        [UIColor cyanColor], 
+        [UIColor colorWithRed:0.3 green:0.5 blue:1.0 alpha:1.0], 
+        [UIColor orangeColor], 
+        [UIColor yellowColor], 
+        [UIColor greenColor], 
+        [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0], 
+        [UIColor redColor]
+    ];
     return colors[type];
 }
 
@@ -710,28 +739,38 @@ static int rop_blocks[7][4][4][2] = {
         _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
         
         if (linesCleared == 4) {
+            _isPaused = YES;
+            
             SKLabelNode *msg = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-            msg.text = @"ROP CHAIN SECURED!";
-            msg.fontColor = [UIColor magentaColor];
-            msg.fontSize = 24;
+            msg.text = @"[ KERNEL OVERRIDE 100% ]";
+            msg.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
+            msg.fontSize = 20;
             msg.position = CGPointMake(self.size.width/2, self.size.height/2);
             msg.zPosition = 100;
             [self addChild:msg];
             
-            SKAction *moveUp = [SKAction moveByX:0 y:40 duration:0.8];
-            SKAction *fadeOut = [SKAction fadeOutWithDuration:0.8];
-            [msg runAction:[SKAction sequence:@[[SKAction group:@[moveUp, fadeOut]], [SKAction removeFromParent]]]];
-            
             SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
             flash.position = CGPointMake(self.size.width/2, self.size.height/2);
-            flash.fillColor = [UIColor whiteColor];
-            flash.alpha = 0.7;
+            flash.fillColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
+            flash.alpha = 0.8;
             flash.zPosition = 99;
             [self addChild:flash];
-            [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
+            
+            [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.6], [SKAction removeFromParent]]]];
+            
+            SKAction *hold = [SKAction waitForDuration:1.5];
+            SKAction *moveUp = [SKAction moveByX:0 y:50 duration:0.6];
+            SKAction *fadeOut = [SKAction fadeOutWithDuration:0.6];
+            [msg runAction:[SKAction sequence:@[hold, [SKAction group:@[moveUp, fadeOut]], [SKAction removeFromParent], [SKAction runBlock:^{ self->_isPaused = NO; }]]]];
             
             UINotificationFeedbackGenerator *successFeed = [[UINotificationFeedbackGenerator alloc] init];
             [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [successFeed notificationOccurred:UINotificationFeedbackTypeWarning];
+            });
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
+            });
         }
     }
 }
@@ -758,7 +797,7 @@ static int rop_blocks[7][4][4][2] = {
         int ghostY = _bY;
         while ([self isValidX:_bX y:ghostY-1 rot:_bRot type:_bType]) ghostY--;
         
-        UIColor *gC = [UIColor colorWithWhite:0.3 alpha:0.5];
+        UIColor *gC = [UIColor colorWithWhite:0.6 alpha:0.85];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
             int ny = ghostY + rop_blocks[_bType][_bRot][i][1];
