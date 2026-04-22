@@ -295,11 +295,13 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)setupGestures:(SKView *)view {
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    [view addGestureRecognizer:pan];
-    
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
-    [view addGestureRecognizer:tap];
+    NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionUp), @(UISwipeGestureRecognizerDirectionDown), 
+                      @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
+    for (NSNumber *dir in dirs) {
+        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
+        swipe.direction = dir.integerValue;
+        [view addGestureRecognizer:swipe];
+    }
 }
 
 - (void)showLeaderboard {
