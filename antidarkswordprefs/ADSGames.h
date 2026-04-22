@@ -19,12 +19,12 @@ typedef NS_ENUM(NSInteger, ADSGameState) {
 @property (nonatomic, copy) void (^exitHandler)(void);
 @end
 
-@interface ADSROPStackerScene : SKScene
+@interface ADSJailTrisScene : SKScene
 @property (nonatomic, copy) void (^exitHandler)(void);
 @end
 
-// --- EXPLOIT EATER SCENE ---
-@interface ADSExploitEaterScene : SKScene
+// --- PYEATER SCENE ---
+@interface ADSPyEaterScene : SKScene
 @property (nonatomic, assign) ADSGameState gameState;
 @property (nonatomic, strong) NSMutableArray<NSValue *> *snake;
 @property (nonatomic, assign) CGPoint food;

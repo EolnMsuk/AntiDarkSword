@@ -1,7 +1,7 @@
 #import "ADSGames.h"
 
-// --- EXPLOIT EATER SCENE ---
-@implementation ADSExploitEaterScene
+// --- PYEATER SCENE ---
+@implementation ADSPyEaterScene
 static const CGFloat kGridSize = 20.0;
 
 - (int)minX { return 2; }
@@ -40,7 +40,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)setupUI {
     self.titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.titleLbl.text = @"Exploit Eater";
+    self.titleLbl.text = @"PyEater";
     self.titleLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.titleLbl.fontSize = 24;
     self.titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 15);
@@ -323,8 +323,8 @@ static const CGFloat kGridSize = 20.0;
 @end
 
 
-// --- ROP STACKER (TETRIS) SCENE ---
-@implementation ADSROPStackerScene {
+// --- JAILTRIS (TETRIS) SCENE ---
+@implementation ADSJailTrisScene {
     NSMutableDictionary *_board; 
     int _bX, _bY, _bType, _bRot, _nextType;
     NSTimeInterval _lastTick, _tickRate;
@@ -463,7 +463,7 @@ static int rop_blocks[7][4][4][2] = {
 - (void)showLeaderboard {
     if (_leaderboardNode) return;
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
-    NSInteger best = [def integerForKey:@"ADS_ROPHighScore"];
+    NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
     
     _leaderboardNode = [SKNode node];
     _leaderboardNode.zPosition = 100;
@@ -679,7 +679,7 @@ static int rop_blocks[7][4][4][2] = {
 - (void)die {
     _isDead = YES;
     _isPlaying = NO;
-    _startBtn.text = @"↻ KERNEL PANIC";
+    _startBtn.text = @"↻ GAME OVER";
     _startBtn.hidden = NO;
     _restartOverlay.hidden = NO;
     _highScoreBtn.hidden = NO;
@@ -688,9 +688,9 @@ static int rop_blocks[7][4][4][2] = {
     [feed notificationOccurred:UINotificationFeedbackTypeError];
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
-    NSInteger best = [def integerForKey:@"ADS_ROPHighScore"];
+    NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
     if (_score > best) {
-        [def setInteger:_score forKey:@"ADS_ROPHighScore"];
+        [def setInteger:_score forKey:@"ADS_JailTrisHighScore"];
         [def synchronize];
         [self showLeaderboard];
     }
@@ -814,7 +814,7 @@ static int rop_blocks[7][4][4][2] = {
             [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.1 duration:0.3], [SKAction fadeAlphaTo:0.2 duration:0.3], [SKAction scaleTo:1.0 duration:0.3], [SKAction fadeAlphaTo:0.8 duration:0.3]]]]];
             
             SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-            line1.text = @"[ KERNEL OVERRIDE ]";
+            line1.text = @"[ 4X ROW BONUS! ]";
             line1.fontColor = [UIColor colorWithRed:0.0 green:1.0 blue:0.4 alpha:1.0];
             line1.fontSize = 22;
             line1.position = CGPointMake(0, 10);
@@ -935,7 +935,7 @@ static int rop_blocks[7][4][4][2] = {
     self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
     
     SKLabelNode *title = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    title.text = @"SELECT TARGET PAYLOAD";
+    title.text = @"SELECT GAME";
     title.fontColor = [UIColor whiteColor];
     title.fontSize = 22;
     title.position = CGPointMake(self.size.width/2, self.size.height - 100); 
@@ -955,7 +955,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_btnSnake];
     
     SKLabelNode *snakeLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    snakeLbl.text = @"🐍 EXPLOIT EATER";
+    snakeLbl.text = @"🐍 PYEATER";
     snakeLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     snakeLbl.fontSize = 18;
     snakeLbl.position = CGPointMake(0, -6);
@@ -969,7 +969,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_btnTetris];
     
     SKLabelNode *tetrisLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    tetrisLbl.text = @"🧱 ROP STACKER";
+    tetrisLbl.text = @"🧱 JAILTRIS";
     tetrisLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     tetrisLbl.fontSize = 18;
     tetrisLbl.position = CGPointMake(0, -6);
@@ -1047,11 +1047,11 @@ static int rop_blocks[7][4][4][2] = {
     menuScene.onSelectGame = ^(NSInteger gameIndex) {
         SKScene *selectedScene;
         if (gameIndex == 0) {
-            ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            ADSPyEaterScene *s = [[ADSPyEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
             s.exitHandler = ^{ [weakSelf showMenuScene:YES]; };
             selectedScene = s;
         } else {
-            ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            ADSJailTrisScene *s = [[ADSJailTrisScene alloc] initWithSize:weakSelf.gameView.bounds.size];
             s.exitHandler = ^{ [weakSelf showMenuScene:YES]; };
             selectedScene = s;
         }
