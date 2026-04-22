@@ -172,16 +172,18 @@ static const CGFloat kGridSize = 20.0;
     self.pauseBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); 
     [self.bloomNode addChild:self.pauseBtn];
     
-    self.musicBtnBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(90, 26) cornerRadius:13];
+    self.musicBtnBg = [SKShapeNode shapeNodeWithCircleOfRadius:16];
     self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.musicBtnBg.fillColor = [UIColor clearColor];
     self.musicBtnBg.lineWidth = 2.0;
-    self.musicBtnBg.position = CGPointMake(self.size.width - 55, 20);
+    self.musicBtnBg.position = CGPointMake(self.size.width - 30, 25);
     [self.bloomNode addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.musicBtn.fontSize = 12;
+    self.musicBtn.text = @"♫";
+    self.musicBtn.fontSize = 18;
     self.musicBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
+    self.musicBtn.horizontalAlignmentMode = SKLabelHorizontalAlignmentModeCenter;
     [self.musicBtnBg addChild:self.musicBtn];
     [self updateMusicBtn];
     
@@ -194,13 +196,16 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)updateMusicBtn {
+    UIColor *onColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    UIColor *offColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+
     if (_musicEnabled) {
-        self.musicBtn.text = @"Music ON";
-        self.musicBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+        self.musicBtn.fontColor = onColor;
+        self.musicBtnBg.strokeColor = onColor;
         if (_synthState && self.gameState == ADSGameStatePlaying) _synthState->playBGM = 1;
     } else {
-        self.musicBtn.text = @"Music OFF";
-        self.musicBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        self.musicBtn.fontColor = offColor;
+        self.musicBtnBg.strokeColor = offColor;
         if (_synthState) _synthState->playBGM = 0;
     }
 }
@@ -319,10 +324,16 @@ static const CGFloat kGridSize = 20.0;
 - (void)handleSwipe:(UISwipeGestureRecognizer *)sender {
     if (self.gameState != ADSGameStatePlaying) return;
     
-    if (sender.direction == UISwipeGestureRecognizerDirectionUp && self.direction.dy == 0) self.direction = CGVectorMake(0, 1);
-    else if (sender.direction == UISwipeGestureRecognizerDirectionDown && self.direction.dy == 0) self.direction = CGVectorMake(0, -1);
-    else if (sender.direction == UISwipeGestureRecognizerDirectionLeft && self.direction.dx == 0) self.direction = CGVectorMake(-1, 0);
-    else if (sender.direction == UISwipeGestureRecognizerDirectionRight && self.direction.dx == 0) self.direction = CGVectorMake(1, 0);
+    BOOL changed = NO;
+    if (sender.direction == UISwipeGestureRecognizerDirectionUp && self.direction.dy == 0) { self.direction = CGVectorMake(0, 1); changed = YES; }
+    else if (sender.direction == UISwipeGestureRecognizerDirectionDown && self.direction.dy == 0) { self.direction = CGVectorMake(0, -1); changed = YES; }
+    else if (sender.direction == UISwipeGestureRecognizerDirectionLeft && self.direction.dx == 0) { self.direction = CGVectorMake(-1, 0); changed = YES; }
+    else if (sender.direction == UISwipeGestureRecognizerDirectionRight && self.direction.dx == 0) { self.direction = CGVectorMake(1, 0); changed = YES; }
+    
+    if (changed) {
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feed impactOccurred];
+    }
 }
 
 - (void)drawWalls {
@@ -640,16 +651,18 @@ static int rop_blocks[7][4][4][2] = {
     _menuBtn.position = CGPointMake(20, self.size.height - 35);
     [self addChild:_menuBtn];
     
-    self.musicBtnBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(90, 26) cornerRadius:13];
+    self.musicBtnBg = [SKShapeNode shapeNodeWithCircleOfRadius:16];
     self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.musicBtnBg.fillColor = [UIColor clearColor];
     self.musicBtnBg.lineWidth = 2.0;
-    self.musicBtnBg.position = CGPointMake(self.size.width - 55, 25);
+    self.musicBtnBg.position = CGPointMake(self.size.width - 30, 25);
     [self addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.musicBtn.fontSize = 12;
+    self.musicBtn.text = @"♫";
+    self.musicBtn.fontSize = 18;
     self.musicBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
+    self.musicBtn.horizontalAlignmentMode = SKLabelHorizontalAlignmentModeCenter;
     [self.musicBtnBg addChild:self.musicBtn];
     [self updateMusicBtn];
     
@@ -696,13 +709,16 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (void)updateMusicBtn {
+    UIColor *onColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    UIColor *offColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+
     if (_musicEnabled) {
-        self.musicBtn.text = @"Music ON";
-        self.musicBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+        self.musicBtn.fontColor = onColor;
+        self.musicBtnBg.strokeColor = onColor;
         if (_synthState && _isPlaying && !_isPaused && !_isDead) _synthState->playBGM = 1;
     } else {
-        self.musicBtn.text = @"Music OFF";
-        self.musicBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        self.musicBtn.fontColor = offColor;
+        self.musicBtnBg.strokeColor = offColor;
         if (_synthState) _synthState->playBGM = 0;
     }
 }
