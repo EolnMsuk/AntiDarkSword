@@ -613,7 +613,7 @@ static int rop_blocks[7][4][4][2] = {
                         trail.zPosition = 5;
                         [self addChild:trail];
                         
-                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.15], [SKAction removeFromParent]]]];
+                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.30], [SKAction removeFromParent]]]];
                     }
                     
                     SKAction *sLeft = [SKAction moveByX:-2 y:-1 duration:0.02];
