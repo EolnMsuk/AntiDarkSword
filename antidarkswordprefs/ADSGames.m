@@ -246,7 +246,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)update:(NSTimeInterval)currentTime {
     if (self.gameState != ADSGameStatePlaying) return;
-    if (currentTime - self.lastTick < 0.22) return;
+    if (currentTime - self.lastTick < 0.20) return;
     self.lastTick = currentTime;
     
     CGPoint head = self.snake.firstObject.CGPointValue;
@@ -856,7 +856,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_closeBtn];
 
     _btnSnake = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 + 50);
+    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 - 50);
     _btnSnake.fillColor = [UIColor clearColor];
     _btnSnake.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _btnSnake.lineWidth = 3.0;
@@ -870,7 +870,7 @@ static int rop_blocks[7][4][4][2] = {
     [_btnSnake addChild:snakeLbl];
 
     _btnTetris = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 - 50);
+    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 + 50);
     _btnTetris.fillColor = [UIColor clearColor];
     _btnTetris.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _btnTetris.lineWidth = 3.0;
