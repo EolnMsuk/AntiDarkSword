@@ -173,20 +173,30 @@ typedef NS_ENUM(NSInteger, ADSGameState) {
 @property (nonatomic, assign) CGPoint food;
 @property (nonatomic, assign) CGVector direction;
 @property (nonatomic, assign) NSTimeInterval lastTick;
+@property (nonatomic, assign) NSInteger score;
 
 @property (nonatomic, strong) SKNode *gameLayer;
 @property (nonatomic, strong) SKEffectNode *bloomNode;
+@property (nonatomic, strong) SKNode *leaderboardNode;
+@property (nonatomic, strong) SKShapeNode *restartOverlay;
 
 @property (nonatomic, strong) SKLabelNode *titleLbl;
+@property (nonatomic, strong) SKLabelNode *scoreLbl;
 @property (nonatomic, strong) SKLabelNode *startBtn;
 @property (nonatomic, strong) SKLabelNode *pauseBtn;
 @property (nonatomic, strong) SKLabelNode *closeBtn;
+@property (nonatomic, strong) SKLabelNode *highScoreBtn;
 
 @property (nonatomic, copy) void (^exitHandler)(void);
 @end
 
 @implementation ADSExploitEaterScene
 static const CGFloat kGridSize = 20.0;
+
+- (int)minX { return 2; }
+- (int)maxX { return (self.size.width / kGridSize) - 2; }
+- (int)minY { return 3; }
+- (int)maxY { return (self.size.height / kGridSize) - 4; }
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
@@ -212,17 +222,37 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)setupUI {
     self.titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    self.titleLbl.text = @"AntiDarkSnake";
+    self.titleLbl.text = @"Exploit Eater";
     self.titleLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.titleLbl.fontSize = 24;
     self.titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 35);
     [self.bloomNode addChild:self.titleLbl];
+
+    self.scoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.scoreLbl.text = @"SCORE: 0";
+    self.scoreLbl.fontColor = [UIColor whiteColor];
+    self.scoreLbl.fontSize = 16;
+    self.scoreLbl.position = CGPointMake(self.size.width / 2, self.size.height - 60);
+    [self.bloomNode addChild:self.scoreLbl];
+
+    // Opaque background for restart
+    CGFloat overlayW = self.size.width - 60;
+    CGFloat overlayH = self.size.height - 120;
+    self.restartOverlay = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
+    self.restartOverlay.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 10);
+    self.restartOverlay.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; // Solid dark color
+    self.restartOverlay.strokeColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    self.restartOverlay.lineWidth = 4.0;
+    self.restartOverlay.zPosition = 50;
+    self.restartOverlay.hidden = YES;
+    [self.bloomNode addChild:self.restartOverlay];
 
     self.startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.startBtn.text = @"▶ START";
     self.startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.startBtn.fontSize = 40;
     self.startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 15);
+    self.startBtn.zPosition = 51; // Always above overlay
     [self.bloomNode addChild:self.startBtn];
 
     self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -238,6 +268,13 @@ static const CGFloat kGridSize = 20.0;
     self.closeBtn.fontSize = 20;
     self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 35);
     [self.bloomNode addChild:self.closeBtn];
+    
+    self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.highScoreBtn.text = @"🏆 HIGH SCORES";
+    self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    self.highScoreBtn.fontSize = 16;
+    self.highScoreBtn.position = CGPointMake(self.size.width / 2, 20);
+    [self.bloomNode addChild:self.highScoreBtn];
 }
 
 - (void)setupGestures:(SKView *)view {
@@ -250,17 +287,72 @@ static const CGFloat kGridSize = 20.0;
     }
 }
 
+- (void)showLeaderboard {
+    if (self.leaderboardNode) return;
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
+    
+    self.leaderboardNode = [SKNode node];
+    
+    SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(220, 140) cornerRadius:12];
+    bg.fillColor = [UIColor colorWithWhite:0.1 alpha:0.95];
+    bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    bg.lineWidth = 2.0;
+    bg.position = CGPointMake(self.size.width/2, self.size.height/2);
+    [self.leaderboardNode addChild:bg];
+    
+    SKLabelNode *title = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    title.text = @"HIGH SCORE";
+    title.fontColor = [UIColor whiteColor];
+    title.fontSize = 22;
+    title.position = CGPointMake(0, 25);
+    [bg addChild:title];
+    
+    SKLabelNode *val = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    val.text = [NSString stringWithFormat:@"%ld", (long)best];
+    val.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    val.fontSize = 36;
+    val.position = CGPointMake(0, -15);
+    [bg addChild:val];
+    
+    SKLabelNode *tap = [SKLabelNode labelNodeWithFontNamed:@"Courier"];
+    tap.text = @"Tap anywhere to close";
+    tap.fontColor = [UIColor grayColor];
+    tap.fontSize = 12;
+    tap.position = CGPointMake(0, -50);
+    [bg addChild:tap];
+    
+    self.leaderboardNode.zPosition = 100;
+    self.leaderboardNode.alpha = 0;
+    [self.bloomNode addChild:self.leaderboardNode];
+    [self.leaderboardNode runAction:[SKAction fadeInWithDuration:0.2]];
+}
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     UITouch *touch = [touches anyObject];
     CGPoint loc = [touch locationInNode:self];
+
+    if (self.leaderboardNode) {
+        [self.leaderboardNode runAction:[SKAction sequence:@[
+            [SKAction fadeOutWithDuration:0.2],
+            [SKAction removeFromParent]
+        ]] completion:^{ self.leaderboardNode = nil; }];
+        return;
+    }
 
     if ([self.closeBtn containsPoint:loc]) {
         if (self.exitHandler) self.exitHandler();
         return;
     }
+    
+    if ([self.highScoreBtn containsPoint:loc]) {
+        [self showLeaderboard];
+        return;
+    }
 
     if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
-        if ([self.startBtn containsPoint:loc]) {
+        // Tap big overlay or text
+        if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
             [self resetGame];
         }
     } else if (self.gameState == ADSGameStatePlaying) {
@@ -287,8 +379,10 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)drawWalls {
-    SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(self.size.width - kGridSize*2, self.size.height - kGridSize*4)];
-    border.position = CGPointMake(self.size.width/2, self.size.height/2 - 10);
+    CGFloat w = ([self maxX] - [self minX] + 1) * kGridSize;
+    CGFloat h = ([self maxY] - [self minY] + 1) * kGridSize;
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(w, h)];
+    border.position = CGPointMake(([self minX] + [self maxX])/2.0 * kGridSize, ([self minY] + [self maxY])/2.0 * kGridSize);
     border.strokeColor = [UIColor colorWithRed:0.2 green:0.2 blue:1.0 alpha:1.0];
     border.lineWidth = 4.0;
     [self.bloomNode addChild:border];
@@ -297,17 +391,18 @@ static const CGFloat kGridSize = 20.0;
 - (void)resetGame {
     self.gameState = ADSGameStatePlaying;
     self.startBtn.hidden = YES;
+    self.restartOverlay.hidden = YES;
+    self.score = 0;
+    self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
-    self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake(10, 10)]];
+    self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake([self minX]+2, [self minY]+2)]];
     [self spawnFood];
     self.lastTick = 0;
 }
 
 - (void)spawnFood {
-    int maxX = (self.size.width - kGridSize*4) / kGridSize;
-    int maxY = (self.size.height - kGridSize*6) / kGridSize;
-    int x = (arc4random_uniform(maxX) + 2);
-    int y = (arc4random_uniform(maxY) + 2);
+    int x = [self minX] + arc4random_uniform([self maxX] - [self minX] + 1);
+    int y = [self minY] + arc4random_uniform([self maxY] - [self minY] + 1);
     self.food = CGPointMake(x, y);
 }
 
@@ -319,10 +414,7 @@ static const CGFloat kGridSize = 20.0;
     CGPoint head = self.snake.firstObject.CGPointValue;
     CGPoint next = CGPointMake(head.x + self.direction.dx, head.y + self.direction.dy);
     
-    int maxX = (self.size.width - kGridSize*2) / kGridSize;
-    int maxY = (self.size.height - kGridSize*4) / kGridSize;
-    
-    if (next.x < 1 || next.x >= maxX || next.y < 1 || next.y >= maxY) { [self die]; return; }
+    if (next.x < [self minX] || next.x > [self maxX] || next.y < [self minY] || next.y > [self maxY]) { [self die]; return; }
     
     for (NSValue *val in self.snake) {
         if (CGPointEqualToPoint(val.CGPointValue, next)) { [self die]; return; }
@@ -331,6 +423,9 @@ static const CGFloat kGridSize = 20.0;
     [self.snake insertObject:[NSValue valueWithCGPoint:next] atIndex:0];
     
     if (CGPointEqualToPoint(next, self.food)) {
+        self.score += 10;
+        self.scoreLbl.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
+        
         UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
         [feed impactOccurred];
         [self spawnFood];
@@ -344,6 +439,7 @@ static const CGFloat kGridSize = 20.0;
     self.gameState = ADSGameStateDead;
     self.startBtn.text = @"↻ RESTART";
     self.startBtn.hidden = NO;
+    self.restartOverlay.hidden = NO;
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeWarning];
@@ -353,6 +449,14 @@ static const CGFloat kGridSize = 20.0;
     flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
     [self addChild:flash];
     [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
+    if (self.score > best) {
+        [def setInteger:self.score forKey:@"ADS_SnakeHighScore"];
+        [def synchronize];
+        [self showLeaderboard];
+    }
 }
 
 - (void)render {
