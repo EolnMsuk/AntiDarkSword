@@ -344,7 +344,7 @@ static const CGFloat kGridSize = 20.0;
     BOOL _isDead, _isPlaying, _isPaused;
 }
 
-static const CGFloat kRopGrid = 26.0; 
+static const CGFloat kRopGrid = 24.0; 
 static const int kRopCols = 10;
 static const int kRopRows = 20;
 
