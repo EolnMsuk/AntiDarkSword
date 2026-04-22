@@ -1,9 +1,6 @@
 export ARCHS ?= arm64 arm64e
 export TARGET ?= iphone:clang:latest:14.5
 
-# Force dual SHA1+SHA256 signing
-export TARGET_CODESIGN_FLAGS = -S -Hsha1 -Hsha256
-
 include $(THEOS)/makefiles/common.mk
 
 SUBPROJECTS += AntiDarkSwordUI AntiDarkSwordDaemon antidarkswordprefs CorelliumDecoy
