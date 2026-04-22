@@ -11,9 +11,21 @@ typedef struct {
     int playBGM;
 } ADSSynthState;
 
+@interface ADSPyEaterScene ()
+@property (nonatomic, strong) SKLabelNode *musicBtn;
+@end
+
+@interface ADSJailTrisScene ()
+@property (nonatomic, strong) SKLabelNode *musicBtn;
+@end
+
 // --- PYEATER SCENE ---
 @implementation ADSPyEaterScene {
     CGPoint _touchStartLoc;
+    AVAudioEngine *_audioEngine;
+    AVAudioSourceNode *_sourceNode;
+    ADSSynthState *_synthState;
+    BOOL _musicEnabled;
 }
 static const CGFloat kGridSize = 20.0;
 
@@ -23,6 +35,14 @@ static const CGFloat kGridSize = 20.0;
 - (int)maxY { return (self.size.height / kGridSize) - 3; } 
 
 - (void)willMoveFromView:(SKView *)view {
+    if (_audioEngine) {
+        [_audioEngine stop];
+        _audioEngine = nil;
+    }
+    if (_synthState) {
+        free(_synthState);
+        _synthState = NULL;
+    }
     NSArray *gestures = [view.gestureRecognizers copy];
     for (UIGestureRecognizer *g in gestures) {
         [view removeGestureRecognizer:g];
@@ -43,12 +63,62 @@ static const CGFloat kGridSize = 20.0;
     self.gameLayer = [SKNode node];
     [self.bloomNode addChild:self.gameLayer];
     
+    [self setupAudio];
     [self setupGestures:view];
     [self setupUI];
     [self drawWalls];
     
     self.gameState = ADSGameStateMenu;
     self.snake = [NSMutableArray array];
+}
+
+- (void)setupAudio {
+    _synthState = malloc(sizeof(ADSSynthState));
+    memset(_synthState, 0, sizeof(ADSSynthState));
+    _musicEnabled = YES;
+    _synthState->playBGM = 1;
+    
+    _audioEngine = [[AVAudioEngine alloc] init];
+    AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
+    ADSSynthState *state = _synthState;
+    
+    _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
+        float *outBuf = (float *)outputData->mBuffers[0].mData;
+        float pyeaterTune[] = { 261.63, 329.63, 392.00, 523.25, 392.00, 329.63, 261.63, 196.00 }; 
+        for (AVAudioFrameCount i = 0; i < frameCount; i++) {
+            float bgmSamp = 0;
+            if (state->playBGM) {
+                state->bgmTime += 1.0/44100.0;
+                if (state->bgmTime > 0.15) {
+                    state->bgmTime = 0;
+                    state->bgmIdx = (state->bgmIdx + 1) % 8;
+                }
+                float bFreq = pyeaterTune[state->bgmIdx];
+                if (bFreq > 0) {
+                    state->bgmPhase += (bFreq * 2.0 * M_PI) / 44100.0;
+                    if (state->bgmPhase > 2.0 * M_PI) state->bgmPhase -= 2.0 * M_PI;
+                    bgmSamp = (state->bgmPhase < M_PI ? 0.03 : -0.03); 
+                }
+            }
+            float sfxSamp = 0;
+            if (state->sfxDur > 0) {
+                state->sfxPhase += (state->sfxFreq * 2.0 * M_PI) / 44100.0;
+                if (state->sfxPhase > 2.0 * M_PI) state->sfxPhase -= 2.0 * M_PI;
+                sfxSamp = (state->sfxPhase < M_PI ? 0.2 : -0.2); 
+                state->sfxDur -= 1.0/44100.0;
+            }
+            outBuf[i] = bgmSamp + sfxSamp;
+        }
+        return noErr;
+    }];
+    
+    [_audioEngine attachNode:_sourceNode];
+    [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format];
+    [_audioEngine startAndReturnError:nil];
+}
+
+- (void)playSFX:(float)freq dur:(float)dur {
+    if (_synthState) { _synthState->sfxFreq = freq; _synthState->sfxDur = dur; }
 }
 
 - (void)setupUI {
@@ -99,6 +169,12 @@ static const CGFloat kGridSize = 20.0;
     self.pauseBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); 
     [self.bloomNode addChild:self.pauseBtn];
     
+    self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.musicBtn.fontSize = 16;
+    self.musicBtn.position = CGPointMake(self.size.width / 2, 60); 
+    [self.bloomNode addChild:self.musicBtn];
+    [self updateMusicBtn];
+    
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -107,12 +183,25 @@ static const CGFloat kGridSize = 20.0;
     [self.bloomNode addChild:self.highScoreBtn];
 }
 
+- (void)updateMusicBtn {
+    if (_musicEnabled) {
+        self.musicBtn.text = @"Music ON";
+        self.musicBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+        if (_synthState && self.gameState == ADSGameStatePlaying) _synthState->playBGM = 1;
+    } else {
+        self.musicBtn.text = @"Music OFF";
+        self.musicBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        if (_synthState) _synthState->playBGM = 0;
+    }
+}
+
 - (void)setupGestures:(SKView *)view {
     NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionUp), @(UISwipeGestureRecognizerDirectionDown), 
                       @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
     for (NSNumber *dir in dirs) {
         UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
         swipe.direction = dir.integerValue;
+        swipe.cancelsTouchesInView = NO; 
         [view addGestureRecognizer:swipe];
     }
 }
@@ -184,6 +273,12 @@ static const CGFloat kGridSize = 20.0;
         return;
     }
     
+    if ([self.musicBtn containsPoint:loc]) {
+        _musicEnabled = !_musicEnabled;
+        [self updateMusicBtn];
+        return;
+    }
+    
     if (!self.highScoreBtn.hidden && [self.highScoreBtn containsPoint:loc]) {
         [self showLeaderboard];
         return;
@@ -200,11 +295,13 @@ static const CGFloat kGridSize = 20.0;
             self.gameState = ADSGameStatePaused;
             self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO;
+            if (_synthState) _synthState->playBGM = 0;
         }
     } else if (self.gameState == ADSGameStatePaused) {
         if ([self.startBtn containsPoint:loc]) {
             self.gameState = ADSGameStatePlaying;
             self.startBtn.hidden = YES;
+            if (_synthState && _musicEnabled) _synthState->playBGM = 1;
         }
     }
 }
@@ -237,6 +334,7 @@ static const CGFloat kGridSize = 20.0;
     self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
     self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake([self minX]+2, [self minY]+2)]];
+    if (_synthState && _musicEnabled) _synthState->playBGM = 1;
     [self spawnFood];
     self.lastTick = 0;
 }
@@ -284,6 +382,8 @@ static const CGFloat kGridSize = 20.0;
         UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleRigid];
         [feed impactOccurred];
         
+        [self playSFX:880.0 dur:0.1];
+        
         [self spawnFood];
     } else {
         [self.snake removeLastObject];
@@ -297,6 +397,9 @@ static const CGFloat kGridSize = 20.0;
     self.startBtn.hidden = NO;
     self.restartOverlay.hidden = NO;
     self.highScoreBtn.hidden = NO; 
+    if (_synthState) _synthState->playBGM = 0;
+    
+    [self playSFX:150.0 dur:0.5];
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeWarning];
@@ -365,6 +468,7 @@ static const CGFloat kGridSize = 20.0;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
     ADSSynthState *_synthState;
+    BOOL _musicEnabled;
 }
 
 static const CGFloat kRopGrid = 22.0; 
@@ -424,6 +528,7 @@ static int rop_blocks[7][4][4][2] = {
 - (void)setupAudio {
     _synthState = malloc(sizeof(ADSSynthState));
     memset(_synthState, 0, sizeof(ADSSynthState));
+    _musicEnabled = YES;
     _synthState->playBGM = 1;
     
     _audioEngine = [[AVAudioEngine alloc] init];
@@ -491,6 +596,12 @@ static int rop_blocks[7][4][4][2] = {
     _menuBtn.position = CGPointMake(45, self.size.height - 35);
     [self addChild:_menuBtn];
     
+    self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    self.musicBtn.fontSize = 14;
+    self.musicBtn.position = CGPointMake(self.size.width / 2, self.size.height - 40);
+    [self addChild:self.musicBtn];
+    [self updateMusicBtn];
+    
     _highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _highScoreBtn.text = @"🏆 HIGH SCORES";
     _highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -533,11 +644,25 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_restartBtn];
 }
 
+- (void)updateMusicBtn {
+    if (_musicEnabled) {
+        self.musicBtn.text = @"Music ON";
+        self.musicBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+        if (_synthState && _isPlaying && !_isPaused && !_isDead) _synthState->playBGM = 1;
+    } else {
+        self.musicBtn.text = @"Music OFF";
+        self.musicBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        if (_synthState) _synthState->playBGM = 0;
+    }
+}
+
 - (void)setupGestures:(SKView *)view {
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    pan.cancelsTouchesInView = NO;
     [view addGestureRecognizer:pan];
     
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
+    tap.cancelsTouchesInView = NO;
     [view addGestureRecognizer:tap];
 }
 
@@ -609,6 +734,12 @@ static int rop_blocks[7][4][4][2] = {
         return;
     }
     
+    if ([self.musicBtn containsPoint:loc]) {
+        _musicEnabled = !_musicEnabled;
+        [self updateMusicBtn];
+        return;
+    }
+    
     if (!_highScoreBtn.hidden && [_highScoreBtn containsPoint:loc]) {
         [self showLeaderboard];
         return;
@@ -639,7 +770,7 @@ static int rop_blocks[7][4][4][2] = {
             } else {
                 _startBtn.hidden = YES;
                 _restartOverlay.hidden = YES;
-                if (_synthState) _synthState->playBGM = 1;
+                if (_synthState && _musicEnabled) _synthState->playBGM = 1;
             }
         }
     }
@@ -724,6 +855,14 @@ static int rop_blocks[7][4][4][2] = {
 
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
+    
+    CGPoint viewLoc = [sender locationInView:sender.view];
+    CGPoint loc = [self convertPointFromView:viewLoc];
+    
+    if ([_pauseBtn containsPoint:loc] || [_menuBtn containsPoint:loc] || [self.musicBtn containsPoint:loc] || [_restartBtn containsPoint:loc]) {
+        return;
+    }
+    
     if (_bType == 3) return; 
     
     int nextRot = (_bRot + 1) % 4;
@@ -763,7 +902,7 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBtn.hidden = YES;
     [_deathContainer removeFromParent];
     _deathContainer = nil;
-    if (_synthState) _synthState->playBGM = 1;
+    if (_synthState && _musicEnabled) _synthState->playBGM = 1;
     
     [_board removeAllObjects];
     _score = 0;
