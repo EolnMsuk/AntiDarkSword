@@ -222,7 +222,6 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)setupUI {
-    // Top UI moved UP by 1 cell (20 points)
     self.titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.titleLbl.text = @"Exploit Eater";
     self.titleLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
@@ -241,7 +240,7 @@ static const CGFloat kGridSize = 20.0;
     CGFloat overlayH = self.size.height - 120;
     self.restartOverlay = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
     self.restartOverlay.position = CGPointMake(self.size.width / 2, self.size.height / 2);
-    self.restartOverlay.fillColor = [UIColor clearColor]; // Clear background as requested
+    self.restartOverlay.fillColor = [UIColor clearColor]; 
     self.restartOverlay.strokeColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.restartOverlay.lineWidth = 4.0;
     self.restartOverlay.zPosition = 50;
@@ -260,17 +259,16 @@ static const CGFloat kGridSize = 20.0;
     self.pauseBtn.text = @"⏸";
     self.pauseBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.pauseBtn.fontSize = 24;
-    self.pauseBtn.position = CGPointMake(30, self.size.height - 15);
+    self.pauseBtn.position = CGPointMake(30, self.size.height - 40); // Aligned with score
     [self.bloomNode addChild:self.pauseBtn];
 
     self.closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.closeBtn.text = @"❌";
     self.closeBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.closeBtn.fontSize = 20;
-    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 15);
+    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40); // Aligned with score
     [self.bloomNode addChild:self.closeBtn];
     
-    // Positioned 3 cells (60 points) below the new bottom wall (y=80)
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
