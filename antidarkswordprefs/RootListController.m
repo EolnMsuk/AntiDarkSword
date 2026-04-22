@@ -193,10 +193,11 @@ typedef NS_ENUM(NSInteger, ADSGameState) {
 @implementation ADSExploitEaterScene
 static const CGFloat kGridSize = 20.0;
 
+// Shifted grid boundaries UP by 1 cell
 - (int)minX { return 2; }
 - (int)maxX { return (self.size.width / kGridSize) - 2; }
-- (int)minY { return 3; }
-- (int)maxY { return (self.size.height / kGridSize) - 4; }
+- (int)minY { return 4; } 
+- (int)maxY { return (self.size.height / kGridSize) - 3; } 
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
@@ -221,26 +222,26 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)setupUI {
+    // Top UI moved UP by 1 cell (20 points)
     self.titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.titleLbl.text = @"Exploit Eater";
     self.titleLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.titleLbl.fontSize = 24;
-    self.titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 35);
+    self.titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 15);
     [self.bloomNode addChild:self.titleLbl];
 
     self.scoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.scoreLbl.text = @"SCORE: 0";
     self.scoreLbl.fontColor = [UIColor whiteColor];
     self.scoreLbl.fontSize = 16;
-    self.scoreLbl.position = CGPointMake(self.size.width / 2, self.size.height - 60);
+    self.scoreLbl.position = CGPointMake(self.size.width / 2, self.size.height - 40);
     [self.bloomNode addChild:self.scoreLbl];
 
-    // Opaque background for restart
     CGFloat overlayW = self.size.width - 60;
     CGFloat overlayH = self.size.height - 120;
     self.restartOverlay = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
-    self.restartOverlay.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 10);
-    self.restartOverlay.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; // Solid dark color
+    self.restartOverlay.position = CGPointMake(self.size.width / 2, self.size.height / 2);
+    self.restartOverlay.fillColor = [UIColor clearColor]; // Clear background as requested
     self.restartOverlay.strokeColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.restartOverlay.lineWidth = 4.0;
     self.restartOverlay.zPosition = 50;
@@ -252,28 +253,29 @@ static const CGFloat kGridSize = 20.0;
     self.startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.startBtn.fontSize = 40;
     self.startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 15);
-    self.startBtn.zPosition = 51; // Always above overlay
+    self.startBtn.zPosition = 51; 
     [self.bloomNode addChild:self.startBtn];
 
     self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.pauseBtn.text = @"⏸";
     self.pauseBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.pauseBtn.fontSize = 24;
-    self.pauseBtn.position = CGPointMake(30, self.size.height - 35);
+    self.pauseBtn.position = CGPointMake(30, self.size.height - 15);
     [self.bloomNode addChild:self.pauseBtn];
 
     self.closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.closeBtn.text = @"❌";
     self.closeBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     self.closeBtn.fontSize = 20;
-    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 35);
+    self.closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 15);
     [self.bloomNode addChild:self.closeBtn];
     
+    // Positioned 3 cells (60 points) below the new bottom wall (y=80)
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.highScoreBtn.fontSize = 16;
-    self.highScoreBtn.position = CGPointMake(self.size.width / 2, 20);
+    self.highScoreBtn.position = CGPointMake(self.size.width / 2, 20); 
     [self.bloomNode addChild:self.highScoreBtn];
 }
 
@@ -345,13 +347,13 @@ static const CGFloat kGridSize = 20.0;
         return;
     }
     
-    if ([self.highScoreBtn containsPoint:loc]) {
+    // Only register clicks if the button isn't hidden
+    if (!self.highScoreBtn.hidden && [self.highScoreBtn containsPoint:loc]) {
         [self showLeaderboard];
         return;
     }
 
     if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
-        // Tap big overlay or text
         if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
             [self resetGame];
         }
@@ -392,6 +394,7 @@ static const CGFloat kGridSize = 20.0;
     self.gameState = ADSGameStatePlaying;
     self.startBtn.hidden = YES;
     self.restartOverlay.hidden = YES;
+    self.highScoreBtn.hidden = YES; // Hide high score during gameplay
     self.score = 0;
     self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
@@ -440,6 +443,7 @@ static const CGFloat kGridSize = 20.0;
     self.startBtn.text = @"↻ RESTART";
     self.startBtn.hidden = NO;
     self.restartOverlay.hidden = NO;
+    self.highScoreBtn.hidden = NO; // Reveal high score when game ends
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
     [feed notificationOccurred:UINotificationFeedbackTypeWarning];
