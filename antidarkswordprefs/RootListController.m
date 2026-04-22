@@ -166,6 +166,16 @@ typedef NS_ENUM(NSInteger, ADSGameState) {
     ADSGameStateDead
 };
 
+// --- MINI GAMES ---
+@interface ADSGameMenuScene : SKScene
+@property (nonatomic, copy) void (^onSelectGame)(NSInteger gameIndex);
+@property (nonatomic, copy) void (^exitHandler)(void);
+@end
+
+@interface ADSROPStackerScene : SKScene
+@property (nonatomic, copy) void (^exitHandler)(void);
+@end
+
 // --- EXPLOIT EATER SCENE ---
 @interface ADSExploitEaterScene : SKScene
 @property (nonatomic, assign) ADSGameState gameState;
@@ -511,6 +521,319 @@ static const CGFloat kGridSize = 20.0;
 }
 @end
 
+// --- ROP STACKER (TETRIS) SCENE ---
+@implementation ADSROPStackerScene {
+    NSMutableDictionary *_board; 
+    int _bX, _bY, _bType, _bRot;
+    NSTimeInterval _lastTick, _tickRate;
+    NSInteger _score;
+    SKNode *_gameLayer;
+    SKLabelNode *_scoreLbl, *_startBtn, *_closeBtn;
+    SKShapeNode *_restartOverlay;
+    BOOL _isDead, _isPlaying;
+}
+
+static const CGFloat kRopGrid = 16.0;
+static const int kRopCols = 10;
+static const int kRopRows = 20;
+
+static int rop_blocks[7][4][2] = {
+    {{0,-1}, {0,0}, {0,1}, {0,2}},   // I
+    {{-1,1}, {-1,0}, {0,0}, {1,0}},  // J
+    {{1,1}, {1,0}, {0,0}, {-1,0}},   // L
+    {{0,0}, {1,0}, {0,1}, {1,1}},    // O
+    {{-1,-1}, {0,-1}, {0,0}, {1,0}}, // S
+    {{-1,0}, {0,0}, {1,0}, {0,-1}},  // T
+    {{-1,0}, {0,0}, {0,-1}, {1,-1}}  // Z
+};
+
+- (void)didMoveToView:(SKView *)view {
+    self.backgroundColor = [UIColor blackColor];
+    _board = [NSMutableDictionary dictionary];
+    _tickRate = 0.5;
+    
+    _gameLayer = [SKNode node];
+    
+    // Center the board
+    CGFloat boardWidth = kRopCols * kRopGrid;
+    CGFloat boardHeight = kRopRows * kRopGrid;
+    _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 - 10);
+    [self addChild:_gameLayer];
+    
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, boardWidth, boardHeight)];
+    border.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    border.lineWidth = 2.0;
+    [_gameLayer addChild:border];
+    
+    _scoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _scoreLbl.text = @"STACKS CLEARED: 0";
+    _scoreLbl.fontSize = 16;
+    _scoreLbl.fontColor = [UIColor whiteColor];
+    _scoreLbl.position = CGPointMake(self.size.width / 2, self.size.height - 35);
+    [self addChild:_scoreLbl];
+
+    _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _closeBtn.text = @"❌";
+    _closeBtn.fontSize = 20;
+    _closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40);
+    [self addChild:_closeBtn];
+
+    _startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _startBtn.text = @"▶ INJECT PAYLOAD";
+    _startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    _startBtn.fontSize = 24;
+    _startBtn.position = CGPointMake(self.size.width / 2, self.size.height / 2);
+    _startBtn.zPosition = 50;
+    [self addChild:_startBtn];
+
+    [self setupGestures:view];
+}
+
+- (void)setupGestures:(SKView *)view {
+    NSArray *dirs = @[@(UISwipeGestureRecognizerDirectionDown), @(UISwipeGestureRecognizerDirectionLeft), @(UISwipeGestureRecognizerDirectionRight)];
+    for (NSNumber *dir in dirs) {
+        UISwipeGestureRecognizer *swipe = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
+        swipe.direction = dir.integerValue;
+        [view addGestureRecognizer:swipe];
+    }
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap:)];
+    [view addGestureRecognizer:tap];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    CGPoint loc = [[touches anyObject] locationInNode:self];
+    if ([_closeBtn containsPoint:loc]) {
+        if (self.exitHandler) self.exitHandler();
+        return;
+    }
+    if (!_isPlaying && [_startBtn containsPoint:loc]) {
+        [self resetGame];
+    }
+}
+
+- (void)handleSwipe:(UISwipeGestureRecognizer *)sender {
+    if (!_isPlaying || _isDead) return;
+    if (sender.direction == UISwipeGestureRecognizerDirectionLeft && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+    if (sender.direction == UISwipeGestureRecognizerDirectionRight && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
+    if (sender.direction == UISwipeGestureRecognizerDirectionDown) {
+        while ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) _bY--;
+        _lastTick = 0; 
+    }
+    [self render];
+}
+
+- (void)handleTap:(UITapGestureRecognizer *)sender {
+    if (!_isPlaying || _isDead) return;
+    if (_bType == 3) return; // O block doesn't rotate
+    int nextRot = (_bRot + 1) % 4;
+    if ([self isValidX:_bX y:_bY rot:nextRot type:_bType]) _bRot = nextRot;
+    [self render];
+}
+
+- (void)resetGame {
+    _isPlaying = YES;
+    _isDead = NO;
+    _startBtn.hidden = YES;
+    [_board removeAllObjects];
+    _score = 0;
+    _tickRate = 0.5;
+    _scoreLbl.text = @"STACKS CLEARED: 0";
+    [self spawnBlock];
+}
+
+- (void)spawnBlock {
+    _bType = arc4random_uniform(7);
+    _bRot = 0;
+    _bX = kRopCols / 2;
+    _bY = kRopRows - 2;
+    if (![self isValidX:_bX y:_bY rot:_bRot type:_bType]) {
+        _isDead = YES;
+        _isPlaying = NO;
+        _startBtn.text = @"↻ KERNEL PANIC (RETRY)";
+        _startBtn.hidden = NO;
+        UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
+        [feed notificationOccurred:UINotificationFeedbackTypeError];
+    }
+}
+
+- (CGPoint)rotatedPoint:(int)px py:(int)py rot:(int)rot {
+    int nx = px, ny = py;
+    for(int i=0; i<rot; i++) { int t=nx; nx=-ny; ny=t; }
+    return CGPointMake(nx, ny);
+}
+
+- (BOOL)isValidX:(int)x y:(int)y rot:(int)rot type:(int)type {
+    for (int i=0; i<4; i++) {
+        CGPoint pt = [self rotatedPoint:rop_blocks[type][i][0] py:rop_blocks[type][i][1] rot:rot];
+        int nx = x + (int)pt.x;
+        int ny = y + (int)pt.y;
+        if (nx < 0 || nx >= kRopCols || ny < 0 || ny >= kRopRows) return NO;
+        if (_board[[NSString stringWithFormat:@"%d,%d", nx, ny]] != nil) return NO;
+    }
+    return YES;
+}
+
+- (void)update:(NSTimeInterval)currentTime {
+    if (!_isPlaying || _isDead) return;
+    if (currentTime - _lastTick < _tickRate) return;
+    _lastTick = currentTime;
+    
+    if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) {
+        _bY--;
+    } else {
+        [self lockBlock];
+        [self clearLines];
+        [self spawnBlock];
+    }
+    [self render];
+}
+
+- (UIColor *)colorForType:(int)type {
+    NSArray *colors = @[[UIColor cyanColor], [UIColor blueColor], [UIColor orangeColor], [UIColor yellowColor], [UIColor greenColor], [UIColor purpleColor], [UIColor redColor]];
+    return colors[type];
+}
+
+- (void)lockBlock {
+    UIColor *c = [self colorForType:_bType];
+    for (int i=0; i<4; i++) {
+        CGPoint pt = [self rotatedPoint:rop_blocks[_bType][i][0] py:rop_blocks[_bType][i][1] rot:_bRot];
+        int nx = _bX + (int)pt.x;
+        int ny = _bY + (int)pt.y;
+        _board[[NSString stringWithFormat:@"%d,%d", nx, ny]] = c;
+    }
+    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feed impactOccurred];
+}
+
+- (void)clearLines {
+    int linesCleared = 0;
+    for (int y = 0; y < kRopRows; y++) {
+        BOOL full = YES;
+        for (int x = 0; x < kRopCols; x++) {
+            if (!_board[[NSString stringWithFormat:@"%d,%d", x, y]]) { full = NO; break; }
+        }
+        if (full) {
+            linesCleared++;
+            for (int dropY = y; dropY < kRopRows - 1; dropY++) {
+                for (int x = 0; x < kRopCols; x++) {
+                    UIColor *above = _board[[NSString stringWithFormat:@"%d,%d", x, dropY+1]];
+                    if (above) _board[[NSString stringWithFormat:@"%d,%d", x, dropY]] = above;
+                    else [_board removeObjectForKey:[NSString stringWithFormat:@"%d,%d", x, dropY]];
+                }
+            }
+            y--; 
+        }
+    }
+    if (linesCleared > 0) {
+        _score += linesCleared;
+        _scoreLbl.text = [NSString stringWithFormat:@"STACKS CLEARED: %ld", (long)_score];
+        _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
+    }
+}
+
+- (void)render {
+    [_gameLayer removeAllChildren];
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopCols * kRopGrid, kRopRows * kRopGrid)];
+    border.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    border.lineWidth = 2.0;
+    [_gameLayer addChild:border];
+    
+    // Draw locked blocks
+    for (NSString *key in _board) {
+        NSArray *comps = [key componentsSeparatedByString:@","];
+        int x = [comps[0] intValue], y = [comps[1] intValue];
+        SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kRopGrid, y*kRopGrid, kRopGrid-1, kRopGrid-1)];
+        node.fillColor = _board[key];
+        node.lineWidth = 0;
+        [_gameLayer addChild:node];
+    }
+    
+    // Draw current block
+    if (_isPlaying && !_isDead) {
+        UIColor *c = [self colorForType:_bType];
+        for (int i=0; i<4; i++) {
+            CGPoint pt = [self rotatedPoint:rop_blocks[_bType][i][0] py:rop_blocks[_bType][i][1] rot:_bRot];
+            int nx = _bX + (int)pt.x;
+            int ny = _bY + (int)pt.y;
+            SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, ny*kRopGrid, kRopGrid-1, kRopGrid-1)];
+            node.fillColor = c;
+            node.lineWidth = 0;
+            [_gameLayer addChild:node];
+        }
+    }
+}
+@end
+
+// --- MENU SCENE ---
+@implementation ADSGameMenuScene {
+    SKLabelNode *_closeBtn;
+    SKShapeNode *_btnSnake;
+    SKShapeNode *_btnTetris;
+}
+
+- (void)didMoveToView:(SKView *)view {
+    self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
+    
+    SKLabelNode *title = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    title.text = @"SELECT TARGET PAYLOAD";
+    title.fontColor = [UIColor whiteColor];
+    title.fontSize = 22;
+    title.position = CGPointMake(self.size.width/2, self.size.height - 60);
+    [self addChild:title];
+    
+    _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _closeBtn.text = @"❌";
+    _closeBtn.fontSize = 20;
+    _closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40);
+    [self addChild:_closeBtn];
+
+    // Exploit Eater Button
+    _btnSnake = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
+    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 + 50);
+    _btnSnake.fillColor = [UIColor clearColor];
+    _btnSnake.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    _btnSnake.lineWidth = 3.0;
+    [self addChild:_btnSnake];
+    
+    SKLabelNode *snakeLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    snakeLbl.text = @"🐍 EXPLOIT EATER";
+    snakeLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    snakeLbl.fontSize = 18;
+    snakeLbl.position = CGPointMake(0, -6);
+    [_btnSnake addChild:snakeLbl];
+
+    // ROP Stacker Button
+    _btnTetris = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
+    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 - 50);
+    _btnTetris.fillColor = [UIColor clearColor];
+    _btnTetris.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    _btnTetris.lineWidth = 3.0;
+    [self addChild:_btnTetris];
+    
+    SKLabelNode *tetrisLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    tetrisLbl.text = @"🧱 ROP STACKER";
+    tetrisLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    tetrisLbl.fontSize = 18;
+    tetrisLbl.position = CGPointMake(0, -6);
+    [_btnTetris addChild:tetrisLbl];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    CGPoint loc = [[touches anyObject] locationInNode:self];
+    
+    if ([_closeBtn containsPoint:loc]) {
+        if (self.exitHandler) self.exitHandler();
+        return;
+    }
+    
+    if ([_btnSnake containsPoint:loc]) {
+        if (self.onSelectGame) self.onSelectGame(0);
+    } else if ([_btnTetris containsPoint:loc]) {
+        if (self.onSelectGame) self.onSelectGame(1);
+    }
+}
+@end
+
 // --- CONTROLLER INTEGRATION ---
 @interface AntiDarkSwordCreditsController ()
 @property (nonatomic, strong) SKView *gameView;
@@ -557,13 +880,29 @@ static const CGFloat kGridSize = 20.0;
     [footerContainer addSubview:self.gameView];
     table.tableFooterView = footerContainer;
     
-    ADSExploitEaterScene *scene = [[ADSExploitEaterScene alloc] initWithSize:self.gameView.bounds.size];
-    scene.scaleMode = SKSceneScaleModeAspectFill;
+    ADSGameMenuScene *menuScene = [[ADSGameMenuScene alloc] initWithSize:self.gameView.bounds.size];
+    menuScene.scaleMode = SKSceneScaleModeAspectFill;
     
     __weak typeof(self) weakSelf = self;
-    scene.exitHandler = ^{ [weakSelf teardownGame]; };
+    menuScene.exitHandler = ^{ [weakSelf teardownGame]; };
     
-    [self.gameView presentScene:scene];
+    menuScene.onSelectGame = ^(NSInteger gameIndex) {
+        SKScene *selectedScene;
+        if (gameIndex == 0) {
+            ADSExploitEaterScene *s = [[ADSExploitEaterScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            s.exitHandler = ^{ [weakSelf teardownGame]; };
+            selectedScene = s;
+        } else {
+            ADSROPStackerScene *s = [[ADSROPStackerScene alloc] initWithSize:weakSelf.gameView.bounds.size];
+            s.exitHandler = ^{ [weakSelf teardownGame]; };
+            selectedScene = s;
+        }
+        selectedScene.scaleMode = SKSceneScaleModeAspectFill;
+        SKTransition *transition = [SKTransition pushWithDirection:SKTransitionDirectionLeft duration:0.3];
+        [weakSelf.gameView presentScene:selectedScene transition:transition];
+    };
+    
+    [self.gameView presentScene:menuScene];
     
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 1.0;
