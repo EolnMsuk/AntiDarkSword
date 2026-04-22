@@ -209,6 +209,13 @@ static const CGFloat kGridSize = 20.0;
 - (int)minY { return 4; } 
 - (int)maxY { return (self.size.height / kGridSize) - 3; } 
 
+- (void)willMoveFromView:(SKView *)view {
+    NSArray *gestures = [view.gestureRecognizers copy];
+    for (UIGestureRecognizer *g in gestures) {
+        [view removeGestureRecognizer:g];
+    }
+}
+
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
     
@@ -560,6 +567,13 @@ static int rop_blocks[7][4][4][2] = {
     // 6: Z
     { {{-1,1}, {0,1}, {0,0}, {1,0}}, {{1,1}, {1,0}, {0,0}, {0,-1}}, {{-1,1}, {0,1}, {0,0}, {1,0}}, {{1,1}, {1,0}, {0,0}, {0,-1}} }
 };
+
+- (void)willMoveFromView:(SKView *)view {
+    NSArray *gestures = [view.gestureRecognizers copy];
+    for (UIGestureRecognizer *g in gestures) {
+        [view removeGestureRecognizer:g];
+    }
+}
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
