@@ -529,10 +529,11 @@ static const CGFloat kGridSize = 20.0;
 // --- ROP STACKER (TETRIS) SCENE ---
 @implementation ADSROPStackerScene {
     NSMutableDictionary *_board; 
-    int _bX, _bY, _bType, _bRot;
+    int _bX, _bY, _bType, _bRot, _nextType;
     NSTimeInterval _lastTick, _tickRate;
     NSInteger _score;
     SKNode *_gameLayer;
+    SKNode *_previewNode;
     SKNode *_leaderboardNode;
     
     SKLabelNode *_scoreLbl;
@@ -545,10 +546,12 @@ static const CGFloat kGridSize = 20.0;
     BOOL _isDead, _isPlaying, _isPaused;
 }
 
-static const CGFloat kRopGrid = 17.0; 
+// Increased grid size to fill space better
+static const CGFloat kRopGrid = 20.0; 
 static const int kRopCols = 10;
 static const int kRopRows = 20;
 
+// Hardcoded 4-state rotations
 static int rop_blocks[7][4][4][2] = {
     // 0: I 
     { {{-1,0}, {0,0}, {1,0}, {2,0}}, {{0,1}, {0,0}, {0,-1}, {0,-2}}, {{-1,0}, {0,0}, {1,0}, {2,0}}, {{0,1}, {0,0}, {0,-1}, {0,-2}} },
@@ -579,10 +582,11 @@ static int rop_blocks[7][4][4][2] = {
     _tickRate = 0.5;
     
     _gameLayer = [SKNode node];
-    
     CGFloat boardWidth = kRopCols * kRopGrid;
     CGFloat boardHeight = kRopRows * kRopGrid;
-    _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 15);
+    
+    // Shifted slightly down to ensure top UI clears the pieces
+    _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 5);
     [self addChild:_gameLayer];
     
     [self setupUI];
@@ -617,6 +621,11 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBtn.fontSize = 14;
     _highScoreBtn.position = CGPointMake(self.size.width / 2, self.size.height - 25);
     [self addChild:_highScoreBtn];
+    
+    _previewNode = [SKNode node];
+    // Position preview relative to the top right to avoid overlap
+    _previewNode.position = CGPointMake(self.size.width - 40, self.size.height - 85);
+    [self addChild:_previewNode];
 
     CGFloat overlayW = self.size.width - 60;
     CGFloat overlayH = self.size.height - 120;
@@ -741,10 +750,12 @@ static int rop_blocks[7][4][4][2] = {
         
         if (fabs(translation.x) > fabs(translation.y)) { 
             if (fabs(velocity.x) > 1000 || fabs(translation.x) > 80) {
+                // BUG FIX: Limit fast swipe to 4 blocks
+                int steps = 0;
                 if (translation.x > 0) {
-                    while ([self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
+                    while (steps < 4 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) { _bX++; steps++; }
                 } else {
-                    while ([self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) _bX--;
+                    while (steps < 4 && [self isValidX:_bX-1 y:_bY rot:_bRot type:_bType]) { _bX--; steps++; }
                 }
             } else {
                 if (translation.x > 0 && [self isValidX:_bX+1 y:_bY rot:_bRot type:_bType]) _bX++;
@@ -763,8 +774,23 @@ static int rop_blocks[7][4][4][2] = {
 - (void)handleTap:(UITapGestureRecognizer *)sender {
     if (!_isPlaying || _isDead || _isPaused) return;
     if (_bType == 3) return; 
+    
     int nextRot = (_bRot + 1) % 4;
-    if ([self isValidX:_bX y:_bY rot:nextRot type:_bType]) _bRot = nextRot;
+    // BUG FIX: Basic Wall Kicking (Try rotating, then try shifting left/right/up)
+    if ([self isValidX:_bX y:_bY rot:nextRot type:_bType]) {
+        _bRot = nextRot;
+    } else if ([self isValidX:_bX-1 y:_bY rot:nextRot type:_bType]) {
+        _bX--; _bRot = nextRot;
+    } else if ([self isValidX:_bX+1 y:_bY rot:nextRot type:_bType]) {
+        _bX++; _bRot = nextRot;
+    } else if (_bType == 0 && [self isValidX:_bX-2 y:_bY rot:nextRot type:_bType]) { // Long I-Piece Wall Kick Left
+        _bX -= 2; _bRot = nextRot;
+    } else if (_bType == 0 && [self isValidX:_bX+2 y:_bY rot:nextRot type:_bType]) { // Long I-Piece Wall Kick Right
+        _bX += 2; _bRot = nextRot;
+    } else if ([self isValidX:_bX y:_bY+1 rot:nextRot type:_bType]) { // Floor Kick
+        _bY++; _bRot = nextRot;
+    }
+    
     [self render];
 }
 
@@ -779,6 +805,9 @@ static int rop_blocks[7][4][4][2] = {
     _score = 0;
     _tickRate = 0.5;
     _scoreLbl.text = @"STACKS CLEARED: 0";
+    
+    // Seed initial next block
+    _nextType = arc4random_uniform(7);
     [self spawnBlock];
 }
 
@@ -803,7 +832,8 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (void)spawnBlock {
-    _bType = arc4random_uniform(7);
+    _bType = _nextType;
+    _nextType = arc4random_uniform(7);
     _bRot = 0;
     _bX = kRopCols / 2;
     _bY = kRopRows - 2;
@@ -908,6 +938,8 @@ static int rop_blocks[7][4][4][2] = {
 
 - (void)render {
     [_gameLayer removeAllChildren];
+    [_previewNode removeAllChildren];
+    
     SKShapeNode *border = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopCols * kRopGrid, kRopRows * kRopGrid)];
     border.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     border.lineWidth = 2.0;
@@ -923,6 +955,7 @@ static int rop_blocks[7][4][4][2] = {
     }
     
     if (_isPlaying && !_isDead) {
+        // Draw Current Block
         UIColor *c = [self colorForType:_bType];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
@@ -931,6 +964,18 @@ static int rop_blocks[7][4][4][2] = {
             node.fillColor = c;
             node.lineWidth = 0;
             [_gameLayer addChild:node];
+        }
+        
+        // Draw Next Block Preview
+        UIColor *nc = [self colorForType:_nextType];
+        CGFloat pGrid = 12.0; // Smaller grid scale for preview box
+        for (int i=0; i<4; i++) {
+            int nx = rop_blocks[_nextType][0][i][0];
+            int ny = rop_blocks[_nextType][0][i][1];
+            SKShapeNode *nNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*pGrid, ny*pGrid, pGrid-1, pGrid-1)];
+            nNode.fillColor = nc;
+            nNode.lineWidth = 0;
+            [_previewNode addChild:nNode];
         }
     }
 }
