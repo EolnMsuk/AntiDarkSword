@@ -608,12 +608,12 @@ static int rop_blocks[7][4][4][2] = {
                         CGFloat height = (nyTop - nyBot) * kRopGrid + (kRopGrid - 1);
                         SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopGrid - 1, height)];
                         trail.position = CGPointMake(self->_gameLayer.position.x + nx * kRopGrid, self->_gameLayer.position.y + nyBot * kRopGrid);
-                        trail.fillColor = [c colorWithAlphaComponent:0.6];
+                        trail.fillColor = [c colorWithAlphaComponent:0.25];
                         trail.lineWidth = 0;
                         trail.zPosition = 5;
                         [self addChild:trail];
                         
-                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.35], [SKAction removeFromParent]]]];
+                        [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.15], [SKAction removeFromParent]]]];
                     }
                     
                     SKAction *sLeft = [SKAction moveByX:-2 y:-1 duration:0.02];
