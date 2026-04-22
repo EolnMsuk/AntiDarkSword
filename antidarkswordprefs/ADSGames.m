@@ -557,23 +557,13 @@ static int rop_blocks[7][4][4][2] = {
     CGPoint translation = [sender translationInView:sender.view];
     CGPoint velocity = [sender velocityInView:sender.view];
     
-    if (sender.state == UIGestureRecognizerStateChanged) {
-        if (translation.y > 25 && fabs(translation.y) > fabs(translation.x)) {
-            if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) {
-                _bY--;
-                [sender setTranslation:CGPointZero inView:sender.view];
-                [self render];
-            }
-        }
-    } else if (sender.state == UIGestureRecognizerStateEnded) {
+    if (sender.state == UIGestureRecognizerStateEnded) {
         if (fabs(translation.x) > fabs(translation.y)) { 
             int dir = translation.x > 0 ? 1 : -1;
             int blocksToMove = 1;
             
-            if (fabs(velocity.x) > 1200) {
+            if (fabs(velocity.x) > 800 || fabs(translation.x) > 60) {
                 blocksToMove = 3;
-            } else if (fabs(velocity.x) > 500) {
-                blocksToMove = 2;
             }
             
             if (blocksToMove > 1) {
@@ -596,7 +586,7 @@ static int rop_blocks[7][4][4][2] = {
                 [self render];
             }
         } else {
-            if (translation.y > 0 && velocity.y > 50) { 
+            if (translation.y > 10 || velocity.y > 50) { 
                 int drops = 0;
                 while ([self isValidX:_bX y:_bY - (drops + 1) rot:_bRot type:_bType]) drops++;
                 
