@@ -1,5 +1,6 @@
 #import "ADSGames.h"
 #import <AVFoundation/AVFoundation.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 typedef struct {
     float bgmPhase;
@@ -31,6 +32,8 @@ typedef struct {
     BOOL _musicEnabled;
     SKShapeNode *_menuBg;
     SKShapeNode *_pauseBg;
+    BOOL _hasSurpassedHighScore;
+    NSInteger _savedHighScore;
 }
 static const CGFloat kGridSize = 20.0;
 
@@ -56,6 +59,9 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    _savedHighScore = [def integerForKey:@"ADS_SnakeHighScore"];
     
     self.bloomNode = [[SKEffectNode alloc] init];
     CIFilter *bloom = [CIFilter filterWithName:@"CIBloom"];
@@ -208,12 +214,13 @@ static const CGFloat kGridSize = 20.0;
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.highScoreBtn.fontSize = 12;
     self.highScoreBtn.position = CGPointMake(65, 15); 
+    self.highScoreBtn.hidden = NO;
     [self.bloomNode addChild:self.highScoreBtn];
 }
 
 - (void)updateMusicBtn {
-    UIColor *onColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
-    UIColor *offColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    UIColor *onColor = [UIColor cyanColor];
+    UIColor *offColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
 
     if (_musicEnabled) {
         self.musicBtn.fontColor = onColor;
@@ -292,6 +299,9 @@ static const CGFloat kGridSize = 20.0;
     CGPoint loc = [[touches anyObject] locationInNode:self];
     if (hypot(loc.x - _touchStartLoc.x, loc.y - _touchStartLoc.y) > 15) return;
 
+    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feed impactOccurred];
+
     if (self.leaderboardNode) {
         SKNode *node = self.leaderboardNode;
         self.leaderboardNode = nil; 
@@ -310,7 +320,8 @@ static const CGFloat kGridSize = 20.0;
         return;
     }
     
-    if (!self.highScoreBtn.hidden && [self.highScoreBtn containsPoint:loc]) {
+    if ([self.highScoreBtn containsPoint:loc]) {
+        [self playSFX:1046.50 dur:0.4];
         [self showLeaderboard];
         return;
     }
@@ -366,7 +377,11 @@ static const CGFloat kGridSize = 20.0;
     self.gameState = ADSGameStatePlaying;
     self.startBtn.hidden = YES;
     self.restartOverlay.hidden = YES;
-    self.highScoreBtn.hidden = YES; 
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    _savedHighScore = [def integerForKey:@"ADS_SnakeHighScore"];
+    _hasSurpassedHighScore = NO;
+    
     [self.deathContainer removeFromParent];
     self.deathContainer = nil;
     self.score = 0;
@@ -418,10 +433,18 @@ static const CGFloat kGridSize = 20.0;
         self.score += 10;
         self.scoreLbl.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
         
+        if (!_hasSurpassedHighScore && self.score > _savedHighScore && _savedHighScore > 0) {
+            _hasSurpassedHighScore = YES;
+            [self runAction:[SKAction sequence:@[
+                [SKAction runBlock:^{ [self playSFX:987.77 dur:0.1]; }], [SKAction waitForDuration:0.1],
+                [SKAction runBlock:^{ [self playSFX:1318.51 dur:0.2]; }]
+            ]]];
+        } else {
+            [self playSFX:880.0 dur:0.1];
+        }
+        
         UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleRigid];
         [feed impactOccurred];
-        
-        [self playSFX:880.0 dur:0.1];
         
         [self spawnFood];
     } else {
@@ -434,17 +457,6 @@ static const CGFloat kGridSize = 20.0;
     self.gameState = ADSGameStateDead;
     if (_synthState) _synthState->playBGM = 0;
     
-    [self playSFX:150.0 dur:0.5];
-    
-    UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
-    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
-    
-    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
-    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
-    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
-    [self addChild:flash];
-    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
-    
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
     BOOL isNewHigh = NO;
@@ -455,6 +467,26 @@ static const CGFloat kGridSize = 20.0;
         isNewHigh = YES;
     }
     
+    if (isNewHigh && self.score > 0) {
+        [self runAction:[SKAction sequence:@[
+            [SKAction runBlock:^{ [self playSFX:523.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:659.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:783.99 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:1046.50 dur:0.4]; }]
+        ]]];
+    } else {
+        [self playSFX:150.0 dur:0.5];
+    }
+    
+    UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
+    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
+    
+    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
+    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
+    [self addChild:flash];
+    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
+    
     self.deathContainer = [SKNode node];
     self.deathContainer.zPosition = 60;
     [self.bloomNode addChild:self.deathContainer];
@@ -464,23 +496,39 @@ static const CGFloat kGridSize = 20.0;
     SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
     bg.position = CGPointMake(self.size.width / 2, self.size.height / 2);
     bg.fillColor = [UIColor colorWithWhite:0.0 alpha:0.9];
-    bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    bg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     bg.lineWidth = 4.0;
     [self.deathContainer addChild:bg];
     
-    SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblScore.text = isNewHigh ? @"NEW HIGH SCORE!" : [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
-    lblScore.fontColor = isNewHigh ? [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0] : [UIColor whiteColor];
-    lblScore.fontSize = isNewHigh ? 20 : 24;
-    lblScore.position = CGPointMake(0, 10);
-    [bg addChild:lblScore];
-    
-    SKLabelNode *lblHigh = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblHigh.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
-    lblHigh.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    lblHigh.fontSize = 18;
-    lblHigh.position = CGPointMake(0, -20);
-    [bg addChild:lblHigh];
+    if (isNewHigh) {
+        SKLabelNode *lblTitle = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblTitle.text = @"NEW HIGH SCORE!";
+        lblTitle.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        lblTitle.fontSize = 20;
+        lblTitle.position = CGPointMake(0, 15);
+        [bg addChild:lblTitle];
+        
+        SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblScore.text = [NSString stringWithFormat:@"%ld", (long)self.score];
+        lblScore.fontColor = [UIColor whiteColor];
+        lblScore.fontSize = 28;
+        lblScore.position = CGPointMake(0, -15);
+        [bg addChild:lblScore];
+    } else {
+        SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblScore.text = [NSString stringWithFormat:@"SCORE: %ld", (long)self.score];
+        lblScore.fontColor = [UIColor whiteColor];
+        lblScore.fontSize = 24;
+        lblScore.position = CGPointMake(0, 10);
+        [bg addChild:lblScore];
+        
+        SKLabelNode *lblHigh = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblHigh.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
+        lblHigh.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        lblHigh.fontSize = 18;
+        lblHigh.position = CGPointMake(0, -20);
+        [bg addChild:lblHigh];
+    }
     
     SKLabelNode *lblIcon = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     lblIcon.text = @"↻";
@@ -554,6 +602,9 @@ static const CGFloat kGridSize = 20.0;
     AVAudioSourceNode *_sourceNode;
     ADSSynthState *_synthState;
     BOOL _musicEnabled;
+    
+    BOOL _hasSurpassedHighScore;
+    NSInteger _savedHighScore;
 }
 
 static const CGFloat kRopGrid = 22.0; 
@@ -589,6 +640,9 @@ static int rop_blocks[7][4][4][2] = {
     self.backgroundColor = [UIColor blackColor];
     _board = [NSMutableDictionary dictionary];
     _tickRate = 0.5;
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    _savedHighScore = [def integerForKey:@"ADS_JailTrisHighScore"];
     
     [self setupAudio];
     
@@ -655,7 +709,7 @@ static int rop_blocks[7][4][4][2] = {
 
 - (void)setupUI {
     _scoreLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    _scoreLbl.text = @"STACKS CLEARED: 0";
+    _scoreLbl.text = @"CURRENT SCORE: 0";
     _scoreLbl.fontSize = 14;
     _scoreLbl.fontColor = [UIColor whiteColor];
     _scoreLbl.position = CGPointMake(self.size.width / 2, 5);
@@ -707,7 +761,7 @@ static int rop_blocks[7][4][4][2] = {
     
     _highScoreBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(180, 40) cornerRadius:8];
     _highScoreBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    _highScoreBg.fillColor = [UIColor clearColor];
+    _highScoreBg.fillColor = [UIColor colorWithWhite:0.1 alpha:0.95];
     _highScoreBg.position = CGPointMake(self.size.width / 2, 106);
     [self addChild:_highScoreBg];
 
@@ -721,8 +775,7 @@ static int rop_blocks[7][4][4][2] = {
     _previewNode = [SKNode node];
     CGFloat boardWidth = kRopCols * kRopGrid;
     CGFloat boardHeight = kRopRows * kRopGrid;
-    _previewNode.position = CGPointMake(_gameLayer.position.x + boardWidth - 42, 
-                                        _gameLayer.position.y + boardHeight - 37);
+    _previewNode.position = CGPointMake(_gameLayer.position.x + boardWidth - 42, _gameLayer.position.y + boardHeight - 37);
     _previewNode.alpha = 0.5;
     [self addChild:_previewNode];
 
@@ -738,7 +791,7 @@ static int rop_blocks[7][4][4][2] = {
     [self addChild:_restartOverlay];
 
     _startBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 50) cornerRadius:10];
-    _startBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    _startBg.strokeColor = [UIColor clearColor];
     _startBg.fillColor = [UIColor clearColor];
     _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 60);
     _startBg.zPosition = 51;
@@ -747,7 +800,7 @@ static int rop_blocks[7][4][4][2] = {
     _startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _startBtn.text = @"▶ Start";
     _startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    _startBtn.fontSize = 22;
+    _startBtn.fontSize = 28;
     _startBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
     [_startBg addChild:_startBtn];
     
@@ -848,6 +901,9 @@ static int rop_blocks[7][4][4][2] = {
     CGPoint loc = [[touches anyObject] locationInNode:self];
     if (hypot(loc.x - _touchStartLoc.x, loc.y - _touchStartLoc.y) > 15) return;
     
+    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [feed impactOccurred];
+
     if (_leaderboardNode) {
         SKNode *node = _leaderboardNode;
         _leaderboardNode = nil;
@@ -892,10 +948,17 @@ static int rop_blocks[7][4][4][2] = {
                 _startBtn.text = @"▶ RESUME";
                 _startBg.hidden = NO;
                 _restartOverlay.hidden = NO;
+                _highScoreBg.hidden = NO;
+                _highScoreBg.zPosition = 55;
+                
+                _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 35);
+                _highScoreBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 25);
                 if (_synthState) _synthState->playBGM = 0;
             } else {
                 _startBg.hidden = YES;
                 _restartOverlay.hidden = YES;
+                _highScoreBg.hidden = YES;
+                _highScoreBg.zPosition = 0;
                 if (_synthState && _musicEnabled) _synthState->playBGM = 1;
             }
         }
@@ -1036,85 +1099,20 @@ static int rop_blocks[7][4][4][2] = {
     _scoreLbl.hidden = NO;
     [_deathContainer removeFromParent];
     _deathContainer = nil;
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    _savedHighScore = [def integerForKey:@"ADS_JailTrisHighScore"];
+    _hasSurpassedHighScore = NO;
+
     if (_synthState && _musicEnabled) _synthState->playBGM = 1;
     
     [_board removeAllObjects];
     _score = 0;
     _tickRate = 0.5;
-    _scoreLbl.text = @"STACKS CLEARED: 0";
+    _scoreLbl.text = @"CURRENT SCORE: 0";
     
     _nextType = arc4random_uniform(7);
     [self spawnBlock];
-}
-
-- (void)die {
-    _isDead = YES;
-    _isPlaying = NO;
-    _highScoreBg.hidden = NO;
-    if (_synthState) _synthState->playBGM = 0;
-    
-    [self playSFX:150.0 dur:0.5];
-    
-    UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
-    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
-    
-    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
-    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
-    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
-    flash.zPosition = 99;
-    [self addChild:flash];
-    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
-    
-    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
-    NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
-    BOOL isNewHigh = NO;
-    if (_score > best) {
-        best = _score;
-        [def setInteger:best forKey:@"ADS_JailTrisHighScore"];
-        [def synchronize];
-        isNewHigh = YES;
-    }
-    
-    _deathContainer = [SKNode node];
-    _deathContainer.zPosition = 60;
-    [self addChild:_deathContainer];
-    
-    CGFloat overlayW = self.size.width - 60;
-    CGFloat overlayH = (self.size.height - 120) / 2.0;
-    SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
-    bg.position = CGPointMake(self.size.width / 2, self.size.height / 2);
-    bg.fillColor = [UIColor colorWithWhite:0.0 alpha:0.9];
-    bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    bg.lineWidth = 4.0;
-    [_deathContainer addChild:bg];
-    
-    SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblScore.text = isNewHigh ? @"NEW HIGH SCORE!" : [NSString stringWithFormat:@"SCORE: %ld", (long)_score];
-    lblScore.fontColor = isNewHigh ? [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0] : [UIColor whiteColor];
-    lblScore.fontSize = isNewHigh ? 20 : 24;
-    lblScore.position = CGPointMake(0, 10);
-    [bg addChild:lblScore];
-    
-    SKLabelNode *lblHigh = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblHigh.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
-    lblHigh.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    lblHigh.fontSize = 18;
-    lblHigh.position = CGPointMake(0, -20);
-    [bg addChild:lblHigh];
-    
-    SKLabelNode *lblIcon = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    lblIcon.text = @"↻";
-    lblIcon.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    lblIcon.fontSize = 72;
-    lblIcon.position = CGPointMake(-overlayW/2 + 50, -25);
-    [bg addChild:lblIcon];
-    
-    SKLabelNode *lblTap = [SKLabelNode labelNodeWithFontNamed:@"Courier"];
-    lblTap.text = @"Tap anywhere to restart";
-    lblTap.fontColor = [UIColor grayColor];
-    lblTap.fontSize = 12;
-    lblTap.position = CGPointMake(0, -overlayH/2 + 15);
-    [bg addChild:lblTap];
 }
 
 - (void)spawnBlock {
@@ -1150,7 +1148,7 @@ static int rop_blocks[7][4][4][2] = {
     } else {
         [self lockBlock];
         [self clearLines];
-        if (!_isDead) [self spawnBlock];
+        if (!_isDead && !_isPaused) [self spawnBlock];
     }
     [self render];
 }
@@ -1181,141 +1179,168 @@ static int rop_blocks[7][4][4][2] = {
 }
 
 - (void)clearLines {
-    int linesCleared = 0;
+    NSMutableArray *linesToClear = [NSMutableArray array];
     for (int y = 0; y < kRopRows; y++) {
         BOOL full = YES;
         for (int x = 0; x < kRopCols; x++) {
             if (!_board[[NSString stringWithFormat:@"%d,%d", x, y]]) { full = NO; break; }
         }
-        if (full) {
-            linesCleared++;
+        if (full) [linesToClear addObject:@(y)];
+    }
+    
+    int linesCleared = (int)linesToClear.count;
+    if (linesCleared == 0) return;
+    
+    _isPaused = YES; 
+
+    for (NSNumber *yNum in linesToClear) {
+        int y = yNum.intValue;
+        for (int x = 0; x < kRopCols; x++) {
+            NSString *key = [NSString stringWithFormat:@"%d,%d", x, y];
+            UIColor *origCol = _board[key];
+            if (!origCol) continue;
             
-            for (int x = 0; x < kRopCols; x++) {
-                SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kRopGrid, y*kRopGrid, kRopGrid-1, kRopGrid-1)];
-                node.fillColor = [UIColor whiteColor];
-                node.lineWidth = 0;
-                node.zPosition = 10;
-                [_gameLayer addChild:node];
-                
-                CGFloat dx = (x < kRopCols / 2) ? -60.0 : 60.0;
-                SKAction *moveOut = [SKAction moveByX:dx y:0 duration:0.25];
-                SKAction *fadeScale = [SKAction group:@[[SKAction fadeOutWithDuration:0.25], [SKAction scaleTo:0.2 duration:0.25]]];
-                [node runAction:[SKAction sequence:@[[SKAction group:@[moveOut, fadeScale]], [SKAction removeFromParent]]]];
-            }
+            SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kRopGrid, y*kRopGrid, kRopGrid-1, kRopGrid-1)];
+            node.fillColor = [UIColor whiteColor];
+            node.lineWidth = 0;
+            node.zPosition = 10;
+            [_gameLayer addChild:node];
             
-            for (int dropY = y; dropY < kRopRows - 1; dropY++) {
-                for (int x = 0; x < kRopCols; x++) {
-                    UIColor *above = _board[[NSString stringWithFormat:@"%d,%d", x, dropY+1]];
-                    if (above) _board[[NSString stringWithFormat:@"%d,%d", x, dropY]] = above;
-                    else [_board removeObjectForKey:[NSString stringWithFormat:@"%d,%d", x, dropY]];
-                }
-            }
-            y--; 
+            [_board removeObjectForKey:key];
+            
+            SKAction *flash = [SKAction colorizeWithColor:origCol colorBlendFactor:1.0 duration:0.15];
+            CGFloat dx = (arc4random_uniform(100) - 50) * 1.5;
+            CGFloat dy = (arc4random_uniform(50)) * 1.0;
+            SKAction *scatter = [SKAction group:@[
+                [SKAction moveByX:dx y:dy duration:0.3],
+                [SKAction scaleTo:1.5 duration:0.3],
+                [SKAction fadeOutWithDuration:0.3]
+            ]];
+            [node runAction:[SKAction sequence:@[flash, scatter, [SKAction removeFromParent]]]];
         }
     }
     
-    if (linesCleared > 0) {
-        _score += linesCleared;
-        _scoreLbl.text = [NSString stringWithFormat:@"STACKS CLEARED: %ld", (long)_score];
-        _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
-        
-        if (linesCleared == 4) {
-            _isPaused = YES;
-            
-            [self runAction:[SKAction sequence:@[
-                [SKAction runBlock:^{ [self playSFX:523.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
-                [SKAction runBlock:^{ [self playSFX:659.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
-                [SKAction runBlock:^{ [self playSFX:783.99 dur:0.1]; }], [SKAction waitForDuration:0.12],
-                [SKAction runBlock:^{ [self playSFX:1046.50 dur:0.3]; }]
-            ]]];
-            
-            SKAction *s1 = [SKAction moveByX:-15 y:15 duration:0.03];
-            SKAction *s2 = [SKAction moveByX:30 y:-30 duration:0.03];
-            SKAction *s3 = [SKAction moveByX:-30 y:30 duration:0.03];
-            SKAction *sCenter = [SKAction moveByX:15 y:-15 duration:0.03];
-            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
-            
-            SKNode *msgContainer = [SKNode node];
-            msgContainer.position = CGPointMake(self.size.width/2, self.size.height/2);
-            msgContainer.zPosition = 100;
-            msgContainer.xScale = 0.1;
-            msgContainer.yScale = 0.1;
-            [self addChild:msgContainer];
-            
-            [msgContainer runAction:[SKAction sequence:@[[SKAction scaleTo:1.2 duration:0.2], [SKAction scaleTo:1.0 duration:0.1]]]];
-            
-            UIColor *gold = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-            
-            SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
-            bg.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; 
-            bg.strokeColor = gold;
-            bg.lineWidth = 3.0;
-            [msgContainer addChild:bg];
-            
-            SKShapeNode *glow = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(260, 100) cornerRadius:10];
-            glow.fillColor = [UIColor clearColor];
-            glow.strokeColor = [gold colorWithAlphaComponent:0.8];
-            glow.lineWidth = 8.0;
-            [msgContainer addChild:glow];
-            [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.1 duration:0.3], [SKAction fadeAlphaTo:0.2 duration:0.3], [SKAction scaleTo:1.0 duration:0.3], [SKAction fadeAlphaTo:0.8 duration:0.3]]]]];
-            
-            SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-            line1.text = @"[ 4X ROW BONUS! ]";
-            line1.fontColor = gold;
-            line1.fontSize = 22;
-            line1.position = CGPointMake(0, 10);
-            [msgContainer addChild:line1];
-            
-            SKLabelNode *line2 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-            line2.text = @"100%";
-            line2.fontColor = gold;
-            line2.fontSize = 34;
-            line2.position = CGPointMake(0, -28);
-            [msgContainer addChild:line2];
-            
-            SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
-            flash.position = CGPointMake(self.size.width/2, self.size.height/2);
-            flash.fillColor = gold;
-            flash.alpha = 0.0;
-            flash.zPosition = 99;
-            [self addChild:flash];
-            
-            SKAction *strobe = [SKAction sequence:@[[SKAction fadeAlphaTo:0.9 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.7 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.5 duration:0.1], [SKAction fadeOutWithDuration:0.4]]];
-            [flash runAction:[SKAction sequence:@[strobe, [SKAction removeFromParent]]]];
-            
-            SKAction *hold = [SKAction waitForDuration:1.5];
-            SKAction *moveUp = [SKAction moveByX:0 y:50 duration:0.6];
-            SKAction *fadeOut = [SKAction fadeOutWithDuration:0.6];
-            [msgContainer runAction:[SKAction sequence:@[hold, [SKAction group:@[moveUp, fadeOut]], [SKAction removeFromParent], [SKAction runBlock:^{ self->_isPaused = NO; }]]]];
-            
-            UINotificationFeedbackGenerator *successFeed = [[UINotificationFeedbackGenerator alloc] init];
-            [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [successFeed notificationOccurred:UINotificationFeedbackTypeWarning];
-            });
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
-            });
-        } else {
-            NSMutableArray *beeps = [NSMutableArray array];
-            for (int i = 0; i < linesCleared; i++) {
-                [beeps addObject:[SKAction runBlock:^{ [self playSFX:880.0 dur:0.05]; }]];
-                if (i < linesCleared - 1) [beeps addObject:[SKAction waitForDuration:0.08]];
+    int scoreAdd = (linesCleared == 4) ? 8 : linesCleared;
+    _score += scoreAdd;
+    _scoreLbl.text = [NSString stringWithFormat:@"CURRENT SCORE: %ld", (long)_score];
+    _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
+    
+    if (!_hasSurpassedHighScore && _score > _savedHighScore && _savedHighScore > 0) {
+        _hasSurpassedHighScore = YES;
+        [self runAction:[SKAction sequence:@[
+            [SKAction runBlock:^{ [self playSFX:987.77 dur:0.1]; }], [SKAction waitForDuration:0.1],
+            [SKAction runBlock:^{ [self playSFX:1318.51 dur:0.2]; }]
+        ]]];
+    }
+    
+    SKAction *waitDrop = [SKAction waitForDuration:0.4];
+    [self runAction:[SKAction sequence:@[waitDrop, [SKAction runBlock:^{
+        int dropCount = 0;
+        for (int y = 0; y < kRopRows; y++) {
+            if ([linesToClear containsObject:@(y)]) {
+                dropCount++;
+            } else if (dropCount > 0) {
+                for (int x = 0; x < kRopCols; x++) {
+                    UIColor *above = self->_board[[NSString stringWithFormat:@"%d,%d", x, y]];
+                    if (above) {
+                        self->_board[[NSString stringWithFormat:@"%d,%d", x, y - dropCount]] = above;
+                        [self->_board removeObjectForKey:[NSString stringWithFormat:@"%d,%d", x, y]];
+                    }
+                }
             }
-            [self runAction:[SKAction sequence:beeps]];
-            
-            SKAction *s1 = [SKAction moveByX:-6 y:3 duration:0.04];
-            SKAction *s2 = [SKAction moveByX:12 y:-6 duration:0.04];
-            SKAction *s3 = [SKAction moveByX:-12 y:6 duration:0.04];
-            SKAction *sCenter = [SKAction moveByX:6 y:-3 duration:0.04];
-            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
-            
-            SKAction *colorHighlight = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; }];
-            SKAction *scaleUp = [SKAction scaleTo:1.5 duration:0.15];
-            SKAction *scaleDown = [SKAction scaleTo:1.0 duration:0.15];
-            SKAction *colorNormal = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor whiteColor]; }];
-            [self->_scoreLbl runAction:[SKAction sequence:@[colorHighlight, scaleUp, scaleDown, colorNormal]]];
         }
+        
+        self->_isPaused = NO;
+        [self render];
+        if (!self->_isDead) [self spawnBlock];
+    }]]]];
+
+    if (linesCleared == 4) {
+        [self runAction:[SKAction sequence:@[
+            [SKAction runBlock:^{ [self playSFX:523.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:659.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:783.99 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:1046.50 dur:0.3]; }]
+        ]]];
+        
+        SKAction *s1 = [SKAction moveByX:-15 y:15 duration:0.03];
+        SKAction *s2 = [SKAction moveByX:30 y:-30 duration:0.03];
+        SKAction *s3 = [SKAction moveByX:-30 y:30 duration:0.03];
+        SKAction *sCenter = [SKAction moveByX:15 y:-15 duration:0.03];
+        [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
+        
+        SKNode *msgContainer = [SKNode node];
+        msgContainer.position = CGPointMake(self.size.width/2, self.size.height/2);
+        msgContainer.zPosition = 100;
+        msgContainer.xScale = 0.1;
+        msgContainer.yScale = 0.1;
+        [self addChild:msgContainer];
+        [msgContainer runAction:[SKAction sequence:@[[SKAction scaleTo:1.2 duration:0.2], [SKAction scaleTo:1.0 duration:0.1]]]];
+        
+        UIColor *gold = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(280, 100) cornerRadius:10];
+        bg.fillColor = [UIColor colorWithWhite:0.05 alpha:1.0]; 
+        bg.strokeColor = gold;
+        bg.lineWidth = 3.0;
+        [msgContainer addChild:bg];
+        
+        SKShapeNode *glow = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(280, 100) cornerRadius:10];
+        glow.fillColor = [UIColor clearColor];
+        glow.strokeColor = [gold colorWithAlphaComponent:0.8];
+        glow.lineWidth = 8.0;
+        [msgContainer addChild:glow];
+        [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.1 duration:0.3], [SKAction fadeAlphaTo:0.2 duration:0.3], [SKAction scaleTo:1.0 duration:0.3], [SKAction fadeAlphaTo:0.8 duration:0.3]]]]];
+        
+        SKLabelNode *line1 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        line1.text = @"JailTris! 4x Row Bonus";
+        line1.fontColor = gold;
+        line1.fontSize = 20;
+        line1.position = CGPointMake(0, 10);
+        [msgContainer addChild:line1];
+        
+        SKLabelNode *line2 = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        line2.text = @"+8 POINTS";
+        line2.fontColor = gold;
+        line2.fontSize = 30;
+        line2.position = CGPointMake(0, -28);
+        [msgContainer addChild:line2];
+        
+        SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+        flash.position = CGPointMake(self.size.width/2, self.size.height/2);
+        flash.fillColor = gold;
+        flash.alpha = 0.0;
+        flash.zPosition = 99;
+        [self addChild:flash];
+        
+        SKAction *strobe = [SKAction sequence:@[[SKAction fadeAlphaTo:0.9 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.7 duration:0.05], [SKAction fadeAlphaTo:0.0 duration:0.05], [SKAction fadeAlphaTo:0.5 duration:0.1], [SKAction fadeOutWithDuration:0.4]]];
+        [flash runAction:[SKAction sequence:@[strobe, [SKAction removeFromParent]]]];
+        
+        [msgContainer runAction:[SKAction sequence:@[[SKAction waitForDuration:1.5], [SKAction group:@[[SKAction moveByX:0 y:50 duration:0.6], [SKAction fadeOutWithDuration:0.6]]], [SKAction removeFromParent]]]];
+        
+        UINotificationFeedbackGenerator *successFeed = [[UINotificationFeedbackGenerator alloc] init];
+        [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [successFeed notificationOccurred:UINotificationFeedbackTypeWarning];
+        });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
+        });
+    } else {
+        NSMutableArray *beeps = [NSMutableArray array];
+        for (int i = 0; i < linesCleared; i++) {
+            [beeps addObject:[SKAction runBlock:^{ [self playSFX:880.0 dur:0.05]; }]];
+            if (i < linesCleared - 1) [beeps addObject:[SKAction waitForDuration:0.08]];
+        }
+        [self runAction:[SKAction sequence:beeps]];
+        
+        SKAction *s1 = [SKAction moveByX:-6 y:3 duration:0.04];
+        SKAction *s2 = [SKAction moveByX:12 y:-6 duration:0.04];
+        SKAction *s3 = [SKAction moveByX:-12 y:6 duration:0.04];
+        SKAction *sCenter = [SKAction moveByX:6 y:-3 duration:0.04];
+        [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
+        
+        SKAction *colorHighlight = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; }];
+        [self->_scoreLbl runAction:[SKAction sequence:@[colorHighlight, [SKAction scaleTo:1.5 duration:0.15], [SKAction scaleTo:1.0 duration:0.15], [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor whiteColor]; }]]]];
     }
 }
 
@@ -1323,7 +1348,7 @@ static int rop_blocks[7][4][4][2] = {
     [_gameLayer removeAllChildren];
     [_previewNode removeAllChildren];
     
-    SKShapeNode *border = [SKShapeNode shapeNodeWithRect:CGRectMake(-2, -2, (kRopCols * kRopGrid) + 4, (kRopRows * kRopGrid) + 4)];
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRect:CGRectMake(-2, -2, (kRopCols * kRopGrid) + 3, (kRopRows * kRopGrid) + 4)];
     border.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     border.lineWidth = 2.0;
     [_gameLayer addChild:border];
@@ -1337,9 +1362,23 @@ static int rop_blocks[7][4][4][2] = {
         [_gameLayer addChild:node];
     }
     
-    if (_isPlaying && !_isDead) {
+    if (_isPlaying && !_isDead && !_isPaused) {
         int ghostY = _bY;
         while ([self isValidX:_bX y:ghostY-1 rot:_bRot type:_bType]) ghostY--;
+        
+        int shadowHeight = _bY - ghostY;
+        if (shadowHeight > 0) {
+            UIColor *shadowCol = [UIColor colorWithWhite:0.5 alpha:0.15];
+            for (int i=0; i<4; i++) {
+                int nx = _bX + rop_blocks[_bType][_bRot][i][0];
+                int nyTop = _bY + rop_blocks[_bType][_bRot][i][1];
+                int nyBot = ghostY + rop_blocks[_bType][_bRot][i][1];
+                SKShapeNode *shNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, nyBot*kRopGrid + kRopGrid, kRopGrid-1, (nyTop - nyBot - 1)*kRopGrid)];
+                shNode.fillColor = shadowCol;
+                shNode.lineWidth = 0;
+                [_gameLayer addChild:shNode];
+            }
+        }
         
         UIColor *gC = [UIColor colorWithWhite:0.4 alpha:0.50];
         for (int i=0; i<4; i++) {
@@ -1374,6 +1413,101 @@ static int rop_blocks[7][4][4][2] = {
     }
 }
 
+- (void)die {
+    _isDead = YES;
+    _isPlaying = NO;
+    _highScoreBg.hidden = NO;
+    _highScoreBg.position = CGPointMake(self.size.width / 2, 106);
+    if (_synthState) _synthState->playBGM = 0;
+    
+    NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
+    NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
+    BOOL isNewHigh = NO;
+    if (_score > best) {
+        best = _score;
+        [def setInteger:best forKey:@"ADS_JailTrisHighScore"];
+        [def synchronize];
+        isNewHigh = YES;
+    }
+
+    if (isNewHigh && _score > 0) {
+        [self runAction:[SKAction sequence:@[
+            [SKAction runBlock:^{ [self playSFX:523.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:659.25 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:783.99 dur:0.1]; }], [SKAction waitForDuration:0.12],
+            [SKAction runBlock:^{ [self playSFX:1046.50 dur:0.4]; }]
+        ]]];
+    } else {
+        [self playSFX:150.0 dur:0.5];
+    }
+    
+    UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
+    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
+    
+    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
+    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
+    flash.zPosition = 99;
+    [self addChild:flash];
+    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
+    
+    _deathContainer = [SKNode node];
+    _deathContainer.zPosition = 60;
+    [self addChild:_deathContainer];
+    
+    CGFloat overlayW = self.size.width - 60;
+    CGFloat overlayH = (self.size.height - 180) / 2.0;
+    SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
+    bg.position = CGPointMake(self.size.width / 2, self.size.height / 2);
+    bg.fillColor = [UIColor colorWithWhite:0.0 alpha:0.9];
+    bg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    bg.lineWidth = 4.0;
+    [_deathContainer addChild:bg];
+    
+    if (isNewHigh) {
+        SKLabelNode *lblTitle = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblTitle.text = @"NEW HIGH SCORE!";
+        lblTitle.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        lblTitle.fontSize = 20;
+        lblTitle.position = CGPointMake(0, 15);
+        [bg addChild:lblTitle];
+        
+        SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblScore.text = [NSString stringWithFormat:@"%ld", (long)_score];
+        lblScore.fontColor = [UIColor whiteColor];
+        lblScore.fontSize = 28;
+        lblScore.position = CGPointMake(0, -15);
+        [bg addChild:lblScore];
+    } else {
+        SKLabelNode *lblScore = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblScore.text = [NSString stringWithFormat:@"SCORE: %ld", (long)_score];
+        lblScore.fontColor = [UIColor whiteColor];
+        lblScore.fontSize = 24;
+        lblScore.position = CGPointMake(0, 10);
+        [bg addChild:lblScore];
+        
+        SKLabelNode *lblHigh = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+        lblHigh.text = [NSString stringWithFormat:@"BEST: %ld", (long)best];
+        lblHigh.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+        lblHigh.fontSize = 18;
+        lblHigh.position = CGPointMake(0, -15);
+        [bg addChild:lblHigh];
+    }
+    
+    SKLabelNode *lblIcon = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    lblIcon.text = @"↻";
+    lblIcon.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
+    lblIcon.fontSize = 60;
+    lblIcon.position = CGPointMake(-overlayW/2 + 40, -20);
+    [bg addChild:lblIcon];
+    
+    SKLabelNode *lblTap = [SKLabelNode labelNodeWithFontNamed:@"Courier"];
+    lblTap.text = @"Tap anywhere to restart";
+    lblTap.fontColor = [UIColor grayColor];
+    lblTap.fontSize = 12;
+    lblTap.position = CGPointMake(0, -overlayH/2 + 10);
+    [bg addChild:lblTap];
+}
 @end
 
 // --- MENU SCENE ---
@@ -1450,6 +1584,9 @@ static int rop_blocks[7][4][4][2] = {
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint loc = [[touches anyObject] locationInNode:self];
     
+    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+    [feed impactOccurred];
+    
     if ([_closeBtn containsPoint:loc]) {
         if (self.exitHandler) self.exitHandler();
         return;
@@ -1464,8 +1601,10 @@ static int rop_blocks[7][4][4][2] = {
     }
     
     if ([_btnSnake containsPoint:loc]) {
+        AudioServicesPlaySystemSound(1052);
         if (self.onSelectGame) self.onSelectGame(0);
     } else if ([_btnTetris containsPoint:loc]) {
+        AudioServicesPlaySystemSound(1057);
         if (self.onSelectGame) self.onSelectGame(1);
     }
 }
