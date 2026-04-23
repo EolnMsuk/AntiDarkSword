@@ -170,7 +170,7 @@ static const CGFloat kGridSize = 20.0;
     self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.musicBtnBg.fillColor = [UIColor clearColor];
     self.musicBtnBg.lineWidth = 2.0;
-    self.musicBtnBg.position = CGPointMake(self.size.width - 36, 25);
+    self.musicBtnBg.position = CGPointMake(self.size.width - 41, 28);
     [self.bloomNode addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
