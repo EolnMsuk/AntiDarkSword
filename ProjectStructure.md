@@ -2,8 +2,6 @@
 
 **Description:** iOS security tweak hardening jailbroken devices on iOS 13.0–17.0 (rootless/rootful) against WebKit RCE & iMessage zero-click exploits (DarkSword & Coruna). Ships as rootful `.deb`, rootless `.deb`, and a TrollFools `.dylib`.
 
-**GitHub:** https://github.com/EolnMsuk/AntiDarkSword/
-
 ---
 
 ## Project Structure
@@ -23,7 +21,6 @@ AntiDarkSword/
 ├── Makefile
 │     ROOT MAKEFILE: Aggregates AntiDarkSwordUI, AntiDarkSwordDaemon, antidarkswordprefs,
 │     & CorelliumDecoy subprojects. Targets arm64 + arm64e, min iOS 13.0, SDK 16.5.
-│     Forces dual SHA1+SHA256 codesigning (TARGET_CODESIGN_FLAGS) for Dopamine/RootHide
 │     trust-cache compatibility. Stages PreferenceLoader entry plist in internal-stage::.
 │
 ├── Makefile.trollfools
@@ -228,7 +225,6 @@ AntiDarkSword/
 │   │       • Advanced custom daemon bundle-ID / process-name input with swipe-to-delete
 │   │       • Corellium decoy toggle + live probe counter cell
 │   │       • Per-app rule editing (TargetRules_<bundleID> sub-plist)
-│   │       • RootHide compatibility: `ads_root_path()` calls jbroot() when available
 │   │         & confirmed non-trivial remapping paths to per-process preboot prefix
 │   │       • Uses posix_spawn (not system()) invoking uicache/userspace-reboot for
 │   │         daemon restarts; waits with waitpid() confirming completion
@@ -336,5 +332,3 @@ AntiDarkSword/
 **Private API wrapping:** All private API calls (`_WKProcessPoolConfiguration`, `WKWebpagePreferences.lockdownModeEnabled` on pre-iOS-16 SDKs, KVC on WKPreferences) guarded with `respondsToSelector:` & wrapped in `@try/@catch`.
 
 **Release logging:** All `ADSLog()` calls expand to `((void)0)` in release builds via `DEBUG` macro in ADSLogging.h. Never use `NSLog` directly.
-
-**RootHide compatibility:** `ads_root_path()` in RootListController.m dlopen-resolves `jbroot()`, verifying non-trivial remap (`jbroot("/") != "/"`) before applying to preference/daemon paths.
