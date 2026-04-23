@@ -170,7 +170,7 @@ static const CGFloat kGridSize = 20.0;
     self.musicBtnBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.musicBtnBg.fillColor = [UIColor clearColor];
     self.musicBtnBg.lineWidth = 2.0;
-    self.musicBtnBg.position = CGPointMake(self.size.width - 30, 25);
+    self.musicBtnBg.position = CGPointMake(self.size.width - 36, 25);
     [self.bloomNode addChild:self.musicBtnBg];
     
     self.musicBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -185,7 +185,7 @@ static const CGFloat kGridSize = 20.0;
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.highScoreBtn.fontSize = 12;
-    self.highScoreBtn.position = CGPointMake(80, 17); 
+    self.highScoreBtn.position = CGPointMake(90, 20);
     self.highScoreBtn.hidden = NO;
     
     SKShapeNode *hsBorder = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 28) cornerRadius:14];
@@ -384,7 +384,7 @@ static const CGFloat kGridSize = 20.0;
     self.deathContainer = [SKNode node]; self.deathContainer.zPosition = 60; [self.bloomNode addChild:self.deathContainer];
     CGFloat overlayW = self.size.width - 60; CGFloat overlayH = (self.size.height - 120) / 2.0;
     SKShapeNode *bg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(overlayW, overlayH) cornerRadius:15];
-    bg.position = CGPointMake(self.size.width / 2, self.size.height / 2);
+    bg.position = CGPointMake((self.size.width / 2) - 1, self.size.height / 2);
     bg.fillColor = [UIColor colorWithWhite:0.0 alpha:0.9]; bg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0]; bg.lineWidth = 4.0;
     [self.deathContainer addChild:bg];
     
