@@ -163,7 +163,7 @@ static const CGFloat kGridSize = 20.0;
     _menuBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _menuBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _menuBg.fillColor = [UIColor clearColor];
-    _menuBg.position = CGPointMake(32, self.size.height - 20);
+    _menuBg.position = CGPointMake(32, self.size.height - 23);
     [self.bloomNode addChild:_menuBg];
 
     self.menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -177,7 +177,7 @@ static const CGFloat kGridSize = 20.0;
     _pauseBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _pauseBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _pauseBg.fillColor = [UIColor clearColor];
-    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 20);
+    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 23);
     [self.bloomNode addChild:_pauseBg];
 
     self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -665,7 +665,7 @@ static int rop_blocks[7][4][4][2] = {
     _pauseBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _pauseBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _pauseBg.fillColor = [UIColor clearColor];
-    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 20);
+    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 23);
     [self addChild:_pauseBg];
 
     _pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -679,7 +679,7 @@ static int rop_blocks[7][4][4][2] = {
     _menuBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _menuBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _menuBg.fillColor = [UIColor clearColor];
-    _menuBg.position = CGPointMake(32, self.size.height - 20);
+    _menuBg.position = CGPointMake(32, self.size.height - 23);
     [self addChild:_menuBg];
 
     _menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
