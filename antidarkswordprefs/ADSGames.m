@@ -905,6 +905,7 @@ static int rop_blocks[7][4][4][2] = {
     
     if (sender.state == UIGestureRecognizerStateChanged && !_panHandled) {
         CGPoint translation = [sender translationInView:sender.view];
+        CGPoint velocity = [sender velocityInView:sender.view];
         
         if (translation.y > 20 && fabs(translation.y) > fabs(translation.x) * 1.5) {
             _panHandled = YES;
@@ -949,11 +950,27 @@ static int rop_blocks[7][4][4][2] = {
         } else if (fabs(translation.x) > 30) {
             int dir = translation.x > 0 ? 1 : -1;
             _panHandled = YES;
-            if ([self isValidX:_bX + dir y:_bY rot:_bRot type:_bType]) {
-                _bX += dir;
-                UIImpactFeedbackGenerator *tickFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-                [tickFeed impactOccurred];
-                [self render];
+            
+            int blocksToMove = (fabs(velocity.x) > 800 || fabs(translation.x) > 60) ? 3 : 1;
+            
+            if (blocksToMove > 1) {
+                for (int i = 1; i <= blocksToMove; i++) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.025 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                        if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
+                            self->_bX += dir;
+                            UIImpactFeedbackGenerator *tickFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+                            [tickFeed impactOccurred];
+                            [self render];
+                        }
+                    });
+                }
+            } else {
+                if ([self isValidX:self->_bX + dir y:self->_bY rot:self->_bRot type:self->_bType]) {
+                    self->_bX += dir;
+                    UIImpactFeedbackGenerator *tickFeed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+                    [tickFeed impactOccurred];
+                    [self render];
+                }
             }
         }
     }
