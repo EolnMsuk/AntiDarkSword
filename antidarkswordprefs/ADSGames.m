@@ -163,7 +163,7 @@ static const CGFloat kGridSize = 20.0;
     _menuBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _menuBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _menuBg.fillColor = [UIColor clearColor];
-    _menuBg.position = CGPointMake(32, self.size.height - 35);
+    _menuBg.position = CGPointMake(32, self.size.height - 20);
     [self.bloomNode addChild:_menuBg];
 
     self.menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -177,7 +177,7 @@ static const CGFloat kGridSize = 20.0;
     _pauseBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _pauseBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _pauseBg.fillColor = [UIColor clearColor];
-    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 35);
+    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 20);
     [self.bloomNode addChild:_pauseBg];
 
     self.pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -544,6 +544,7 @@ static const CGFloat kGridSize = 20.0;
     SKShapeNode *_pauseBg;
     SKShapeNode *_startBg;
     SKShapeNode *_highScoreBg;
+    SKLabelNode *_titleLbl;
     
     BOOL _isDead, _isPlaying, _isPaused;
     BOOL _panHandled, _justSlammed;
@@ -664,7 +665,7 @@ static int rop_blocks[7][4][4][2] = {
     _pauseBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _pauseBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _pauseBg.fillColor = [UIColor clearColor];
-    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 35);
+    _pauseBg.position = CGPointMake(self.size.width - 32, self.size.height - 20);
     [self addChild:_pauseBg];
 
     _pauseBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -678,7 +679,7 @@ static int rop_blocks[7][4][4][2] = {
     _menuBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _menuBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _menuBg.fillColor = [UIColor clearColor];
-    _menuBg.position = CGPointMake(32, self.size.height - 35);
+    _menuBg.position = CGPointMake(32, self.size.height - 20);
     [self addChild:_menuBg];
 
     _menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -707,7 +708,7 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(180, 40) cornerRadius:8];
     _highScoreBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     _highScoreBg.fillColor = [UIColor clearColor];
-    _highScoreBg.position = CGPointMake(self.size.width / 2, 40);
+    _highScoreBg.position = CGPointMake(self.size.width / 2, 106);
     [self addChild:_highScoreBg];
 
     _highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -749,6 +750,14 @@ static int rop_blocks[7][4][4][2] = {
     _startBtn.fontSize = 22;
     _startBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
     [_startBg addChild:_startBtn];
+    
+    _titleLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    _titleLbl.text = @"🧱 JAILTRIS";
+    _titleLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    _titleLbl.fontSize = 30;
+    _titleLbl.position = CGPointMake(self.size.width / 2, self.size.height - 90);
+    _titleLbl.zPosition = 51;
+    [self addChild:_titleLbl];
 
     _restartBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _restartBtn.text = @"↺";
@@ -940,9 +949,9 @@ static int rop_blocks[7][4][4][2] = {
                     [trail runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.30], [SKAction removeFromParent]]]];
                 }
                 
-                SKAction *sLeft = [SKAction moveByX:-2 y:-1 duration:0.02];
-                SKAction *sRight = [SKAction moveByX:4 y:2 duration:0.02];
-                SKAction *sCenter = [SKAction moveByX:-2 y:-1 duration:0.02];
+                SKAction *sLeft = [SKAction moveByX:-4 y:-2 duration:0.02];
+                SKAction *sRight = [SKAction moveByX:8 y:4 duration:0.02];
+                SKAction *sCenter = [SKAction moveByX:-4 y:-2 duration:0.02];
                 [self->_gameLayer runAction:[SKAction sequence:@[sLeft, sRight, sCenter]]];
                 
                 _lastTick = 0; 
@@ -1021,6 +1030,7 @@ static int rop_blocks[7][4][4][2] = {
     _isDead = NO;
     _isPaused = NO;
     _startBg.hidden = YES;
+    _titleLbl.hidden = YES;
     _restartOverlay.hidden = YES;
     _highScoreBg.hidden = YES;
     _scoreLbl.hidden = NO;
@@ -1178,16 +1188,16 @@ static int rop_blocks[7][4][4][2] = {
             linesCleared++;
             
             for (int x = 0; x < kRopCols; x++) {
-                UIColor *c = _board[[NSString stringWithFormat:@"%d,%d", x, y]];
                 SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kRopGrid, y*kRopGrid, kRopGrid-1, kRopGrid-1)];
-                node.fillColor = c;
+                node.fillColor = [UIColor whiteColor];
                 node.lineWidth = 0;
+                node.zPosition = 10;
                 [_gameLayer addChild:node];
-                [node runAction:[SKAction sequence:@[
-                    [SKAction scaleTo:1.2 duration:0.15],
-                    [SKAction fadeOutWithDuration:0.15],
-                    [SKAction removeFromParent]
-                ]]];
+                
+                CGFloat dx = (x < kRopCols / 2) ? -60.0 : 60.0;
+                SKAction *moveOut = [SKAction moveByX:dx y:0 duration:0.25];
+                SKAction *fadeScale = [SKAction group:@[[SKAction fadeOutWithDuration:0.25], [SKAction scaleTo:0.2 duration:0.25]]];
+                [node runAction:[SKAction sequence:@[[SKAction group:@[moveOut, fadeScale]], [SKAction removeFromParent]]]];
             }
             
             for (int dropY = y; dropY < kRopRows - 1; dropY++) {
@@ -1216,10 +1226,10 @@ static int rop_blocks[7][4][4][2] = {
                 [SKAction runBlock:^{ [self playSFX:1046.50 dur:0.3]; }]
             ]]];
             
-            SKAction *s1 = [SKAction moveByX:-10 y:10 duration:0.04];
-            SKAction *s2 = [SKAction moveByX:20 y:-20 duration:0.04];
-            SKAction *s3 = [SKAction moveByX:-20 y:20 duration:0.04];
-            SKAction *sCenter = [SKAction moveByX:10 y:-10 duration:0.04];
+            SKAction *s1 = [SKAction moveByX:-15 y:15 duration:0.03];
+            SKAction *s2 = [SKAction moveByX:30 y:-30 duration:0.03];
+            SKAction *s3 = [SKAction moveByX:-30 y:30 duration:0.03];
+            SKAction *sCenter = [SKAction moveByX:15 y:-15 duration:0.03];
             [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
             
             SKNode *msgContainer = [SKNode node];
@@ -1284,7 +1294,13 @@ static int rop_blocks[7][4][4][2] = {
                 [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
             });
         } else {
-            [self runAction:[SKAction runBlock:^{ [self playSFX:70.0 dur:0.15]; }]];
+            [self runAction:[SKAction runBlock:^{ [self playSFX:880.0 dur:0.1]; }]];
+            
+            SKAction *s1 = [SKAction moveByX:-6 y:3 duration:0.04];
+            SKAction *s2 = [SKAction moveByX:12 y:-6 duration:0.04];
+            SKAction *s3 = [SKAction moveByX:-12 y:6 duration:0.04];
+            SKAction *sCenter = [SKAction moveByX:6 y:-3 duration:0.04];
+            [self->_gameLayer runAction:[SKAction sequence:@[s1, s2, s3, sCenter]]];
             
             SKAction *colorHighlight = [SKAction runBlock:^{ self->_scoreLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; }];
             SKAction *scaleUp = [SKAction scaleTo:1.5 duration:0.15];
