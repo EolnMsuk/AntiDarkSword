@@ -397,7 +397,7 @@ static int rop_blocks[7][4][4][2] = {
         [self runAction:[SKAction sequence:@[ [SKAction runBlock:^{ [self playSFX:987.77 dur:0.1]; }], [SKAction waitForDuration:0.1], [SKAction runBlock:^{ [self playSFX:1318.51 dur:0.2]; }] ]]];
     }
     
-    SKAction *waitDrop = [SKAction waitForDuration:0.4];
+    SKAction *waitDrop = [SKAction waitForDuration:(linesCleared == 4 ? 1.4 : 0.4)];
     [self runAction:[SKAction sequence:@[waitDrop, [SKAction runBlock:^{
         int dropCount = 0;
         for (int y = 0; y < kRopRows; y++) {
