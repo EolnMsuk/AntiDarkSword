@@ -183,13 +183,13 @@ static const CGFloat kGridSize = 20.0;
     
     self.highScoreBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
-    self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    self.highScoreBtn.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     self.highScoreBtn.fontSize = 12;
     self.highScoreBtn.position = CGPointMake(95, 24);
     self.highScoreBtn.hidden = NO;
     
     SKShapeNode *hsBorder = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 28) cornerRadius:14];
-    hsBorder.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    hsBorder.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     hsBorder.fillColor = [UIColor clearColor];
     hsBorder.lineWidth = 2.0;
     hsBorder.position = CGPointMake(0, 4);
