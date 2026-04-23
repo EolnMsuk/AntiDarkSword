@@ -1,6 +1,5 @@
 #import "ADSGames.h"
 #import <AVFoundation/AVFoundation.h>
-#import <AudioToolbox/AudioToolbox.h>
 
 typedef struct {
     float bgmPhase;
@@ -299,10 +298,13 @@ static const CGFloat kGridSize = 20.0;
     CGPoint loc = [[touches anyObject] locationInNode:self];
     if (hypot(loc.x - _touchStartLoc.x, loc.y - _touchStartLoc.y) > 15) return;
 
-    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [feed impactOccurred];
+    void (^playTap)(void) = ^{
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feed impactOccurred];
+    };
 
     if (self.leaderboardNode) {
+        playTap();
         SKNode *node = self.leaderboardNode;
         self.leaderboardNode = nil; 
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]];
@@ -310,28 +312,31 @@ static const CGFloat kGridSize = 20.0;
     }
 
     if ([_menuBg containsPoint:loc]) {
+        playTap();
         if (self.exitHandler) self.exitHandler();
         return;
     }
     
     if ([self.musicBtnBg containsPoint:loc]) {
+        playTap();
         _musicEnabled = !_musicEnabled;
         [self updateMusicBtn];
         return;
     }
     
     if ([self.highScoreBtn containsPoint:loc]) {
+        playTap();
         [self playSFX:1046.50 dur:0.4];
         [self showLeaderboard];
         return;
     }
 
-    if (self.gameState == ADSGameStateMenu) {
-        [self resetGame];
-    } else if (self.gameState == ADSGameStateDead) {
+    if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
+        playTap();
         [self resetGame];
     } else if (self.gameState == ADSGameStatePlaying) {
         if ([_pauseBg containsPoint:loc]) {
+            playTap();
             self.gameState = ADSGameStatePaused;
             self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO;
@@ -340,6 +345,7 @@ static const CGFloat kGridSize = 20.0;
         }
     } else if (self.gameState == ADSGameStatePaused) {
         if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
+            playTap();
             self.gameState = ADSGameStatePlaying;
             self.startBtn.hidden = YES;
             self.restartOverlay.hidden = YES;
@@ -733,7 +739,7 @@ static int rop_blocks[7][4][4][2] = {
     _menuBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(44, 44) cornerRadius:8];
     _menuBg.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     _menuBg.fillColor = [UIColor clearColor];
-    _menuBg.position = CGPointMake(32, self.size.height - 23);
+    _menuBg.position = CGPointMake(31, self.size.height - 23);
     [self addChild:_menuBg];
 
     _menuBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
@@ -793,7 +799,7 @@ static int rop_blocks[7][4][4][2] = {
     _startBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 50) cornerRadius:10];
     _startBg.strokeColor = [UIColor clearColor];
     _startBg.fillColor = [UIColor clearColor];
-    _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 60);
+    _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 5);
     _startBg.zPosition = 51;
     [self addChild:_startBg];
 
@@ -901,10 +907,13 @@ static int rop_blocks[7][4][4][2] = {
     CGPoint loc = [[touches anyObject] locationInNode:self];
     if (hypot(loc.x - _touchStartLoc.x, loc.y - _touchStartLoc.y) > 15) return;
     
-    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [feed impactOccurred];
+    void (^playTap)(void) = ^{
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feed impactOccurred];
+    };
 
     if (_leaderboardNode) {
+        playTap();
         SKNode *node = _leaderboardNode;
         _leaderboardNode = nil;
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]];
@@ -912,37 +921,44 @@ static int rop_blocks[7][4][4][2] = {
     }
 
     if ([_menuBg containsPoint:loc]) {
+        playTap();
         if (self.exitHandler) self.exitHandler();
         return;
     }
     
     if ([self.musicBtnBg containsPoint:loc]) {
+        playTap();
         _musicEnabled = !_musicEnabled;
         [self updateMusicBtn];
         return;
     }
     
     if (!_highScoreBg.hidden && [_highScoreBg containsPoint:loc]) {
+        playTap();
         [self showLeaderboard];
         return;
     }
 
     if ([_restartBtn containsPoint:loc]) {
+        playTap();
         [self resetGame];
         return;
     }
 
     if (_isDead) {
+        playTap();
         [self resetGame];
         return;
     }
 
     if (!_isPlaying) {
         if ([_startBg containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])) {
+            playTap();
             [self resetGame];
         }
     } else if (_isPlaying && !_isDead) {
         if ([_pauseBg containsPoint:loc] || (_isPaused && ([_startBg containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])))) {
+            playTap();
             _isPaused = !_isPaused;
             if (_isPaused) {
                 _startBtn.text = @"▶ RESUME";
@@ -996,15 +1012,26 @@ static int rop_blocks[7][4][4][2] = {
                 [self render];
                 
                 UIColor *c = [self colorForType:_bType];
+                NSMutableDictionary *colMinY = [NSMutableDictionary dictionary];
+                NSMutableDictionary *colMaxY = [NSMutableDictionary dictionary];
+                
                 for (int i = 0; i < 4; i++) {
                     int nx = _bX + rop_blocks[_bType][_bRot][i][0];
                     int nyBot = _bY + rop_blocks[_bType][_bRot][i][1];
                     int nyTop = startY + rop_blocks[_bType][_bRot][i][1];
+                    if (!colMinY[@(nx)] || nyBot < [colMinY[@(nx)] intValue]) colMinY[@(nx)] = @(nyBot);
+                    if (!colMaxY[@(nx)] || nyTop > [colMaxY[@(nx)] intValue]) colMaxY[@(nx)] = @(nyTop);
+                }
+                
+                for (NSNumber *nxNum in colMinY) {
+                    int nx = nxNum.intValue;
+                    int nyBot = [colMinY[nxNum] intValue];
+                    int nyTop = [colMaxY[nxNum] intValue];
                     
                     CGFloat height = (nyTop - nyBot) * kRopGrid + (kRopGrid - 1);
                     SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopGrid - 1, height)];
                     trail.position = CGPointMake(self->_gameLayer.position.x + nx * kRopGrid, self->_gameLayer.position.y + nyBot * kRopGrid);
-                    trail.fillColor = [c colorWithAlphaComponent:0.25];
+                    trail.fillColor = [c colorWithAlphaComponent:0.4];
                     trail.lineWidth = 0;
                     trail.zPosition = 5;
                     [self addChild:trail];
@@ -1208,7 +1235,9 @@ static int rop_blocks[7][4][4][2] = {
             
             [_board removeObjectForKey:key];
             
-            SKAction *flash = [SKAction colorizeWithColor:origCol colorBlendFactor:1.0 duration:0.15];
+            SKAction *waitFlash = [SKAction waitForDuration:0.15];
+            SKAction *colorBack = [SKAction runBlock:^{ node.fillColor = origCol; }];
+            
             CGFloat dx = (arc4random_uniform(100) - 50) * 1.5;
             CGFloat dy = (arc4random_uniform(50)) * 1.0;
             SKAction *scatter = [SKAction group:@[
@@ -1216,7 +1245,8 @@ static int rop_blocks[7][4][4][2] = {
                 [SKAction scaleTo:1.5 duration:0.3],
                 [SKAction fadeOutWithDuration:0.3]
             ]];
-            [node runAction:[SKAction sequence:@[flash, scatter, [SKAction removeFromParent]]]];
+            
+            [node runAction:[SKAction sequence:@[waitFlash, colorBack, scatter, [SKAction removeFromParent]]]];
         }
     }
     
@@ -1368,19 +1398,32 @@ static int rop_blocks[7][4][4][2] = {
         
         int shadowHeight = _bY - ghostY;
         if (shadowHeight > 0) {
-            UIColor *shadowCol = [UIColor colorWithWhite:0.5 alpha:0.15];
+            UIColor *shadowCol = [UIColor colorWithWhite:0.2 alpha:1.0];
+            NSMutableDictionary *colMins = [NSMutableDictionary dictionary];
+            
             for (int i=0; i<4; i++) {
                 int nx = _bX + rop_blocks[_bType][_bRot][i][0];
-                int nyTop = _bY + rop_blocks[_bType][_bRot][i][1];
-                int nyBot = ghostY + rop_blocks[_bType][_bRot][i][1];
-                SKShapeNode *shNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, nyBot*kRopGrid + kRopGrid, kRopGrid-1, (nyTop - nyBot - 1)*kRopGrid)];
-                shNode.fillColor = shadowCol;
-                shNode.lineWidth = 0;
-                [_gameLayer addChild:shNode];
+                int ny = _bY + rop_blocks[_bType][_bRot][i][1];
+                if (!colMins[@(nx)] || ny < [colMins[@(nx)] intValue]) {
+                    colMins[@(nx)] = @(ny);
+                }
+            }
+            
+            for (NSNumber *nxNum in colMins) {
+                int nx = nxNum.intValue;
+                int pBotY = [colMins[nxNum] intValue];
+                int gTopY = pBotY - shadowHeight;
+                
+                if (pBotY > gTopY + 1) {
+                    SKShapeNode *shNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, (gTopY+1)*kRopGrid, kRopGrid-1, (pBotY - gTopY - 1)*kRopGrid)];
+                    shNode.fillColor = shadowCol;
+                    shNode.lineWidth = 0;
+                    [_gameLayer addChild:shNode];
+                }
             }
         }
         
-        UIColor *gC = [UIColor colorWithWhite:0.4 alpha:0.50];
+        UIColor *gC = [UIColor colorWithWhite:0.35 alpha:1.0];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
             int ny = ghostY + rop_blocks[_bType][_bRot][i][1];
@@ -1516,10 +1559,50 @@ static int rop_blocks[7][4][4][2] = {
     SKShapeNode *_btnSnake;
     SKShapeNode *_btnTetris;
     SKLabelNode *_dedicationBtn;
+    
+    AVAudioEngine *_audioEngine;
+    AVAudioSourceNode *_sourceNode;
+    ADSSynthState *_synthState;
+}
+
+- (void)willMoveFromView:(SKView *)view {
+    if (_audioEngine) {
+        [_audioEngine stop];
+        _audioEngine = nil;
+    }
+    if (_synthState) {
+        free(_synthState);
+        _synthState = NULL;
+    }
 }
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
+    
+    _synthState = malloc(sizeof(ADSSynthState));
+    memset(_synthState, 0, sizeof(ADSSynthState));
+    _audioEngine = [[AVAudioEngine alloc] init];
+    AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
+    ADSSynthState *state = _synthState;
+    
+    _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
+        float *outBuf = (float *)outputData->mBuffers[0].mData;
+        for (AVAudioFrameCount i = 0; i < frameCount; i++) {
+            float sfxSamp = 0;
+            if (state->sfxDur > 0) {
+                state->sfxPhase += (state->sfxFreq * 2.0 * M_PI) / 44100.0;
+                if (state->sfxPhase > 2.0 * M_PI) state->sfxPhase -= 2.0 * M_PI;
+                sfxSamp = (state->sfxPhase < M_PI ? 0.2 : -0.2); 
+                state->sfxDur -= 1.0/44100.0;
+            }
+            outBuf[i] = sfxSamp;
+        }
+        return noErr;
+    }];
+    
+    [_audioEngine attachNode:_sourceNode];
+    [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format];
+    [_audioEngine startAndReturnError:nil];
     
     SKLabelNode *title = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     title.text = @"SELECT GAME";
@@ -1581,18 +1664,26 @@ static int rop_blocks[7][4][4][2] = {
     [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[pulseIn, pulseOut]]]];
 }
 
+- (void)playSFX:(float)freq dur:(float)dur {
+    if (_synthState) { _synthState->sfxFreq = freq; _synthState->sfxDur = dur; }
+}
+
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     CGPoint loc = [[touches anyObject] locationInNode:self];
     
-    UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
-    [feed impactOccurred];
+    void (^playTap)(void) = ^{
+        UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feed impactOccurred];
+    };
     
     if ([_closeBtn containsPoint:loc]) {
+        playTap();
         if (self.exitHandler) self.exitHandler();
         return;
     }
     
     if ([_dedicationBtn containsPoint:loc]) {
+        playTap();
         NSURL *url = [NSURL URLWithString:@"https://github.com/00000000aaaaaaaa"];
         if ([[UIApplication sharedApplication] canOpenURL:url]) {
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
@@ -1601,10 +1692,12 @@ static int rop_blocks[7][4][4][2] = {
     }
     
     if ([_btnSnake containsPoint:loc]) {
-        AudioServicesPlaySystemSound(1052);
+        playTap();
+        [self playSFX:440.0 dur:0.1];
         if (self.onSelectGame) self.onSelectGame(0);
     } else if ([_btnTetris containsPoint:loc]) {
-        AudioServicesPlaySystemSound(1057);
+        playTap();
+        [self playSFX:660.0 dur:0.1];
         if (self.onSelectGame) self.onSelectGame(1);
     }
 }
