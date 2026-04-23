@@ -185,7 +185,7 @@ static const CGFloat kGridSize = 20.0;
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.highScoreBtn.fontSize = 12;
-    self.highScoreBtn.position = CGPointMake(90, 20);
+    self.highScoreBtn.position = CGPointMake(90, 24);
     self.highScoreBtn.hidden = NO;
     
     SKShapeNode *hsBorder = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 28) cornerRadius:14];
