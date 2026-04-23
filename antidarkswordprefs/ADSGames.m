@@ -763,7 +763,7 @@ static int rop_blocks[7][4][4][2] = {
     _restartBtn.text = @"↺";
     _restartBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
     _restartBtn.fontSize = 44;
-    _restartBtn.position = CGPointMake(20, 15);
+    _restartBtn.position = CGPointMake(30, 10);
     [self addChild:_restartBtn];
 }
 
@@ -1053,14 +1053,17 @@ static int rop_blocks[7][4][4][2] = {
     _highScoreBg.hidden = NO;
     if (_synthState) _synthState->playBGM = 0;
     
-    [self runAction:[SKAction sequence:@[
-        [SKAction runBlock:^{ [self playSFX:440.0 dur:0.15]; }], [SKAction waitForDuration:0.15],
-        [SKAction runBlock:^{ [self playSFX:349.23 dur:0.15]; }], [SKAction waitForDuration:0.15],
-        [SKAction runBlock:^{ [self playSFX:293.66 dur:0.4]; }]
-    ]]];
+    [self playSFX:150.0 dur:0.5];
     
     UINotificationFeedbackGenerator *feed = [[UINotificationFeedbackGenerator alloc] init];
-    [feed notificationOccurred:UINotificationFeedbackTypeError];
+    [feed notificationOccurred:UINotificationFeedbackTypeWarning];
+    
+    SKShapeNode *flash = [SKShapeNode shapeNodeWithRectOfSize:self.size];
+    flash.position = CGPointMake(self.size.width/2, self.size.height/2);
+    flash.fillColor = [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:0.5];
+    flash.zPosition = 99;
+    [self addChild:flash];
+    [flash runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.3], [SKAction removeFromParent]]]];
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"];
@@ -1294,7 +1297,12 @@ static int rop_blocks[7][4][4][2] = {
                 [successFeed notificationOccurred:UINotificationFeedbackTypeSuccess];
             });
         } else {
-            [self runAction:[SKAction runBlock:^{ [self playSFX:880.0 dur:0.1]; }]];
+            NSMutableArray *beeps = [NSMutableArray array];
+            for (int i = 0; i < linesCleared; i++) {
+                [beeps addObject:[SKAction runBlock:^{ [self playSFX:880.0 dur:0.05]; }]];
+                if (i < linesCleared - 1) [beeps addObject:[SKAction waitForDuration:0.08]];
+            }
+            [self runAction:[SKAction sequence:beeps]];
             
             SKAction *s1 = [SKAction moveByX:-6 y:3 duration:0.04];
             SKAction *s2 = [SKAction moveByX:12 y:-6 duration:0.04];
