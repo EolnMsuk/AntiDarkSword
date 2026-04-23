@@ -212,8 +212,16 @@ static const CGFloat kGridSize = 20.0;
     self.highScoreBtn.text = @"🏆 HIGH SCORES";
     self.highScoreBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     self.highScoreBtn.fontSize = 12;
-    self.highScoreBtn.position = CGPointMake(65, 15); 
+    self.highScoreBtn.position = CGPointMake(80, 17); 
     self.highScoreBtn.hidden = NO;
+    
+    SKShapeNode *hsBorder = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 28) cornerRadius:14];
+    hsBorder.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    hsBorder.fillColor = [UIColor clearColor];
+    hsBorder.lineWidth = 2.0;
+    hsBorder.position = CGPointMake(0, 4);
+    [self.highScoreBtn addChild:hsBorder];
+    
     [self.bloomNode addChild:self.highScoreBtn];
 }
 
@@ -370,10 +378,11 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)drawWalls {
+    self.gameLayer.position = CGPointMake(0, -4); 
     CGFloat w = ([self maxX] - [self minX] + 1) * kGridSize;
     CGFloat h = ([self maxY] - [self minY] + 1) * kGridSize;
-    SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(w, h)];
-    border.position = CGPointMake(([self minX] + [self maxX])/2.0 * kGridSize, ([self minY] + [self maxY])/2.0 * kGridSize);
+    SKShapeNode *border = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(w + 2, h + 2)];
+    border.position = CGPointMake(([self minX] + [self maxX])/2.0 * kGridSize, (([self minY] + [self maxY])/2.0 * kGridSize) - 4);
     border.strokeColor = [UIColor colorWithRed:0.2 green:0.2 blue:1.0 alpha:1.0];
     border.lineWidth = 4.0;
     [self.bloomNode addChild:border];
@@ -1029,8 +1038,8 @@ static int rop_blocks[7][4][4][2] = {
                     int nyBot = [colMinY[nxNum] intValue];
                     int nyTop = [colMaxY[nxNum] intValue];
                     
-                    CGFloat height = (nyTop - nyBot) * kRopGrid + (kRopGrid - 1);
-                    SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopGrid - 1, height)];
+                    CGFloat height = (nyTop - nyBot + 1) * kRopGrid;
+                    SKShapeNode *trail = [SKShapeNode shapeNodeWithRect:CGRectMake(0, 0, kRopGrid, height)];
                     trail.position = CGPointMake(self->_gameLayer.position.x + nx * kRopGrid, self->_gameLayer.position.y + nyBot * kRopGrid);
                     trail.fillColor = [c colorWithAlphaComponent:0.4];
                     trail.lineWidth = 0;
