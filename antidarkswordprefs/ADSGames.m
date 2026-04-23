@@ -581,6 +581,7 @@ static const CGFloat kGridSize = 20.0;
     int _bX, _bY, _bType, _bRot, _nextType;
     NSTimeInterval _lastTick, _tickRate;
     NSInteger _score;
+    NSInteger _totalLinesCleared;
     SKNode *_gameLayer;
     SKNode *_previewNode;
     SKNode *_leaderboardNode;
@@ -1135,6 +1136,7 @@ static int rop_blocks[7][4][4][2] = {
     
     [_board removeAllObjects];
     _score = 0;
+    _totalLinesCleared = 0;
     _tickRate = 0.5;
     _scoreLbl.text = @"CURRENT SCORE: 0";
     
@@ -1224,36 +1226,15 @@ static int rop_blocks[7][4][4][2] = {
         int y = yNum.intValue;
         for (int x = 0; x < kRopCols; x++) {
             NSString *key = [NSString stringWithFormat:@"%d,%d", x, y];
-            UIColor *origCol = _board[key];
-            if (!origCol) continue;
-            
-            SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kRopGrid, y*kRopGrid, kRopGrid-1, kRopGrid-1)];
-            node.fillColor = [UIColor whiteColor];
-            node.lineWidth = 0;
-            node.zPosition = 10;
-            [_gameLayer addChild:node];
-            
             [_board removeObjectForKey:key];
-            
-            SKAction *waitFlash = [SKAction waitForDuration:0.15];
-            SKAction *colorBack = [SKAction runBlock:^{ node.fillColor = origCol; }];
-            
-            CGFloat dx = (arc4random_uniform(100) - 50) * 1.5;
-            CGFloat dy = (arc4random_uniform(50)) * 1.0;
-            SKAction *scatter = [SKAction group:@[
-                [SKAction moveByX:dx y:dy duration:0.3],
-                [SKAction scaleTo:1.5 duration:0.3],
-                [SKAction fadeOutWithDuration:0.3]
-            ]];
-            
-            [node runAction:[SKAction sequence:@[waitFlash, colorBack, scatter, [SKAction removeFromParent]]]];
         }
     }
     
     int scoreAdd = (linesCleared == 4) ? 8 : linesCleared;
     _score += scoreAdd;
+    _totalLinesCleared += linesCleared;
     _scoreLbl.text = [NSString stringWithFormat:@"CURRENT SCORE: %ld", (long)_score];
-    _tickRate = MAX(0.1, 0.5 - (_score * 0.02)); 
+    _tickRate = MAX(0.1, 0.5 - (_totalLinesCleared * 0.02)); 
     
     if (!_hasSurpassedHighScore && _score > _savedHighScore && _savedHighScore > 0) {
         _hasSurpassedHighScore = YES;
@@ -1398,7 +1379,7 @@ static int rop_blocks[7][4][4][2] = {
         
         int shadowHeight = _bY - ghostY;
         if (shadowHeight > 0) {
-            UIColor *shadowCol = [UIColor colorWithWhite:0.2 alpha:1.0];
+            UIColor *shadowCol = [UIColor colorWithWhite:0.08 alpha:1.0];
             NSMutableDictionary *colMins = [NSMutableDictionary dictionary];
             
             for (int i=0; i<4; i++) {
@@ -1415,7 +1396,7 @@ static int rop_blocks[7][4][4][2] = {
                 int gTopY = pBotY - shadowHeight;
                 
                 if (pBotY > gTopY + 1) {
-                    SKShapeNode *shNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, (gTopY+1)*kRopGrid, kRopGrid-1, (pBotY - gTopY - 1)*kRopGrid)];
+                    SKShapeNode *shNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kRopGrid, (gTopY+1)*kRopGrid, kRopGrid, (pBotY - gTopY - 1)*kRopGrid)];
                     shNode.fillColor = shadowCol;
                     shNode.lineWidth = 0;
                     [_gameLayer addChild:shNode];
@@ -1423,7 +1404,7 @@ static int rop_blocks[7][4][4][2] = {
             }
         }
         
-        UIColor *gC = [UIColor colorWithWhite:0.35 alpha:1.0];
+        UIColor *gC = [UIColor colorWithWhite:0.15 alpha:1.0];
         for (int i=0; i<4; i++) {
             int nx = _bX + rop_blocks[_bType][_bRot][i][0];
             int ny = ghostY + rop_blocks[_bType][_bRot][i][1];
