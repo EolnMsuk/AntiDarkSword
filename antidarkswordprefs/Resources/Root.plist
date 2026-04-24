@@ -230,17 +230,17 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>💸  Donate</string>
+            <string>🛠  GitHub</string>
             <key>action</key>
-            <string>openVenmo</string>
+            <string>openGitHub</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>🛠  GitHub</string>
+            <string>💸  Donate</string>
             <key>action</key>
-            <string>openGitHub</string>
+            <string>openVenmo</string>
         </dict>
         <dict>
             <key>cell</key>
