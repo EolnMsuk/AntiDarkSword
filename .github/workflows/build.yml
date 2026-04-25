@@ -26,9 +26,7 @@ jobs:
         run: |
           mkdir -p $THEOS/sdks
           curl -LO https://github.com/theos/sdks/releases/latest/download/iPhoneOS16.5.sdk.tar.xz
-          curl -LO https://github.com/theos/sdks/releases/latest/download/iPhoneOS14.5.sdk.tar.xz
           tar -xf iPhoneOS16.5.sdk.tar.xz -C $THEOS/sdks/
-          tar -xf iPhoneOS14.5.sdk.tar.xz -C $THEOS/sdks/
           rm *.tar.xz
 
       - name: Fix Script Permissions
@@ -64,16 +62,6 @@ jobs:
           DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
           cp "$DYLIB" "../output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib"
 
-      - name: Build Legacy Target (iOS 13–14)
-        run: |
-          rm -rf vendor/AltList.framework
-          cp -R vendor/AltList_Old.framework vendor/AltList.framework
-          lipo -thin arm64 vendor/AltList.framework/AltList -output vendor/AltList.framework/AltList
-
-          make clean
-          make package FINALPACKAGE=1 SYSROOT=$THEOS/sdks/iPhoneOS14.5.sdk TARGET="iphone:clang:14.5:13.0" ARCHS="arm64"
-          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm_legacy.deb
-
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -94,7 +82,6 @@ jobs:
 
             | File | For |
             |---|---|
-            | `*_iphoneos-arm64.deb` | iOS 15+ Rootles (all models) |
+            | `*_iphoneos-arm64.deb` | iOS 15+ Rootless (all models) |
             | `*_iphoneos-arm.deb` | iOS 15+ Rootful (all models) |
             | `*_TrollFools.dylib` | iOS 15+ TrollStore / TrollFools (all models) |
-            | `*_iphoneos-arm_legacy.deb` | iOS 13–14 Rootful (iPhone X and older) |
