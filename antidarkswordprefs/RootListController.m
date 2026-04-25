@@ -264,7 +264,8 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
 - (id)getCountersEnabled:(PSSpecifier *)spec { return @([ads_defaults() boolForKey:@"countersEnabled"]); }
 
 - (void)setCountersEnabled:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults(); [defaults setBool:[value boolValue] forKey:@"countersEnabled"]; [defaults synchronize];
+    NSUserDefaults *defaults = ads_defaults(); [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
+    [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
     ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; });
 }
 
@@ -371,7 +372,21 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
 }
 @end
 
+static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    AntiDarkSwordAppController *controller = (__bridge AntiDarkSwordAppController *)observer;
+    if (controller) { NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; dispatch_async(dispatch_get_main_queue(), ^{ controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot); }); }
+}
+
 @implementation AntiDarkSwordAppController
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
+    NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)AppPrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
+}
+- (void)dealloc { CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL); }
+- (void)savePrompt { ads_present_save_prompt(self, NO); }
+
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
     NSArray *daemons = @[@"com.apple.imagent", @"imagent", @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"];
