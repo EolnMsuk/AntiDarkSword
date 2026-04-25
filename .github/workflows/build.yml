@@ -94,7 +94,7 @@ jobs:
 
             | File | For |
             |---|---|
-            | `*_iphoneos-arm64.deb` | Rootless jailbreak (iOS 15+, arm64 + arm64e) |
-            | `*_iphoneos-arm.deb` | Rootful jailbreak (iOS 15+, arm64 + arm64e) |
-            | `*_iphoneos-arm_legacy.deb` | Rootful jailbreak — Legacy (iOS 13–14, arm64 only) |
-            | `*_TrollFools.dylib` | TrollStore / TrollFools, no jailbreak (iOS 15+) |
+            | `*_iphoneos-arm64.deb` | iOS 15+ Rootles (all models) |
+            | `*_iphoneos-arm.deb` | iOS 15+ Rootful (all models) |
+            | `*_TrollFools.dylib` | iOS 15+ TrollStore / TrollFools (all models) |
+            | `*_iphoneos-arm_legacy.deb` | iOS 13–14 Rootful (iPhone X and older) |
