@@ -20,12 +20,6 @@ swap_altlist() {
 SDK_14="$THEOS/sdks/iPhoneOS14.5.sdk"
 SDK_16="$THEOS/sdks/iPhoneOS16.5.sdk"
 
-# Darwin ptrauth ABI — Linux/WSL LLVM clang doesn't mark arm64e objects with
-# the new Apple ptrauth ABI by default. This flag makes it do so, silencing
-# "incompatible arm64e ABI compiler" linker warnings and preventing the
-# resulting dylib from crashing at bind time (SafeMode) on ptrauth devices.
-export ADDITIONAL_CFLAGS="-Xclang -target-abi -Xclang darwinpcs"
-
 # ==========================================
 # LEGACY TARGETS (iOS 13 - 14) → Native arm64
 # ==========================================
@@ -42,29 +36,26 @@ make package FINALPACKAGE=1 SYSROOT="$SDK_14" TARGET="iphone:clang:14.5:13.0" AR
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_legacy_iphoneos-arm.deb"
 
 # ==========================================
-# MODERN TARGETS (iOS 15+) → arm64 + arm64e
+# MODERN TARGETS (iOS 15+) → arm64
 # ==========================================
 swap_altlist "New"
 
 # Modern Rootful
 make clean
 rm -rf packages/*
-# Changed ARCHS to include arm64e for A12+ support
-make package FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+make package FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_modern_iphoneos-arm.deb"
 
 # Modern Rootless
 make clean
 rm -rf packages/*
-# Changed ARCHS to include arm64e for A12+ support
-make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
 mv packages/*.deb "output/com.eolnmsuk.antidarksword_${VERSION}_modern_iphoneos-arm64.deb"
 
 # TrollFools Dylib
 cd AntiDarkSwordTF
 make clean
-# Changed ARCHS to include arm64e for A12+ support
-make FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64 arm64e"
+make FINALPACKAGE=1 SYSROOT="$SDK_16" TARGET="iphone:clang:16.5:15.0" ARCHS="arm64"
 DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
 cp "$DYLIB" "../output/AntiDarkSword_${VERSION}_TrollFools.dylib"
 cd ..
