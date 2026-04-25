@@ -46,11 +46,16 @@ AntiDarkSword/
 │   │                                     # (covers all foreground app processes).
 │   ├── Tweak.x                           # UI-layer Logos tweak. Hooks WKWebView, WKWebViewConfiguration,
 │   │                                     # WKWebpagePreferences, WKPreferences, _WKProcessPoolConfiguration,
-│   │                                     # JSEvaluateScript (C-level), IMFileTransfer, CKAttachmentMessagePartChatItem,
-│   │                                     # and UIWebView. Applies JIT/JS/media/RTC/file-access/iMessageDL mitigations
-│   │                                     # and UA spoofing with Client Hints injection. Uses associated objects on
-│   │                                     # WKUserContentController to prevent duplicate script injection. Fast-exits
-│   │                                     # for noisy background daemons and .appex extensions in %ctor.
+│   │                                     # JSEvaluateScript (C-level), IMFileTransfer, CKAttachmentMessagePartChatItem
+│   │                                     # (_needsPreviewGeneration + fullSizeImageURL), and UIWebView.
+│   │                                     # Applies JIT/JS/media/RTC/file-access/iMessageDL mitigations,
+│   │                                     # WKContentRuleList remote-content blocking, risky attachment preview
+│   │                                     # suppression (HEIC/WebP/PDF), and UA spoofing with Client Hints injection.
+│   │                                     # Generation-based UCC dedup guard (adsUAGeneration) allows re-injection
+│   │                                     # after UA pref changes without UCC dealloc. NSE bundle IDs
+│   │                                     # (com.apple.messages.NotificationServiceExtension,
+│   │                                     # com.apple.MailNotificationServiceExtension) exempted from .appex fast-exit
+│   │                                     # and added to tier1 + allowedServices.
 │   └── README.md                         # Subproject notes for AntiDarkSwordUI.
 │
 ├── AntiDarkSwordTF/

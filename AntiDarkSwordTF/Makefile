@@ -15,6 +15,6 @@ AntiDarkSword_FILES = Tweak.x
 # TROLLFOOLS_BUILD guards any conditional code in shared headers.
 AntiDarkSword_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unguarded-availability-new -DTROLLFOOLS_BUILD=1
 AntiDarkSword_LDFLAGS = -Wl,-fixup_chains
-AntiDarkSword_FRAMEWORKS = Foundation UIKit WebKit JavaScriptCore CoreFoundation
+AntiDarkSword_FRAMEWORKS = Foundation UIKit WebKit JavaScriptCore CoreFoundation LocalAuthentication
 
 include $(THEOS_MAKE_PATH)/tweak.mk

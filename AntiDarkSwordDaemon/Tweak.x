@@ -6,6 +6,7 @@
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <time.h>
 #include <substrate.h>
 
@@ -262,7 +263,9 @@ static void ads_increment_probe_counter(void) {
 static int (*orig_sysctl)(int *, u_int, void *, size_t *, void *, size_t);
 static int (*orig_sysctlbyname)(const char *, void *, size_t *, void *, size_t);
 
-static const char     kADSSpoofModel[] = "iPhone15,2";
+static const char     kADSSpoofModel[]   = "iPhone15,2";
+// kern.osversion consistent with a real iPhone 14 Pro Max (iPhone15,2) running iOS 17.2.
+static const char     kADSSpoofOSVersion[] = "21C62";
 static struct timeval ads_spoofed_boottime;
 
 // Thread-local re-entrancy guard: GCD queries sysctl (e.g. hw.ncpu) during dispatch_async
@@ -312,6 +315,14 @@ int hook_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp,
         _ads_sysctl_active = NO;
         return ads_spoof_bytes(&ads_spoofed_boottime, sizeof(ads_spoofed_boottime), oldp, oldlenp);
     }
+    // Spoof kern.osversion to match the spoofed model — Corellium may leave a mismatched
+    // build string that fingerprints the VM even when hw.model is patched.
+    if (strcmp(name, "kern.osversion") == 0) {
+        _ads_sysctl_active = YES;
+        ads_increment_probe_counter();
+        _ads_sysctl_active = NO;
+        return ads_spoof_bytes(kADSSpoofOSVersion, sizeof(kADSSpoofOSVersion), oldp, oldlenp);
+    }
     return orig_sysctlbyname(name, oldp, oldlenp, newp, newlen);
 }
 
@@ -334,11 +345,29 @@ int hook_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *new
     return orig_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
 }
 
+static char *(*orig_getenv)(const char *name);
+char *hook_getenv(const char *name) {
+    // Corellium sets CORELLIUM_ENV in some configurations; returning NULL makes the
+    // process behave as if it is running on real hardware.
+    if (globalDecoyEnabled && name && strcmp(name, "CORELLIUM_ENV") == 0) {
+        ads_increment_probe_counter();
+        return NULL;
+    }
+    return orig_getenv(name);
+}
+
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (!globalDecoyEnabled || !path) return orig_access(path, amode);
+    if (strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) return 0;
+    }
+    // Corellium may replace /var/db/uuidtext/ with synthetic content; on a real device
+    // this directory always exists. Return success for any access probe into it.
+    if (strncmp(path, "/var/db/uuidtext", 16) == 0) {
+        ads_increment_probe_counter();
+        return 0;
     }
     return orig_access(path, amode);
 }
@@ -450,4 +479,5 @@ int hook_lstat(const char *path, struct stat *buf) {
     MSHookFunction((void *)lstat,        (void *)hook_lstat,        (void **)&orig_lstat);
     MSHookFunction((void *)sysctl,       (void *)hook_sysctl,       (void **)&orig_sysctl);
     MSHookFunction((void *)sysctlbyname, (void *)hook_sysctlbyname, (void **)&orig_sysctlbyname);
+    MSHookFunction((void *)getenv,       (void *)hook_getenv,       (void **)&orig_getenv);
 }

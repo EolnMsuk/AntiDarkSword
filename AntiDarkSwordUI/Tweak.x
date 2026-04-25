@@ -40,6 +40,7 @@
 
 @interface CKAttachmentMessagePartChatItem : NSObject
 - (BOOL)_needsPreviewGeneration;
+- (NSURL *)fullSizeImageURL;
 @end
 
 static BOOL isRootlessJB = NO;
@@ -66,6 +67,8 @@ static BOOL globalDisableMedia               = NO;
 static BOOL globalDisableRTC                 = NO;
 static BOOL globalDisableFileAccess          = NO;
 static BOOL globalDisableIMessageDL          = NO;
+static BOOL globalBlockRemoteContent         = NO;
+static BOOL globalBlockRiskyAttachments      = NO;
 static BOOL disableJIT                       = NO;
 static BOOL disableJIT15                     = NO;
 static BOOL disableJS                        = NO;
@@ -73,6 +76,8 @@ static BOOL disableMedia                     = NO;
 static BOOL disableRTC                       = NO;
 static BOOL disableFileAccess                = NO;
 static BOOL disableIMessageDL                = NO;
+static BOOL blockRemoteContent               = NO;
+static BOOL blockRiskyAttachments            = NO;
 static _Atomic BOOL applyDisableJIT          = NO;
 static _Atomic BOOL applyDisableJIT15        = NO;
 static _Atomic BOOL applyDisableJS           = NO;
@@ -80,15 +85,23 @@ static _Atomic BOOL applyDisableMedia        = NO;
 static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
 static _Atomic BOOL applyDisableIMessageDL   = NO;
+static _Atomic BOOL applyBlockRemoteContent  = NO;
+static _Atomic BOOL applyBlockRiskyAttachments = NO;
+
+// Generation counter — bumped on every pref reload that changes UA settings.
+// Stored with each UCC so a generation mismatch triggers re-injection instead
+// of requiring UCC dealloc + realloc to clear the guard.
+static NSUInteger adsUAGeneration = 0;
+
+// Compiled once in %ctor; blocks external http/https resource loads.
+// Written on main queue from async completion handler; read from WebKit hooks (main thread).
+static WKContentRuleList *adsContentBlocker = nil;
 
 static NSString *adsJSONStringLiteral(NSString *str);
 
 // Marks a WKUserContentController as having received the ADS UA script so
-// injectUAScript is idempotent. WKWebView initWithFrame: triggers both
-// applyWebKitMitigations (pre-orig) and the setUserContentController: hook
-// (during %orig, on the copied config's UCC). Without this guard the script
-// accumulates on initWithCoder: paths where applyWebKitMitigations fires
-// after the WKWebView — and thus after the hook — has already injected it.
+// injectUAScript is idempotent. Stores the adsUAGeneration at injection time;
+// a mismatch on re-check forces re-injection (e.g., after a UA pref change).
 static const char kADSUCCInjectedKey = 0;
 
 // Derives navigator.userAgentData.brands JSON array from a UA string,
@@ -151,8 +164,10 @@ static NSString *adsJSONStringLiteral(NSString *str) {
 
 static void injectUAScript(WKUserContentController *ucc) {
     if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
-    if (objc_getAssociatedObject(ucc, &kADSUCCInjectedKey)) return;
-    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    // Generation-based dedup: re-inject when UA prefs change (adsUAGeneration bumped in reload).
+    NSNumber *injectedGen = objc_getAssociatedObject(ucc, &kADSUCCInjectedKey);
+    if ([injectedGen isKindOfClass:[NSNumber class]] && injectedGen.unsignedIntegerValue == adsUAGeneration) return;
+    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @(adsUAGeneration), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
 
     NSString *jsonUA = adsJSONStringLiteral(customUAString);
@@ -277,6 +292,10 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
+    WKContentRuleList *localBlocker = adsContentBlocker;
+    if (applyBlockRemoteContent && localBlocker)
+        [configuration.userContentController addContentRuleList:localBlocker];
+
     if (shouldSpoofUA) injectUAScript(configuration.userContentController);
 }
 
@@ -307,26 +326,30 @@ static void loadPrefs() {
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-        globalTweakEnabled      = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"enabled"] boolValue] : NO;
-        globalUASpoofingEnabled = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
-        globalDisableJIT        = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableJIT"] boolValue] : NO;
-        globalDisableJIT15      = [prefs[@"globalDisableJIT15"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableJIT15"] boolValue] : NO;
-        globalDisableJS         = [prefs[@"globalDisableJS"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableJS"] boolValue] : NO;
-        globalDisableMedia      = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableMedia"] boolValue] : NO;
-        globalDisableRTC        = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableRTC"] boolValue] : NO;
-        globalDisableFileAccess = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
-        globalDisableIMessageDL = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]
-                                  ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
-        autoProtectLevel        = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]
-                                  ? [prefs[@"autoProtectLevel"] integerValue] : 1;
+        globalTweakEnabled          = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"enabled"] boolValue] : NO;
+        globalUASpoofingEnabled     = [prefs[@"globalUASpoofingEnabled"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalUASpoofingEnabled"] boolValue] : NO;
+        globalDisableJIT            = [prefs[@"globalDisableJIT"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableJIT"] boolValue] : NO;
+        globalDisableJIT15          = [prefs[@"globalDisableJIT15"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableJIT15"] boolValue] : NO;
+        globalDisableJS             = [prefs[@"globalDisableJS"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableJS"] boolValue] : NO;
+        globalDisableMedia          = [prefs[@"globalDisableMedia"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableMedia"] boolValue] : NO;
+        globalDisableRTC            = [prefs[@"globalDisableRTC"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableRTC"] boolValue] : NO;
+        globalDisableFileAccess     = [prefs[@"globalDisableFileAccess"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableFileAccess"] boolValue] : NO;
+        globalDisableIMessageDL     = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
+        globalBlockRemoteContent    = [prefs[@"globalBlockRemoteContent"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalBlockRemoteContent"] boolValue] : NO;
+        globalBlockRiskyAttachments = [prefs[@"globalBlockRiskyAttachments"] respondsToSelector:@selector(boolValue)]
+                                      ? [prefs[@"globalBlockRiskyAttachments"] boolValue] : NO;
+        autoProtectLevel            = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]
+                                      ? [prefs[@"autoProtectLevel"] integerValue] : 1;
 
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
@@ -376,7 +399,11 @@ static void loadPrefs() {
             @"com.apple.podcasts", @"com.apple.stocks",
             @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
             @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+            // Notification Service Extensions: receive rich notifications before the user
+            // opens the app — a silent-delivery zero-click attack surface on iOS 15+.
+            @"com.apple.messages.NotificationServiceExtension",
+            @"com.apple.MailNotificationServiceExtension"
         ];
         NSArray *tier2 = @[
             @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
@@ -426,6 +453,7 @@ static void loadPrefs() {
     currentProcessIsPreset   = isPresetMatch;
 
     disableMedia = disableRTC = disableIMessageDL = NO;
+    blockRemoteContent = blockRiskyAttachments = NO;
     BOOL spoofUARule = NO;
     disableJIT = disableJIT15 = disableJS = disableFileAccess = NO;
 
@@ -443,7 +471,10 @@ static void loadPrefs() {
             @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
             @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
             @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
-            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook"
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.apple.Passbook",
+            // NSEs receive attachments before the user interacts — treat same as messaging apps.
+            @"com.apple.messages.NotificationServiceExtension",
+            @"com.apple.MailNotificationServiceExtension"
         ];
         NSArray *iMessageUIApps = @[
             @"com.apple.MobileSMS", @"com.apple.iMessageAppsViewService",
@@ -454,9 +485,13 @@ static void loadPrefs() {
             @"com.google.chrome.ios", @"org.mozilla.ios.Firefox",
             @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"
         ];
+        NSArray *quicklookApps = @[
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+        ];
 
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = disableRTC = disableFileAccess = YES;
+            blockRemoteContent = YES;
             if ([iMessageUIApps containsObject:matchedID]) disableIMessageDL = YES;
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
@@ -467,6 +502,8 @@ static void loadPrefs() {
                 spoofUARule = (autoProtectLevel >= 2);
             }
             if (autoProtectLevel >= 3) disableRTC = disableMedia = YES;
+        } else if ([quicklookApps containsObject:matchedID]) {
+            blockRemoteContent = YES;
         } else if (![matchedID containsString:@"daemon"] && ![matchedID hasPrefix:@"com.apple."]) {
             spoofUARule = (autoProtectLevel >= 2);
         }
@@ -476,24 +513,28 @@ static void loadPrefs() {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
         if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
-            if ([appRules[@"disableJIT"]        respondsToSelector:@selector(boolValue)]) disableJIT        = [appRules[@"disableJIT"] boolValue];
-            if ([appRules[@"disableJIT15"]      respondsToSelector:@selector(boolValue)]) disableJIT15      = [appRules[@"disableJIT15"] boolValue];
-            if ([appRules[@"disableJS"]         respondsToSelector:@selector(boolValue)]) disableJS         = [appRules[@"disableJS"] boolValue];
-            if ([appRules[@"disableMedia"]      respondsToSelector:@selector(boolValue)]) disableMedia      = [appRules[@"disableMedia"] boolValue];
-            if ([appRules[@"disableRTC"]        respondsToSelector:@selector(boolValue)]) disableRTC        = [appRules[@"disableRTC"] boolValue];
-            if ([appRules[@"disableFileAccess"] respondsToSelector:@selector(boolValue)]) disableFileAccess = [appRules[@"disableFileAccess"] boolValue];
-            if ([appRules[@"disableIMessageDL"] respondsToSelector:@selector(boolValue)]) disableIMessageDL = [appRules[@"disableIMessageDL"] boolValue];
-            if ([appRules[@"spoofUA"]           respondsToSelector:@selector(boolValue)]) spoofUARule       = [appRules[@"spoofUA"] boolValue];
+            if ([appRules[@"disableJIT"]           respondsToSelector:@selector(boolValue)]) disableJIT           = [appRules[@"disableJIT"] boolValue];
+            if ([appRules[@"disableJIT15"]         respondsToSelector:@selector(boolValue)]) disableJIT15         = [appRules[@"disableJIT15"] boolValue];
+            if ([appRules[@"disableJS"]            respondsToSelector:@selector(boolValue)]) disableJS            = [appRules[@"disableJS"] boolValue];
+            if ([appRules[@"disableMedia"]         respondsToSelector:@selector(boolValue)]) disableMedia         = [appRules[@"disableMedia"] boolValue];
+            if ([appRules[@"disableRTC"]           respondsToSelector:@selector(boolValue)]) disableRTC           = [appRules[@"disableRTC"] boolValue];
+            if ([appRules[@"disableFileAccess"]    respondsToSelector:@selector(boolValue)]) disableFileAccess    = [appRules[@"disableFileAccess"] boolValue];
+            if ([appRules[@"disableIMessageDL"]    respondsToSelector:@selector(boolValue)]) disableIMessageDL    = [appRules[@"disableIMessageDL"] boolValue];
+            if ([appRules[@"spoofUA"]              respondsToSelector:@selector(boolValue)]) spoofUARule          = [appRules[@"spoofUA"] boolValue];
+            if ([appRules[@"blockRemoteContent"]   respondsToSelector:@selector(boolValue)]) blockRemoteContent   = [appRules[@"blockRemoteContent"] boolValue];
+            if ([appRules[@"blockRiskyAttachments"] respondsToSelector:@selector(boolValue)]) blockRiskyAttachments = [appRules[@"blockRiskyAttachments"] boolValue];
         }
     }
 
-    applyDisableJIT        = globalTweakEnabled && (globalDisableJIT        || (currentProcessRestricted && disableJIT));
-    applyDisableJIT15      = globalTweakEnabled && (globalDisableJIT15      || (currentProcessRestricted && disableJIT15));
-    applyDisableJS         = globalTweakEnabled && (globalDisableJS         || (currentProcessRestricted && disableJS));
-    applyDisableMedia      = globalTweakEnabled && (globalDisableMedia      || (currentProcessRestricted && disableMedia));
-    applyDisableRTC        = globalTweakEnabled && (globalDisableRTC        || (currentProcessRestricted && disableRTC));
-    applyDisableFileAccess = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
-    applyDisableIMessageDL = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
+    applyDisableJIT          = globalTweakEnabled && (globalDisableJIT        || (currentProcessRestricted && disableJIT));
+    applyDisableJIT15        = globalTweakEnabled && (globalDisableJIT15      || (currentProcessRestricted && disableJIT15));
+    applyDisableJS           = globalTweakEnabled && (globalDisableJS         || (currentProcessRestricted && disableJS));
+    applyDisableMedia        = globalTweakEnabled && (globalDisableMedia      || (currentProcessRestricted && disableMedia));
+    applyDisableRTC          = globalTweakEnabled && (globalDisableRTC        || (currentProcessRestricted && disableRTC));
+    applyDisableFileAccess   = globalTweakEnabled && (globalDisableFileAccess || (currentProcessRestricted && disableFileAccess));
+    applyDisableIMessageDL   = globalTweakEnabled && (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
+    applyBlockRemoteContent  = globalTweakEnabled && (globalBlockRemoteContent  || (currentProcessRestricted && blockRemoteContent));
+    applyBlockRiskyAttachments = globalTweakEnabled && (globalBlockRiskyAttachments || (currentProcessRestricted && blockRiskyAttachments));
 
     shouldSpoofUA = NO;
     if (globalTweakEnabled) {
@@ -504,9 +545,9 @@ static void loadPrefs() {
     }
 
     if (currentProcessRestricted) {
-        ADSLog(@"[STATUS] Protection ACTIVE. JS:%d JIT:%d Media:%d RTC:%d iMsgDL:%d",
+        ADSLog(@"[STATUS] Protection ACTIVE. JS:%d JIT:%d Media:%d RTC:%d iMsgDL:%d RemoteBlock:%d RiskyAttach:%d",
                applyDisableJS, applyDisableJIT, applyDisableMedia, applyDisableRTC,
-               applyDisableIMessageDL);
+               applyDisableIMessageDL, applyBlockRemoteContent, applyBlockRiskyAttachments);
     } else {
         ADSLog(@"[STATUS] Process unrestricted — tweak dormant.");
     }
@@ -517,6 +558,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
                                     CFStringRef name __unused,
                                     const void *object __unused,
                                     CFDictionaryRef userInfo __unused) {
+    // Bump generation so existing WKUserContentControllers re-inject on next use
+    // rather than retaining a stale or removed UA script.
+    adsUAGeneration++;
     prefsLoaded = NO;
     loadPrefs();
 }
@@ -526,6 +570,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
+    WKContentRuleList *localBlocker = adsContentBlocker;
+    if (applyBlockRemoteContent && localBlocker && userContentController)
+        [userContentController addContentRuleList:localBlocker];
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
@@ -705,6 +752,25 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     if (applyDisableIMessageDL) return NO;
     return %orig;
 }
+
+// Intercepts the URL used to fetch attachment previews. Returns nil for high-risk
+// image/document formats (HEIC, WebP, PDF) to prevent ImageIO/CoreGraphics from
+// parsing potentially exploit-bearing files in the context of the Messages UI process.
+- (NSURL *)fullSizeImageURL {
+    NSURL *url = %orig;
+    if (!applyBlockRiskyAttachments || !url) return url;
+    static NSSet *riskyExts;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        riskyExts = [NSSet setWithObjects:@"heic", @"heif", @"webp", @"pdf", nil];
+    });
+    NSString *ext = url.pathExtension.lowercaseString;
+    if ([riskyExts containsObject:ext]) {
+        ADSLog(@"[MITIGATION] Blocked risky attachment preview (%@): %@", ext, url.lastPathComponent);
+        return nil;
+    }
+    return url;
+}
 %end
 
 %hook UIWebView
@@ -725,7 +791,20 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    if ([path hasSuffix:@".appex"]) return;
+    // Allow specific Notification Service Extensions through the .appex fast-exit.
+    // NSEs receive rich notifications (including attachment payloads) before the user
+    // opens the app, making them a silent zero-click attack surface on iOS 15+.
+    if ([path hasSuffix:@".appex"]) {
+        static NSArray *allowedNSEBundleIDs;
+        static dispatch_once_t nseOnce;
+        dispatch_once(&nseOnce, ^{
+            allowedNSEBundleIDs = @[
+                @"com.apple.messages.NotificationServiceExtension",
+                @"com.apple.MailNotificationServiceExtension"
+            ];
+        });
+        if (![allowedNSEBundleIDs containsObject:bundleID]) return;
+    }
 
     BOOL isUserApp       = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
     BOOL isSystemOrJBApp = [path containsString:@"/Applications/"];
@@ -733,7 +812,9 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     NSArray *allowedServices = @[
         @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
         @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"
+        @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+        @"com.apple.messages.NotificationServiceExtension",
+        @"com.apple.MailNotificationServiceExtension"
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
@@ -772,6 +853,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
+
+    // Pre-compile the remote content blocker. Blocks external http/https resource loads
+    // in WKWebViews — primary zero-click attack surface for HTML email rendering.
+    NSString *blockRules =
+        @"[{\"trigger\":{\"url-filter\":\"^https?://\","
+         "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
+         "\"font\",\"media\",\"svg-document\",\"raw\"]},"
+         "\"action\":{\"type\":\"block\"}}]";
+    [WKContentRuleListStore.defaultStore
+        compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
+        encodedContentRuleList:blockRules
+        completionHandler:^(WKContentRuleList *list, NSError *err) {
+            if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
+            else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
+        }];
 
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
         (CFNotificationCallback)reloadPrefsNotification,

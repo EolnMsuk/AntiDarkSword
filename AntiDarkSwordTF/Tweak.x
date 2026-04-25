@@ -1,13 +1,14 @@
 // AntiDarkSwordTF/Tweak.x
 // TrollFools / TrollStore variant — single dylib, direct per-app injection.
 // No MobileSubstrate dependency; no tier matching; no JSEvaluateScript hook (needs MSHookFunction).
-// Settings via three-finger double-tap overlay. Master switch defaults OFF.
+// Settings via three-finger double-tap overlay (biometric-gated). Master switch defaults OFF.
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 #import <JavaScriptCore/JavaScriptCore.h>
 #import <CoreFoundation/CoreFoundation.h>
+#import <LocalAuthentication/LocalAuthentication.h>
 #include <unistd.h>
 #include <stdatomic.h>
 #include <objc/runtime.h>
@@ -29,6 +30,11 @@
 @property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
 @end
 
+// CKAttachmentMessagePartChatItem is in ChatKit, loaded by Messages and related apps.
+@interface CKAttachmentMessagePartChatItem : NSObject
+- (NSURL *)fullSizeImageURL;
+@end
+
 // Shares prefs domain with the jailbreak tweak so the PreferenceLoader bundle is interoperable.
 static BOOL isRootlessJB = NO;
 
@@ -47,6 +53,7 @@ static _Atomic BOOL applyDisableMedia        = NO;
 static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
 static _Atomic BOOL applyBlockRemoteContent  = NO;
+static _Atomic BOOL applyBlockRiskyAttachments = NO;
 
 static NSString *customUAString = nil;
 
@@ -243,7 +250,7 @@ static void loadPrefs() {
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
             applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
-            applyBlockRemoteContent = NO;
+            applyBlockRemoteContent = applyBlockRiskyAttachments = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
         return;
     }
@@ -263,7 +270,8 @@ static void loadPrefs() {
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
     applyDisableFileAccess  =           ads_read_bool(rules, prefs, @"disableFileAccess",  @"globalDisableFileAccess",  NO);
-    applyBlockRemoteContent =           ads_read_bool(rules, prefs, @"blockRemoteContent", @"globalBlockRemoteContent", NO);
+    applyBlockRemoteContent   =          ads_read_bool(rules, prefs, @"blockRemoteContent",    @"globalBlockRemoteContent",    NO);
+    applyBlockRiskyAttachments =         ads_read_bool(rules, prefs, @"blockRiskyAttachments", @"globalBlockRiskyAttachments", NO);
 
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
                            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
@@ -297,10 +305,11 @@ static void loadPrefs() {
     shouldSpoofUA = (globalUA || uaRule) && customUAString.length > 0;
 
     ADSLog(@"[STATUS] TrollFools protection ACTIVE in %@. "
-           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d RemoteBlock:%d",
+           "JIT:%d Media:%d RTC:%d FileAccess:%d UA:%d RemoteBlock:%d RiskyAttach:%d",
            bundleID,
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
-           (int)applyDisableFileAccess, (int)shouldSpoofUA, (int)applyBlockRemoteContent);
+           (int)applyDisableFileAccess, (int)shouldSpoofUA,
+           (int)applyBlockRemoteContent, (int)applyBlockRiskyAttachments);
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -523,6 +532,26 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 %end
 
+// Intercepts the URL used to fetch attachment previews. Returns nil for high-risk
+// image/document formats to prevent ImageIO/CoreGraphics parsing of exploit-bearing files.
+%hook CKAttachmentMessagePartChatItem
+- (NSURL *)fullSizeImageURL {
+    NSURL *url = %orig;
+    if (!applyBlockRiskyAttachments || !url) return url;
+    static NSSet *riskyExts;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        riskyExts = [NSSet setWithObjects:@"heic", @"heif", @"webp", @"pdf", nil];
+    });
+    NSString *ext = url.pathExtension.lowercaseString;
+    if ([riskyExts containsObject:ext]) {
+        ADSLog(@"[MITIGATION] Blocked risky attachment preview (%@): %@", ext, url.lastPathComponent);
+        return nil;
+    }
+    return url;
+}
+%end
+
 static BOOL ads_gesture_installed = NO;
 
 static UIWindow *ads_key_window(void) {
@@ -603,6 +632,11 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
                       @"key":     @"blockRemoteContent",
                       @"enabled": @YES}];
 
+    [rows addObject:@{@"title":   @"Block Risky Attachment Previews",
+                      @"detail":  @"Suppresses HEIC/WebP/PDF previews (zero-click attack surface)",
+                      @"key":     @"blockRiskyAttachments",
+                      @"enabled": @YES}];
+
     return rows;
 }
 
@@ -611,7 +645,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
     if ([key isEqualToString:@"spoofUA"])           return YES;
     if ([key isEqualToString:@"disableJIT"])        return YES;
     if ([key isEqualToString:@"disableJIT15"])      return YES;
-    // JS, media, RTC, file access all off — user opts in explicitly.
+    // JS, media, RTC, file access, remote content block, risky attachment block all off — user opts in.
     return NO;
 }
 
@@ -982,18 +1016,41 @@ static BOOL ads_default_value_for_key(NSString *key) {
 
 // ---- Gesture installation ----
 
-static void ads_show_settings_overlay(void) {
-    UIWindow       *win  = ads_key_window();
+static void ads_present_overlay_on_main(void) {
+    UIWindow *win = ads_key_window();
     UIViewController *top = win ? ads_top_vc(win.rootViewController) : nil;
-    if (!top) return;
-    
-    // Don't stack multiple overlays
-    if ([top isKindOfClass:[ADSTFSettingsViewController class]]) return;
-
+    if (!top || [top isKindOfClass:[ADSTFSettingsViewController class]]) return;
     ADSTFSettingsViewController *vc = [[ADSTFSettingsViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
     vc.modalTransitionStyle   = UIModalTransitionStyleCrossDissolve;
     [top presentViewController:vc animated:YES completion:nil];
+}
+
+static void ads_show_settings_overlay(void) {
+    UIWindow *win = ads_key_window();
+    UIViewController *top = win ? ads_top_vc(win.rootViewController) : nil;
+    if (!top) return;
+    if ([top isKindOfClass:[ADSTFSettingsViewController class]]) return;
+
+    // Gate the settings overlay behind device owner authentication (Face ID / Touch ID /
+    // passcode fallback) so a malicious app cannot synthesise the gesture to disable mitigations.
+    LAContext *ctx = [[LAContext alloc] init];
+    NSError *biometryError = nil;
+    // LAPolicyDeviceOwnerAuthentication includes biometrics with automatic passcode fallback.
+    if ([ctx canEvaluatePolicy:LAPolicyDeviceOwnerAuthentication error:&biometryError]) {
+        [ctx evaluatePolicy:LAPolicyDeviceOwnerAuthentication
+            localizedReason:@"Authenticate to access AntiDarkSword settings"
+                      reply:^(BOOL success, NSError *authError) {
+            if (success) {
+                dispatch_async(dispatch_get_main_queue(), ^{ ads_present_overlay_on_main(); });
+            } else {
+                ADSLog(@"[AUTH] Settings overlay auth failed: %@", authError.localizedDescription);
+            }
+        }];
+    } else {
+        // No passcode set — fall through directly (device is already unlocked if reachable here).
+        ads_present_overlay_on_main();
+    }
 }
 
 // Persistent singleton target for the gesture recognizer.

@@ -35,6 +35,50 @@ static inline NSUserDefaults *ads_defaults(void) {
     dispatch_once(&onceToken, ^{ sharedDefaults = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE]; }); return sharedDefaults;
 }
 
+// Writes a single key directly via CFPreferences using kCFPreferencesAnyHost — the same
+// host scope the tweaks read from. NSUserDefaults may use kCFPreferencesCurrentHost on
+// supervised/Roothide devices, causing a read-miss in the tweaks for up to ~30 s.
+static inline void ads_cfwrite(NSString *key, id value) {
+    CFStringRef appID = (__bridge CFStringRef)ADS_PREFS_SUITE;
+    if (value) {
+        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
+                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    } else {
+        CFPreferencesSetValue((__bridge CFStringRef)key, NULL,
+                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    }
+    CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+}
+
+// One-time migration: re-writes all known preference keys through CFPreferences so that
+// values previously saved under the NSUserDefaults host scope become visible to the tweaks.
+static void ads_migrate_prefs_if_needed(void) {
+    NSUserDefaults *ud = ads_defaults();
+    if ([ud boolForKey:@"ADSPrefsMigrated_v2"]) return;
+    NSArray *knownKeys = @[
+        @"enabled", @"autoProtectLevel", @"selectedUAPreset", @"customUAString",
+        @"globalUASpoofingEnabled", @"globalDisableJIT", @"globalDisableJIT15",
+        @"globalDisableJS", @"globalDisableRTC", @"globalDisableMedia",
+        @"globalDisableIMessageDL", @"globalDisableFileAccess",
+        @"globalBlockRemoteContent", @"globalBlockRiskyAttachments",
+        @"corelliumDecoyEnabled", @"countersEnabled", @"disabledPresetRules",
+        @"activeCustomDaemonIDs", @"customDaemonIDs", @"restrictedApps",
+        @"hasInitializedDefaultRules"
+    ];
+    for (NSString *key in knownKeys) {
+        id val = [ud objectForKey:key];
+        if (val) ads_cfwrite(key, val);
+    }
+    NSDictionary *all = [ud dictionaryRepresentation];
+    for (NSString *key in all) {
+        if ([key hasPrefix:@"TargetRules_"] || [key hasPrefix:@"restrictedApps-"])
+            ads_cfwrite(key, all[key]);
+    }
+    ads_cfwrite(@"ADSPrefsMigrated_v2", @YES);
+    [ud setBool:YES forKey:@"ADSPrefsMigrated_v2"];
+    [ud synchronize];
+}
+
 static inline void ads_post_notification(void) { CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), ADS_NOTIF_SAVED, NULL, NULL, YES); }
 static inline BOOL ads_is_ios16(void) { return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16; }
 
@@ -200,7 +244,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
         PSSpecifier *globalGroup = [PSSpecifier preferenceSpecifierNamed:@"⚠︎  Global Rules (BETA) ⚠︎ " target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [globalGroup setProperty:@"Global rules can break almost anything, for advanced users only." forKey:@"footerText"]; [specs addObject:globalGroup];
 
-        NSArray *globals = @[ @{@"key": @"globalUASpoofingEnabled", @"label": @"Spoof User Agent"}, @{@"key": @"globalDisableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"globalDisableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"globalDisableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"globalDisableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"globalDisableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"globalDisableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"globalDisableFileAccess", @"label": @"Disable Local File Access"} ];
+        NSArray *globals = @[ @{@"key": @"globalUASpoofingEnabled", @"label": @"Spoof User Agent"}, @{@"key": @"globalDisableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"globalDisableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"globalDisableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"globalDisableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"globalDisableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"globalDisableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"globalDisableFileAccess", @"label": @"Disable Local File Access"}, @{@"key": @"globalBlockRemoteContent", @"label": @"Block Remote Content (Global)"}, @{@"key": @"globalBlockRiskyAttachments", @"label": @"Block Risky Attachment Previews (Global)"} ];
 
         BOOL isIOS16 = ads_is_ios16(); BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
         for (NSDictionary *g in globals) {
@@ -402,7 +446,9 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     BOOL isIOS16 = ads_is_ios16();
     if ([featureKey isEqualToString:@"disableJIT"]) return isIOS16 && !isDaemon;
     if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && !isDaemon;
-    if ([featureKey isEqualToString:@"disableJS"] || [featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"] || [featureKey isEqualToString:@"disableFileAccess"]) return !isDaemon; 
+    if ([featureKey isEqualToString:@"disableJS"] || [featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"] || [featureKey isEqualToString:@"disableFileAccess"]) return !isDaemon;
+    if ([featureKey isEqualToString:@"blockRemoteContent"]) return !isDaemon;
+    if ([featureKey isEqualToString:@"blockRiskyAttachments"]) return isMessageApp || [targetID isEqualToString:@"com.apple.mobilemail"] || [targetID isEqualToString:@"com.apple.MailCompositionService"] || [targetID hasPrefix:@"com.google.Gmail"] || [targetID isEqualToString:@"com.microsoft.Office.Outlook"] || [targetID isEqualToString:@"ch.protonmail.protonmail"];
     return YES;
 }
 - (void)setSpecifier:(PSSpecifier *)specifier {
@@ -419,6 +465,8 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     if ([featureKey isEqualToString:@"disableMedia"]) return [defaults boolForKey:@"globalDisableMedia"];
     if ([featureKey isEqualToString:@"disableIMessageDL"]) return [defaults boolForKey:@"globalDisableIMessageDL"];
     if ([featureKey isEqualToString:@"disableFileAccess"]) return [defaults boolForKey:@"globalDisableFileAccess"];
+    if ([featureKey isEqualToString:@"blockRemoteContent"]) return [defaults boolForKey:@"globalBlockRemoteContent"];
+    if ([featureKey isEqualToString:@"blockRiskyAttachments"]) return [defaults boolForKey:@"globalBlockRiskyAttachments"];
     return NO;
 }
 - (NSArray *)specifiers {
@@ -431,7 +479,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"]; [specs addObject:featGroup];
         
-        NSArray *features = @[ @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}, @{@"key": @"disableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"disableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"} ];
+        NSArray *features = @[ @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}, @{@"key": @"disableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"disableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}, @{@"key": @"blockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"blockRiskyAttachments", @"label": @"Block Risky Attachment Previews"} ];
         
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID]; NSDictionary *rules = [defaults dictionaryForKey:dictKey]; BOOL isIOS16 = ads_is_ios16();
         BOOL isJSTurnedOn = (rules && rules[@"disableJS"] != nil) ? [rules[@"disableJS"] boolValue] : (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
@@ -517,10 +565,10 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
             if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) rules[@"disableJIT"] = @YES;
             else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) rules[@"disableJIT15"] = @YES;
         } else { rules[@"disableJIT"] = @NO; rules[@"disableJIT15"] = @NO; }
-        [defaults setObject:rules forKey:dictKey]; [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
+        [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
         dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; }); ads_post_notification(); return;
     }
-    [defaults setObject:rules forKey:dictKey]; [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification();
+    [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification();
 }
 @end
 
@@ -588,13 +636,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         rules[@"disableJIT"] = (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:targetID]) ? @YES : @NO; 
         rules[@"disableJIT15"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:targetID]) ? @YES : @NO; 
         rules[@"disableJS"] = (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:targetID]) ? @YES : @NO; 
-        rules[@"disableMedia"] = @NO; rules[@"disableRTC"] = @NO; rules[@"disableFileAccess"] = @NO; rules[@"disableIMessageDL"] = @NO; rules[@"spoofUA"] = @NO;
-        
+        rules[@"disableMedia"] = @NO; rules[@"disableRTC"] = @NO; rules[@"disableFileAccess"] = @NO; rules[@"disableIMessageDL"] = @NO; rules[@"spoofUA"] = @NO; rules[@"blockRemoteContent"] = @NO; rules[@"blockRiskyAttachments"] = @NO;
+
         if ([msgAndMail containsObject:targetID]) {
             rules[@"disableMedia"] = [AntiDarkSwordAppController isApplicableFeature:@"disableMedia" forTarget:targetID] ? @YES : @NO;
             rules[@"disableRTC"] = [AntiDarkSwordAppController isApplicableFeature:@"disableRTC" forTarget:targetID] ? @YES : @NO;
             rules[@"disableFileAccess"] = [AntiDarkSwordAppController isApplicableFeature:@"disableFileAccess" forTarget:targetID] ? @YES : @NO;
             rules[@"disableIMessageDL"] = [AntiDarkSwordAppController isApplicableFeature:@"disableIMessageDL" forTarget:targetID] ? @YES : @NO;
+            rules[@"blockRemoteContent"] = @YES;
             if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         } else if ([browsers containsObject:targetID]) {
             if ([targetID isEqualToString:@"com.apple.mobilesafari"] || [targetID isEqualToString:@"com.apple.SafariViewService"]) rules[@"spoofUA"] = @YES; else rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
@@ -690,6 +739,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 - (void)viewDidLoad {
     [super viewDidLoad]; NSUserDefaults *defaults = ads_defaults();
+    ads_migrate_prefs_if_needed();
     NSInteger currentLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1; [self populateDefaultRulesForLevel:currentLevel force:NO];
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
     BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
@@ -733,9 +783,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSString *key = [specifier propertyForKey:@"key"]; NSUserDefaults *defaults = ads_defaults();
     if ([key isEqualToString:@"customUAString"]) {
         NSString *input = (NSString *)value; NSString *trimmed = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (trimmed.length == 0) { NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"; value = ios18UA; [defaults setObject:ios18UA forKey:@"selectedUAPreset"]; [defaults synchronize]; dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; }); }
+        if (trimmed.length == 0) { NSString *ios18UA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"; value = ios18UA; [defaults setObject:ios18UA forKey:@"selectedUAPreset"]; ads_cfwrite(@"selectedUAPreset", ios18UA); [defaults synchronize]; dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; }); }
     }
-    [super setPreferenceValue:value specifier:specifier]; [self flagSaveRequirement];
+    [super setPreferenceValue:value specifier:specifier];
+    if (key) ads_cfwrite(key, value);
+    [self flagSaveRequirement];
     if ([key isEqualToString:@"selectedUAPreset"]) { _specifiers = nil; [self reloadSpecifiers]; }
 }
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
