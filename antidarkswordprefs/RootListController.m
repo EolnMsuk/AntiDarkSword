@@ -534,7 +534,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     NSArray *daemons = @[@"com.apple.imagent", @"com.apple.apsd", @"com.apple.identityservicesd", @"com.apple.IMDPersistenceAgent", @"com.apple.SafariViewService", @"com.apple.MailCompositionService", @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp", @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon"];
     if ([daemons containsObject:targetID]) return targetID;
     @try {
-        Class LSAppProxy = NSClassFromString(@"LSApplicationWorkspace");
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
         if (LSAppProxy) { id proxy = [LSAppProxy applicationProxyForIdentifier:targetID]; if (proxy && [proxy respondsToSelector:@selector(localizedName)]) { NSString *name = [proxy localizedName]; if (name && name.length > 0) return name; } }
     } @catch (NSException *e) {}
     return targetID;
