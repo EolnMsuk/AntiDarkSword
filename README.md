@@ -41,7 +41,7 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 15.0 – 17.0 | A9+ |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 15.0 – 17.0 | A9+ |
 
-> iOS 13–14 is not officially supported. Build from source using the legacy commands in CLAUDE.md.
+> iOS 13–14 is not officially supported. Build from source using the legacy commands.
 
 ---
 
