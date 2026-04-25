@@ -193,8 +193,10 @@
 
 - (void)launchGame {
     if (self.gameView) return;
-    UITableView *table = (UITableView *)[self valueForKey:@"_table"];
-    if (!table) return;
+    UITableView *table = nil;
+    @try { table = (UITableView *)[self valueForKey:@"_table"]; }
+    @catch (NSException *) {}
+    if (![table isKindOfClass:[UITableView class]]) return;
     CGFloat width = table.bounds.size.width;
     CGFloat height = 480.0; 
     
@@ -223,7 +225,9 @@
 
 - (void)teardownGame {
     if (!self.gameView) return;
-    UITableView *table = (UITableView *)[self valueForKey:@"_table"];
+    UITableView *table = nil;
+    @try { table = (UITableView *)[self valueForKey:@"_table"]; }
+    @catch (NSException *) {}
     if (table) table.scrollEnabled = YES;
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 0.0;

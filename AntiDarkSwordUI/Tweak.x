@@ -6,6 +6,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -82,6 +83,14 @@ static _Atomic BOOL applyDisableIMessageDL   = NO;
 
 static NSString *adsJSONStringLiteral(NSString *str);
 
+// Marks a WKUserContentController as having received the ADS UA script so
+// injectUAScript is idempotent. WKWebView initWithFrame: triggers both
+// applyWebKitMitigations (pre-orig) and the setUserContentController: hook
+// (during %orig, on the copied config's UCC). Without this guard the script
+// accumulates on initWithCoder: paths where applyWebKitMitigations fires
+// after the WKWebView — and thus after the hook — has already injected it.
+static const char kADSUCCInjectedKey = 0;
+
 // Derives navigator.userAgentData.brands JSON array from a UA string,
 // keeping engine/browser tokens consistent with userAgent.
 static NSString *adsBrandsFromUA(NSString *ua) {
@@ -142,6 +151,8 @@ static NSString *adsJSONStringLiteral(NSString *str) {
 
 static void injectUAScript(WKUserContentController *ucc) {
     if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
+    if (objc_getAssociatedObject(ucc, &kADSUCCInjectedKey)) return;
+    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
 
     NSString *jsonUA = adsJSONStringLiteral(customUAString);

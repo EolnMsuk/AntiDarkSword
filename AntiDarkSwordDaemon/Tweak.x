@@ -343,23 +343,39 @@ int hook_access(const char *path, int amode) {
     return orig_access(path, amode);
 }
 
+// Fills buf with a plausible stat for the decoy corelliumd binary.
+// Timestamps are derived from ads_spoofed_boottime so they are internally
+// consistent: birth ≈ one week before "boot", access ≈ 30 s after "boot".
+// Zero timestamps (epoch) are immediately detectable by any detector that
+// compares st_birthtimespec against system uptime or install history.
+static void ads_fill_corellium_stat(struct stat *buf) {
+    if (!buf) return;
+    memset(buf, 0, sizeof(struct stat));
+    buf->st_dev     = 1;          // root filesystem device
+    buf->st_ino     = 0x00c12a7f; // plausible inode
+    buf->st_mode    = S_IFREG | 0755;
+    buf->st_nlink   = 1;
+    buf->st_uid     = 0;
+    buf->st_gid     = 0;
+    buf->st_size    = 34520;
+    buf->st_blksize = 4096;
+    buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
+
+    // Binary was "installed" one week before boot; last accessed 30 s after boot.
+    time_t installTime = ads_spoofed_boottime.tv_sec - (86400 * 7);
+    time_t accessTime  = ads_spoofed_boottime.tv_sec + 30;
+    buf->st_birthtimespec.tv_sec = installTime;
+    buf->st_ctimespec.tv_sec     = installTime;
+    buf->st_mtimespec.tv_sec     = installTime;
+    buf->st_atimespec.tv_sec     = accessTime;
+}
+
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
     if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
-            if (buf) {
-                memset(buf, 0, sizeof(struct stat));
-                buf->st_dev     = 1;          // root filesystem device
-                buf->st_ino     = 0x00c12a7f; // plausible inode
-                buf->st_mode    = S_IFREG | 0755;
-                buf->st_nlink   = 1;
-                buf->st_uid     = 0;
-                buf->st_gid     = 0;
-                buf->st_size    = 34520;
-                buf->st_blksize = 4096;
-                buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
-            }
+            ads_fill_corellium_stat(buf);
             return 0;
         }
     }
@@ -371,18 +387,7 @@ int hook_lstat(const char *path, struct stat *buf) {
     if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
-            if (buf) {
-                memset(buf, 0, sizeof(struct stat));
-                buf->st_dev     = 1;
-                buf->st_ino     = 0x00c12a7f;
-                buf->st_mode    = S_IFREG | 0755;
-                buf->st_nlink   = 1;
-                buf->st_uid     = 0;
-                buf->st_gid     = 0;
-                buf->st_size    = 34520;
-                buf->st_blksize = 4096;
-                buf->st_blocks  = 72;
-            }
+            ads_fill_corellium_stat(buf);
             return 0;
         }
     }

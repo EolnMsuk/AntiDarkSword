@@ -10,6 +10,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <objc/runtime.h>
 
 #import "../ADSLogging.h"
 
@@ -51,7 +52,11 @@ static NSString *customUAString = nil;
 
 // Compiled once in %ctor; blocks external http/https resource loads — the primary zero-click
 // attack surface in HTML email rendering (Mail.app). Applied when applyBlockRemoteContent=YES.
+// Written on the main queue (see %ctor completion handler); read from WebKit hooks (main thread).
 static WKContentRuleList *adsContentBlocker = nil;
+
+// Per-UCC injection guard — same rationale as AntiDarkSwordUI (see kADSUCCInjectedKey comment there).
+static const char kADSUCCInjectedKey = 0;
 
 static NSString *adsJSONStringLiteral(NSString *str);
 
@@ -109,6 +114,8 @@ static NSString *adsJSONStringLiteral(NSString *str) {
 
 static void injectUAScript(WKUserContentController *ucc) {
     if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
+    if (objc_getAssociatedObject(ucc, &kADSUCCInjectedKey)) return;
+    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
 
     NSString *jsonUA = adsJSONStringLiteral(customUAString);
@@ -1055,11 +1062,13 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
          "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
          "\"font\",\"media\",\"svg-document\",\"raw\"]},"
          "\"action\":{\"type\":\"block\"}}]";
+    // completionHandler fires on an arbitrary queue; adsContentBlocker is read
+    // from WebKit hooks on the main thread, so the assignment must be main-queue.
     [WKContentRuleListStore.defaultStore
         compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
         encodedContentRuleList:blockRules
         completionHandler:^(WKContentRuleList *list, NSError *err) {
-            if (list) adsContentBlocker = list;
+            if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
             else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
         }];
 

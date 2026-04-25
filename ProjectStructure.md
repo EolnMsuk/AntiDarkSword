@@ -15,9 +15,9 @@ AntiDarkSword/
 ├── Makefile.trollfools                   # Standalone Makefile for the TrollFools dylib. Builds only AntiDarkSwordTF
 │                                         # with LOGOS_DEFAULT_GENERATOR=internal (no MobileSubstrate dependency).
 │
-├── build_all.sh                          # Local build script that swaps the correct AltList framework variant,
-│                                         # builds all four targets (legacy rootful, modern rootful, modern rootless,
-│                                         # TrollFools dylib), and collects outputs into output/.
+├── build_all.sh                          # Local build script that swaps AltList_New.framework into vendor/,
+│                                         # builds three targets (modern rootful, modern rootless, TrollFools dylib),
+│                                         # and collects outputs into output/. Legacy arm-only .deb is built manually.
 │
 ├── control                               # Debian package metadata (package ID, version 4.6.0, arch, dependencies:
 │                                         # mobilesubstrate, preferenceloader, com.opa334.altlist).
@@ -34,8 +34,9 @@ AntiDarkSword/
 │   │                                     # identityservicesd, apsd, IMDPersistenceAgent.
 │   ├── Tweak.x                           # Daemon-layer Logos tweak. Hooks IMFileTransfer to block iMessage
 │   │                                     # auto-download; hooks access/stat/lstat/NSFileManager via MSHookFunction
-│   │                                     # for Corellium path spoofing on rootless; increments probe counter on a
-│   │                                     # serial async queue to avoid cfprefsd deadlock.
+│   │                                     # for Corellium path spoofing on rootless (fabricated stat with plausible
+│   │                                     # timestamps derived from ads_spoofed_boottime); increments probe counter on
+│   │                                     # a serial async queue to avoid cfprefsd deadlock.
 │   └── README.md                         # Subproject notes for AntiDarkSwordDaemon.
 │
 ├── AntiDarkSwordUI/
@@ -47,27 +48,30 @@ AntiDarkSword/
 │   │                                     # WKWebpagePreferences, WKPreferences, _WKProcessPoolConfiguration,
 │   │                                     # JSEvaluateScript (C-level), IMFileTransfer, CKAttachmentMessagePartChatItem,
 │   │                                     # and UIWebView. Applies JIT/JS/media/RTC/file-access/iMessageDL mitigations
-│   │                                     # and UA spoofing with Client Hints injection. Fast-exits for noisy background
-│   │                                     # daemons and .appex extensions in %ctor.
+│   │                                     # and UA spoofing with Client Hints injection. Uses associated objects on
+│   │                                     # WKUserContentController to prevent duplicate script injection. Fast-exits
+│   │                                     # for noisy background daemons and .appex extensions in %ctor.
 │   └── README.md                         # Subproject notes for AntiDarkSwordUI.
 │
 ├── AntiDarkSwordTF/
 │   ├── Makefile                          # Builds the TrollFools dylib with LOGOS_DEFAULT_GENERATOR=internal
 │   │                                     # and -DTROLLFOOLS_BUILD=1. No Substrate linkage; codesigns with sha1+sha256.
 │   ├── Tweak.x                           # TrollFools variant tweak. Contains all AntiDarkSwordUI WebKit hooks plus:
-│   │                                     # WKContentRuleList remote-content blocker (async compiled in %ctor),
+│   │                                     # WKContentRuleList remote-content blocker (async compiled in %ctor;
+│   │                                     # result dispatched to main queue to avoid read/write race with hooks),
 │   │                                     # in-app settings overlay (ADSTFSettingsViewController + ADSTFGestureHandler),
 │   │                                     # three-finger double-tap gesture via %hook UIWindow makeKeyAndVisible,
-│   │                                     # and a three-tier prefs storage fallback (system plist → CFPrefs →
-│   │                                     # NSUserDefaults suite). No daemon hooks or JSEvaluateScript C hook.
+│   │                                     # associated-object UCC dedup guard, and a three-tier prefs storage
+│   │                                     # fallback (system plist → CFPrefs → NSUserDefaults suite).
+│   │                                     # No daemon hooks or JSEvaluateScript C hook.
 │   └── README.md                         # Subproject notes for AntiDarkSwordTF.
 │
 ├── CorelliumDecoy/
 │   ├── Makefile                          # Builds corelliumd as a Theos tool installed to /usr/libexec.
 │   │                                     # Codesigns with platform-application entitlement; patches the LaunchDaemon
 │   │                                     # plist path for rootless installs via sed in internal-stage.
-│   ├── main.m                            # Minimal CFRunLoop daemon. Registers SIGTERM/SIGINT/SIGHUP handlers and
-│   │                                     # loops indefinitely, consuming no measurable CPU while keeping the PID alive.
+│   ├── main.m                            # Minimal CFRunLoop daemon. Registers SIGTERM/SIGINT/SIGHUP handlers (uses
+│   │                                     # _exit() — async-signal-safe) and loops indefinitely at ~0% CPU.
 │   ├── c.eolnmsuk.corelliumdecoy.plist   # LaunchDaemon plist. Runs /usr/libexec/corelliumd with KeepAlive=true
 │   │                                     # so the process restarts automatically if killed.
 │   ├── entitlements.plist                # Grants platform-application and disables container requirement so
@@ -85,7 +89,8 @@ AntiDarkSword/
 │   │                                     # toggle subcontroller, and global override switches. Posts Darwin
 │   │                                     # com.eolnmsuk.antidarkswordprefs/saved on every save.
 │   ├── ADSCreditsMenu.m                  # PSListController subclass rendering the Credits screen (authors,
-│   │                                     # acknowledgements, links).
+│   │                                     # acknowledgements, links). Easter-egg SKView mini-game launcher;
+│   │                                     # private _table KVC access wrapped in @try/@catch for forward-compat.
 │   ├── ADSGames.h                        # Shared header for the embedded mini-game scenes. Declares
 │   │                                     # ADSGameMenuScene, ADSJailTrisScene, ADSPyEaterScene, ADSSynthState,
 │   │                                     # ADSGameState, AntiDarkSwordCreditsController, and ADS_PREFS_SUITE.
