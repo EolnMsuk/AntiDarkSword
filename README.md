@@ -151,4 +151,4 @@ Level 3
 
 Created by [EolnMsuk](https://github.com/EolnMsuk) → [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/)  
 Thanks to [ghh-jb](https://github.com/ghh-jb) → [CorelliumDecoy](https://github.com/ghh-jb/CorelliumDecoy)  
-Support me [BTC](https://www.blockchain.com/explorer/addresses/btc/bc1qm06lzkdfule3f7flf4u70xvjrp5n74lzxnnfks) - [Venmo](https://venmo.com/user/eolnmsuk)
+Support me [BTC](https://www.blockchain.com/explorer/addresses/btc/bc1qm06lzkdfule3f7flf4u70xvjrp5n74lzxnnfks) → [Venmo](https://venmo.com/user/eolnmsuk)
