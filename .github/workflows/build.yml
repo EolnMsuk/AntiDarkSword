@@ -80,6 +80,7 @@ jobs:
 
             ### Compatibility Guide
             > **Legacy Rootful:** → iOS 13-14. You must clone this repo, `make package` or `make package THEOS_PACKAGE_SCHEME=rootless` while using arm64e.old ABI version of `AltList.framework`. 
+
             | File | For |
             |---|---|
             | `modern_iphoneos-arm64.deb` | Rootless (iOS 15+) |
