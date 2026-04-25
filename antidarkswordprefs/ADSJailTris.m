@@ -304,13 +304,17 @@ static int jt_blocks[7][4][4][2] = {
             playTap(); _isPaused = !_isPaused;
             if (_isPaused) {
                 [self playSFX2:330.0 freq2:220.0 dur:0.1];
-                _startBtn.text = @"▶ RESUME"; _startBg.hidden = NO; _startBg.lineWidth = 6.0; _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
+                _startBtn.text = @"▶ RESUME"; _startBg.hidden = NO; 
+                _startBg.path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(-85, -25, 170, 50) cornerRadius:10].CGPath;
+                _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
                 _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 35);
                 _highScoreBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 25);
                 if (_synthState) _synthState->playBGM = 0;
             } else {
                 [self playSFX2:880.0 freq2:1108.73 dur:0.1];
-                _startBg.hidden = YES; _startBg.lineWidth = 3.0; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
+                _startBg.hidden = YES; 
+                _startBg.path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(-70, -25, 140, 50) cornerRadius:10].CGPath;
+                _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
                 if (_synthState && _musicEnabled) _synthState->playBGM = 1;
             }
         }
