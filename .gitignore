@@ -1,9 +1,0 @@
-CLAUDE.md
-changelog.md
-.gitignore
-packages/
-.theos/
-output/
-*.deb
-*.dylib
-.claude/
