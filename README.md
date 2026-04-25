@@ -23,7 +23,7 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 1. Add repo in Sileo/Zebra: https://f0rd0w.github.io/
 2. Or install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
 > Use `arm.deb` for rootful, `arm64.deb` for rootless (if roothide, use patcher on rootless deb).
-> iOS 13–14 is not officially supported. Users on iOS 13–14 must [build from source](https://github.com/EolnMsuk/AntiDarkSword) using the legacy commands in CLAUDE.md.
+> iOS 13–14 is not officially supported. Users on iOS 13–14 must [build from source](https://github.com/EolnMsuk/AntiDarkSword) using the legacy commands.
 
 **TrollFools Dylib**
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
