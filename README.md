@@ -21,8 +21,8 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 
 **Jailbreak Tweak**
 1. Add repo in Sileo/Zebra: https://f0rd0w.github.io/
-2. Or install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases) manually using the table above.
-> Use `arm.deb` for rootful, `arm64.deb` for rootless/roothide.
+2. Or install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
+> Use `arm.deb` for rootful, `arm64.deb` for rootless (if roothide, use patcher on rootless deb). 
 
 **TrollFools Dylib**
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
@@ -143,8 +143,9 @@ Level 3
 
 - [AntiDarkSwordUI.md](https://github.com/EolnMsuk/AntiDarkSword/blob/main/AntiDarkSwordUI/README.md) 
 - [AntiDarkSwordDaemon.md](https://github.com/EolnMsuk/AntiDarkSword/blob/main/AntiDarkSwordDaemon/README.md) 
-- [AntiDarkSwordTF.md](https://github.com/EolnMsuk/AntiDarkSword/blob/main/AntiDarkSwordTF/README.md) 
 - [CorelliumDecoy.md](https://github.com/EolnMsuk/AntiDarkSword/blob/main/CorelliumDecoy/README.md) 
+- [AntiDarkSwordTF.md](https://github.com/EolnMsuk/AntiDarkSword/blob/main/AntiDarkSwordTF/README.md) 
+
 
 ---
 
