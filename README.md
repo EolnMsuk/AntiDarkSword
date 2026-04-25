@@ -39,8 +39,8 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | :--- | :--- | :--- | :--- |
 | `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 16.6.1 | A12+ · A8–A11 |
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 15.0 – 16.x | A8+ |
-| `*_iphoneos-arm_legacy.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0 – 14.x | A8–A11 (arm64) |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 15.0 – 16.x | A8+ |
+| `*_iphoneos-arm_legacy.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0 – 14.x | A8–A11 (arm64) |
 
 ---
 
