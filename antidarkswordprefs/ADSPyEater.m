@@ -322,21 +322,31 @@ static const CGFloat kGridSize = 20.0;
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]];
         return;
     }
-    if ([_menuBg containsPoint:loc]) { playTap(); if (self.exitHandler) self.exitHandler(); return; }
-    if ([self.musicBtnBg containsPoint:loc]) { playTap(); _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
-    if ([self.highScoreBtn containsPoint:loc]) { playTap(); [self playSFX2:1046.50 freq2:1318.51 dur:0.4]; [self showLeaderboard]; return; }
+    if ([_menuBg containsPoint:loc]) { playTap(); [self playSFX:440.0 dur:0.08]; if (self.exitHandler) self.exitHandler(); return; }
+    if ([self.musicBtnBg containsPoint:loc]) { playTap(); [self playSFX2:523.25 freq2:659.25 dur:0.1]; _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
+    if ([self.highScoreBtn containsPoint:loc]) {
+        playTap();
+        if (self.gameState == ADSGameStatePlaying) {
+            self.gameState = ADSGameStatePaused; self.startBtn.text = @"▶ RESUME";
+            self.startBtn.hidden = NO; self.restartOverlay.hidden = NO;
+            if (_synthState) _synthState->playBGM = 0;
+        }
+        [self playSFX2:1046.50 freq2:1318.51 dur:0.4]; [self showLeaderboard]; return;
+    }
 
-    if (self.gameState == ADSGameStateMenu || self.gameState == ADSGameStateDead) {
-        playTap(); [self resetGame];
+    if (self.gameState == ADSGameStateMenu) {
+        playTap(); [self playSFX2:880.0 freq2:1108.73 dur:0.1]; [self resetGame];
+    } else if (self.gameState == ADSGameStateDead) {
+        playTap(); [self playSFXSweep:440.0 sweep:440.0 dur:0.15]; [self resetGame];
     } else if (self.gameState == ADSGameStatePlaying) {
         if ([_pauseBg containsPoint:loc]) {
-            playTap(); self.gameState = ADSGameStatePaused; self.startBtn.text = @"▶ RESUME";
+            playTap(); [self playSFX2:330.0 freq2:220.0 dur:0.1]; self.gameState = ADSGameStatePaused; self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO; self.restartOverlay.hidden = NO;
             if (_synthState) _synthState->playBGM = 0;
         }
     } else if (self.gameState == ADSGameStatePaused) {
         if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
-            playTap(); self.gameState = ADSGameStatePlaying; self.startBtn.hidden = YES; self.restartOverlay.hidden = YES;
+            playTap(); [self playSFX2:880.0 freq2:1108.73 dur:0.1]; self.gameState = ADSGameStatePlaying; self.startBtn.hidden = YES; self.restartOverlay.hidden = YES;
             if (_synthState && _musicEnabled) _synthState->playBGM = 1;
         }
     }
@@ -350,7 +360,7 @@ static const CGFloat kGridSize = 20.0;
     else if (sender.direction == UISwipeGestureRecognizerDirectionLeft && self.direction.dx == 0) { self.direction = CGVectorMake(-1, 0); changed = YES; }
     else if (sender.direction == UISwipeGestureRecognizerDirectionRight && self.direction.dx == 0) { self.direction = CGVectorMake(1, 0); changed = YES; }
     
-    if (changed) { UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight]; [feed impactOccurred]; }
+    if (changed) { UIImpactFeedbackGenerator *feed = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight]; [feed impactOccurred]; [self playSFX:150.0 dur:0.05]; }
 }
 
 - (void)drawWalls {

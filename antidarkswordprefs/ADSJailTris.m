@@ -212,7 +212,7 @@ static int jt_blocks[7][4][4][2] = {
     _restartOverlay.lineWidth = 4.0; _restartOverlay.zPosition = 50; _restartOverlay.hidden = YES; [self addChild:_restartOverlay];
 
     _startBg = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(140, 50) cornerRadius:10];
-    _startBg.strokeColor = [UIColor clearColor]; _startBg.fillColor = [UIColor clearColor];
+    _startBg.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0]; _startBg.lineWidth = 3.0; _startBg.fillColor = [UIColor clearColor];
     _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 5); _startBg.zPosition = 51; [self addChild:_startBg];
     _startBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _startBtn.text = @"▶ Start"; _startBtn.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
@@ -224,7 +224,7 @@ static int jt_blocks[7][4][4][2] = {
 
     _restartBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _restartBtn.text = @"↺"; _restartBtn.fontColor = [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0];
-    _restartBtn.fontSize = 44; _restartBtn.position = CGPointMake(30, 10); [self addChild:_restartBtn];
+    _restartBtn.fontSize = 44; _restartBtn.position = CGPointMake(30, 10); _restartBtn.hidden = YES; [self addChild:_restartBtn];
 }
 
 - (void)updateMusicBtn {
@@ -284,23 +284,25 @@ static int jt_blocks[7][4][4][2] = {
         playTap(); SKNode *node = _leaderboardNode; _leaderboardNode = nil;
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]]; return;
     }
-    if ([_menuBg containsPoint:loc]) { playTap(); if (self.exitHandler) self.exitHandler(); return; }
-    if ([self.musicBtnBg containsPoint:loc]) { playTap(); _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
+    if ([_menuBg containsPoint:loc]) { playTap(); [self playSFX:440.0 dur:0.08]; if (self.exitHandler) self.exitHandler(); return; }
+    if ([self.musicBtnBg containsPoint:loc]) { playTap(); [self playSFX2:523.25 freq2:659.25 dur:0.1]; _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
     if (!_highScoreBg.hidden && [_highScoreBg containsPoint:loc]) { playTap(); [self showLeaderboard]; return; }
-    if ([_restartBtn containsPoint:loc]) { playTap(); [self resetGame]; return; }
-    if (_isDead) { playTap(); [self resetGame]; return; }
+    if ([_restartBtn containsPoint:loc]) { playTap(); [self playSFXSweep:440.0 sweep:440.0 dur:0.15]; [self resetGame]; return; }
+    if (_isDead) { playTap(); [self playSFXSweep:440.0 sweep:440.0 dur:0.15]; [self resetGame]; return; }
 
     if (!_isPlaying) {
-        if ([_startBg containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])) { playTap(); [self resetGame]; }
+        if ([_startBg containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])) { playTap(); [self playSFX2:880.0 freq2:1108.73 dur:0.1]; [self resetGame]; }
     } else if (_isPlaying && !_isDead) {
         if ([_pauseBg containsPoint:loc] || (_isPaused && ([_startBg containsPoint:loc] || (!_restartOverlay.hidden && [_restartOverlay containsPoint:loc])))) {
             playTap(); _isPaused = !_isPaused;
             if (_isPaused) {
+                [self playSFX2:330.0 freq2:220.0 dur:0.1];
                 _startBtn.text = @"▶ RESUME"; _startBg.hidden = NO; _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
                 _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 35);
                 _highScoreBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 25);
                 if (_synthState) _synthState->playBGM = 0;
             } else {
+                [self playSFX2:880.0 freq2:1108.73 dur:0.1];
                 _startBg.hidden = YES; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
                 if (_synthState && _musicEnabled) _synthState->playBGM = 1;
             }
@@ -393,7 +395,7 @@ static int jt_blocks[7][4][4][2] = {
 
 - (void)resetGame {
     _isPlaying = YES; _isDead = NO; _isPaused = NO;
-    _startBg.hidden = YES; _titleLbl.hidden = YES; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _scoreLbl.hidden = NO;
+    _startBg.hidden = YES; _titleLbl.hidden = YES; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _scoreLbl.hidden = NO; _restartBtn.hidden = NO;
     [_deathContainer removeFromParent]; _deathContainer = nil;
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     _savedHighScore = [def integerForKey:@"ADS_JailTrisHighScore"]; _hasSurpassedHighScore = NO;

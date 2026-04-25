@@ -117,11 +117,17 @@
     };
     if ([_closeBtn containsPoint:loc]) {
         playTap();
+        [self playSFX:440.0 dur:0.08];
         if (self.exitHandler) self.exitHandler();
         return;
     }
     if ([_dedicationBtn containsPoint:loc]) {
         playTap();
+        [self playSFX:523.25 dur:0.08];
+        __weak ADSGameMenuScene *ws = self;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.09 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [ws playSFX:659.25 dur:0.08]; });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [ws playSFX:783.99 dur:0.08]; });
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.27 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ [ws playSFX:1046.50 dur:0.15]; });
         NSURL *url = [NSURL URLWithString:@"https://github.com/00000000aaaaaaaa"];
         if ([[UIApplication sharedApplication] canOpenURL:url]) { [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil]; }
         return;
