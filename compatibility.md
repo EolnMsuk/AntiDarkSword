@@ -29,7 +29,7 @@ Generated: 2026-04-25.
 
 | iOS | JIT API | JS API | Notes |
 |---|---|---|---|
-| 13.0–13.x | `_WKProcessPoolConfiguration.JITEnabled` (private) | `javaScriptEnabled` (WKPreferences) | `allowsContentJavaScript` unavailable; `#if < 140000` guard skips it. `lockdownModeEnabled` unavailable. Legacy .deb required. |
+| 13.0–13.x | `_WKProcessPoolConfiguration.JITEnabled` (private) | `javaScriptEnabled` (WKPreferences) | `allowsContentJavaScript` unavailable; `#if < 140000` guard skips it. `lockdownModeEnabled` unavailable. CI-built legacy `_iphoneos-arm_legacy.deb` (arm64, `AltList_Old`) required. |
 | 14.0–14.x | `_WKProcessPoolConfiguration.JITEnabled` + `allowsContentJavaScript` (iOS 14 API) | Both | CI-built legacy `_iphoneos-arm_legacy.deb` (arm64, `AltList_Old`, iOS 13–14). No lockdown mode. |
 | 15.0–15.x | Same as 14 + pool config still relevant | Both | Rootless available (Dopamine, palera1n rootless). `disableJIT15` path active. |
 | 16.0–16.x | `lockdownModeEnabled` public (SDK 160000). Pool config still hooking for belt-and-suspenders. | Both | `disableJIT` path via lockdown mode. UA Client Hints `userAgentData` available. |
