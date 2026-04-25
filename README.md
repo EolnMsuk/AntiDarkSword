@@ -40,7 +40,6 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0¹ – 15.x | N/A |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 14.0¹ – 16.x | N/A |    
 > **¹ Installation on iOS 13/14 requires manual compilation**   
-> **¹ Please try [THESE DEBs](https://github.com/EolnMsuk/AntiDarkSword/tree/main/packages/iOS13-14) or:**
 > 1. Clone repository. 
 > 2. Replace `vendor/AltList.framework` with the legacy `arm64e.old` ABI version. 
 > 3. Execute `make package` or `make package THEOS_PACKAGE_SCHEME=rootless`. 
