@@ -78,14 +78,14 @@ jobs:
           body: |
             Automated builds of AntiDarkSword v${{ env.VERSION }}.
 
-            | File | For |
-            |---|---|
-            | `modern_iphoneos-arm64.deb` | Modern Rootless (iOS 15+) |
-            | `modern_iphoneos-arm.deb` | Modern Rootful (iOS 15+) |
-            | `TrollFools.dylib` | TrollStore / Jailed |
-
             ### Compatibility Guide
             * **Modern Rootless:** → iOS 15+ (Dopamine, palera1n rootless, NathanLR). Standard format for modern devices.
             * **Modern Rootful:** → iOS 15+ (palera1n fakefs). Only use if running a legacy bindfs/fakefs setup on modern firmware.
             * **TrollFools:** → Non-jailbroken devices. Inject `.dylib` into target applications via TrollFools/TrollStore.
             > **Legacy Rootful:** → iOS 13-14. You must clone this repo, `make package` or `make package THEOS_PACKAGE_SCHEME=rootless` while using arm64e.old ABI version of `AltList.framework`. 
+
+            | File | For |
+            |---|---|
+            | `modern_iphoneos-arm64.deb` | Modern Rootless (iOS 15+) |
+            | `modern_iphoneos-arm.deb` | Modern Rootful (iOS 15+) |
+            | `TrollFools.dylib` | TrollStore / Jailed |
