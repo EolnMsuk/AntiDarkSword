@@ -109,14 +109,17 @@ static void ProbeCounterNotification(CFNotificationCenterRef center, void *obser
     if (controller) { dispatch_async(dispatch_get_main_queue(), ^{ [controller reloadSpecifiers]; }); }
 }
 
-static inline void ads_present_save_prompt(UIViewController *controller, BOOL forcePrompt) {
+static inline void ads_present_save_prompt(UIViewController *controller, BOOL forcePrompt, void (^cancelAction)(void)) {
     NSUserDefaults *defaults = ads_defaults(); 
     if (![defaults boolForKey:@"enabled"] && !forcePrompt) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"]; [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; ads_post_notification(); return;
     }
     BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
     NSString *title = @"Save"; NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?"; NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert]; 
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        if (cancelAction) cancelAction();
+    }]];
     [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [defaults setBool:NO forKey:@"ADSNeedsRespring"]; [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize];
         pid_t pid; NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *killall = ads_root_path(@"/usr/bin/killall");
@@ -155,7 +158,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL);
 }
 
-- (void)savePrompt { ads_present_save_prompt(self, NO); }
+- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
@@ -328,7 +331,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)AltPrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 - (void)dealloc { CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL); }
-- (void)savePrompt { ads_present_save_prompt(self, NO); }
+- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     NSUserDefaults *defaults = ads_defaults(); self.cachedRestrictedAppsLegacy = [defaults dictionaryForKey:@"restrictedApps"] ?: @{};
@@ -385,7 +388,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)AppPrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce);
 }
 - (void)dealloc { CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL); }
-- (void)savePrompt { ads_present_save_prompt(self, NO); }
+- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
@@ -705,12 +708,26 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
 }
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
-    [self setPreferenceValue:value specifier:specifier]; NSUserDefaults *defaults = ads_defaults(); NSInteger level = [defaults integerForKey:@"autoProtectLevel"]; NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
-    BOOL masterEnabled = [value boolValue]; BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"]; pid_t pid; NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
+    NSUserDefaults *defaults = ads_defaults(); BOOL wasEnabled = [defaults boolForKey:@"enabled"]; BOOL masterEnabled = [value boolValue];
+    BOOL priorNeedsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL priorNeedsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
+    [self setPreferenceValue:value specifier:specifier]; NSInteger level = [defaults integerForKey:@"autoProtectLevel"]; NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
+    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"]; __block pid_t pid; NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist");
     const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
     if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0) waitpid(pid, NULL, 0);
     if (masterEnabled && decoyEnabled) { const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL}; if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0) waitpid(pid, NULL, 0); }
-    if (level >= 3 || customDaemons.count > 0) { [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; } ads_present_save_prompt(self, YES);
+    if (level >= 3 || customDaemons.count > 0) { [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; }
+
+    ads_present_save_prompt(self, YES, ^{
+        [defaults setBool:wasEnabled forKey:@"enabled"]; [defaults setBool:priorNeedsRespring forKey:@"ADSNeedsRespring"]; [defaults setBool:priorNeedsReboot forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize];
+        if (!wasEnabled && decoyEnabled) {
+            const char* revUnloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
+            if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)revUnloadArgs, NULL) == 0) waitpid(pid, NULL, 0);
+        } else if (wasEnabled && decoyEnabled) {
+            const char* revLoadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
+            if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)revLoadArgs, NULL) == 0) waitpid(pid, NULL, 0);
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; ads_post_notification(); });
+    });
 }
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"]; NSUserDefaults *defaults = ads_defaults();
@@ -758,7 +775,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         NSUserDefaults *defaults = ads_defaults(); [defaults removePersistentDomainForName:ADS_PREFS_SUITE]; [defaults synchronize]; ads_post_notification(); const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL}; posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)rebootArgs, NULL);
     }]]; [self presentViewController:alert animated:YES completion:nil];
 }
-- (void)savePrompt { ads_present_save_prompt(self, NO); }
+- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 - (void)openGitHub { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"] options:@{} completionHandler:nil]; }
 - (void)openVenmo { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://venmo.com/user/eolnmsuk"] options:@{} completionHandler:nil]; }
 @end
