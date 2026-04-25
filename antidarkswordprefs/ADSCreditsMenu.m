@@ -3,8 +3,8 @@
 
 @implementation ADSGameMenuScene {
     SKLabelNode *_closeBtn;
-    SKShapeNode *_btnSnake;
-    SKShapeNode *_btnTetris;
+    SKShapeNode *_btnPyEater;
+    SKShapeNode *_btnJailTris;
     SKLabelNode *_dedicationBtn;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
@@ -13,6 +13,7 @@
 
 - (void)willMoveFromView:(SKView *)view {
     if (_audioEngine) { [_audioEngine stop]; _audioEngine = nil; }
+    _sourceNode = nil;
     if (_synthState) { free(_synthState); _synthState = NULL; }
 }
 
@@ -57,33 +58,33 @@
     _closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40);
     [self addChild:_closeBtn];
 
-    _btnSnake = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnSnake.position = CGPointMake(self.size.width/2, self.size.height/2 - 28);
-    _btnSnake.fillColor = [UIColor clearColor];
-    _btnSnake.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
-    _btnSnake.lineWidth = 3.0;
-    [self addChild:_btnSnake];
+    _btnPyEater = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
+    _btnPyEater.position = CGPointMake(self.size.width/2, self.size.height/2 - 28);
+    _btnPyEater.fillColor = [UIColor clearColor];
+    _btnPyEater.strokeColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    _btnPyEater.lineWidth = 3.0;
+    [self addChild:_btnPyEater];
     
-    SKLabelNode *snakeLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    snakeLbl.text = @"🐍 PYEATER";
-    snakeLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
-    snakeLbl.fontSize = 18;
-    snakeLbl.position = CGPointMake(0, -6);
-    [_btnSnake addChild:snakeLbl];
+    SKLabelNode *pyEaterLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    pyEaterLbl.text = @"🐍 PYEATER";
+    pyEaterLbl.fontColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
+    pyEaterLbl.fontSize = 18;
+    pyEaterLbl.position = CGPointMake(0, -6);
+    [_btnPyEater addChild:pyEaterLbl];
 
-    _btnTetris = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
-    _btnTetris.position = CGPointMake(self.size.width/2, self.size.height/2 + 72);
-    _btnTetris.fillColor = [UIColor clearColor];
-    _btnTetris.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    _btnTetris.lineWidth = 3.0;
-    [self addChild:_btnTetris];
+    _btnJailTris = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
+    _btnJailTris.position = CGPointMake(self.size.width/2, self.size.height/2 + 72);
+    _btnJailTris.fillColor = [UIColor clearColor];
+    _btnJailTris.strokeColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    _btnJailTris.lineWidth = 3.0;
+    [self addChild:_btnJailTris];
     
-    SKLabelNode *tetrisLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
-    tetrisLbl.text = @"🧱 JAILTRIS";
-    tetrisLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
-    tetrisLbl.fontSize = 18;
-    tetrisLbl.position = CGPointMake(0, -6);
-    [_btnTetris addChild:tetrisLbl];
+    SKLabelNode *jailTrisLbl = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
+    jailTrisLbl.text = @"🧱 JAILTRIS";
+    jailTrisLbl.fontColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
+    jailTrisLbl.fontSize = 18;
+    jailTrisLbl.position = CGPointMake(0, -6);
+    [_btnJailTris addChild:jailTrisLbl];
 
     _dedicationBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _dedicationBtn.text = @"DEDICATED TO ⚫ ANDREW ";
@@ -125,11 +126,11 @@
         if ([[UIApplication sharedApplication] canOpenURL:url]) { [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil]; }
         return;
     }
-    if ([_btnSnake containsPoint:loc]) {
+    if ([_btnPyEater containsPoint:loc]) {
         playTap();
         [self playSFX:440.0 dur:0.1];
         if (self.onSelectGame) self.onSelectGame(0);
-    } else if ([_btnTetris containsPoint:loc]) {
+    } else if ([_btnJailTris containsPoint:loc]) {
         playTap();
         [self playSFX:660.0 dur:0.1];
         if (self.onSelectGame) self.onSelectGame(1);
@@ -209,9 +210,10 @@
     table.tableFooterView = footerContainer;
     
     [self showMenuScene:NO];
-    
+
+    __weak typeof(self) weakSelf = self;
     [UIView animateWithDuration:0.5 animations:^{
-        self.gameView.alpha = 1.0;
+        weakSelf.gameView.alpha = 1.0;
     } completion:^(BOOL finished) {
         CGRect footerRect = [table convertRect:table.tableFooterView.bounds fromView:table.tableFooterView];
         [table scrollRectToVisible:footerRect animated:YES];

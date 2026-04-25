@@ -1,21 +1,7 @@
 // AntiDarkSwordTF/Tweak.x
 // TrollFools / TrollStore variant — single dylib, direct per-app injection.
-//
-// Key differences from the jailbreak tweak:
-//   • No MobileSubstrate dependency — %hook compiles to pure ObjC runtime calls.
-//   • No PreferenceLoader UI — settings are accessed via three-finger double-tap
-//     overlay that writes directly to the shared prefs plist.
-//   • No tier matching or process filtering — TrollFools puts the dylib in the
-//     app the user chose; protections apply unconditionally.
-//   • No daemon-layer hooks — imagent/apsd require a jailbreak.
-//     Mail.app (com.apple.mobilemail) IS a supported target: the WebKit hooks
-//     harden HTML email rendering. Enable "Block Remote Content" in the overlay
-//     to prevent auto-loading of external resources in HTML emails (zero-click
-//     mitigation). Mail uses Message.framework, not IMCore, so IMFileTransfer
-//     and CKAttachmentMessagePartChatItem hooks do not apply here.
-//   • JSEvaluateScript C-function hook is omitted (needs MSHookFunction / fishhook).
-//     The WKWebpagePreferences and WKPreferences %hooks cover JS blocking at the
-//     ObjC level, which is sufficient for attack-surface reduction.
+// No MobileSubstrate dependency; no tier matching; no JSEvaluateScript hook (needs MSHookFunction).
+// Settings via three-finger double-tap overlay. Master switch defaults OFF.
 
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
@@ -27,12 +13,7 @@
 
 #import "../ADSLogging.h"
 
-// =========================================================
-// PRIVATE WEBKIT INTERFACES (JIT & LOCKDOWN MODE)
-// =========================================================
-// lockdownModeEnabled became a public API in iOS 16 (SDK 160000+).
-// Only forward-declare it as private when building against an older SDK to
-// avoid a duplicate-declaration conflict with the SDK's own header.
+// lockdownModeEnabled became public in iOS 16 (SDK 160000+); forward-declare only for older SDKs.
 #if __IPHONE_OS_VERSION_MAX_ALLOWED < 160000
 @interface WKWebpagePreferences (Private)
 @property (nonatomic, assign) BOOL lockdownModeEnabled;
@@ -47,13 +28,7 @@
 @property (nonatomic, readonly) _WKProcessPoolConfiguration *_configuration;
 @end
 
-// =========================================================
-// PREFERENCES
-// Shares the same domain as the jailbreak tweak so settings
-// written by the prefs bundle (if also installed) are honoured
-// here without any extra plumbing.
-// =========================================================
-
+// Shares prefs domain with the jailbreak tweak so the PreferenceLoader bundle is interoperable.
 static BOOL isRootlessJB = NO;
 
 static NSString *ads_prefs_path(void) {
@@ -62,7 +37,6 @@ static NSString *ads_prefs_path(void) {
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
 }
 
-// All mutable state is _Atomic: hooks can fire on any thread.
 static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL shouldSpoofUA            = NO;
 static _Atomic BOOL applyDisableJIT          = NO;
@@ -73,23 +47,16 @@ static _Atomic BOOL applyDisableRTC          = NO;
 static _Atomic BOOL applyDisableFileAccess   = NO;
 static _Atomic BOOL applyBlockRemoteContent  = NO;
 
-// Written once per loadPrefs call, read from hooks on any thread.
-// Safe under the prefsLoaded CAS gate — only one writer at a time.
 static NSString *customUAString = nil;
 
-// Compiled once in %ctor; applied to WKWebViewConfigurations when applyBlockRemoteContent=YES.
-// Blocks external http/https resource loads (images, scripts, media, etc.) — the primary
-// zero-click attack surface in HTML email rendering (Mail.app) and similar HTML views.
+// Compiled once in %ctor; blocks external http/https resource loads — the primary zero-click
+// attack surface in HTML email rendering (Mail.app). Applied when applyBlockRemoteContent=YES.
 static WKContentRuleList *adsContentBlocker = nil;
 
-// =========================================================
-// HELPERS (identical to AntiDarkSwordUI)
-// =========================================================
-
-// Returns a properly JSON-encoded string literal including surrounding double quotes.
 static NSString *adsJSONStringLiteral(NSString *str);
 
-// Derives a navigator.userAgentData.brands JSON array from a UA string.
+// Derives navigator.userAgentData.brands JSON array from a UA string,
+// keeping engine/browser tokens consistent with userAgent.
 static NSString *adsBrandsFromUA(NSString *ua) {
     if (!ua) return @"[{\"brand\":\"Safari\",\"version\":\"18\"}]";
 
@@ -192,24 +159,16 @@ static void injectUAScript(WKUserContentController *ucc) {
     [ucc addUserScript:script];
 }
 
-// =========================================================
-// PREFERENCES I/O
-// On a non-jailbroken TrollStore device the injected app is sandboxed and
-// cannot write to /var/mobile/Library/Preferences/. We try that path first
-// (works for jailbroken users), then fall back to NSUserDefaults with a suite
-// name, which always succeeds because it writes to the app's own container.
-// =========================================================
-
-// Suite name used as the NSUserDefaults fallback.
-// NOT an app-group ID — NSUserDefaults writes it to the app's own container.
+// Sandboxed TrollStore devices cannot write to /var/mobile/Library/Preferences/.
+// ads_write_prefs tries the system path first; falls back to NSUserDefaults suite
+// (app's own container) which always succeeds.
 static NSString * const kADSTFSuite = @"com.eolnmsuk.antidarkswordprefs";
 
+// Priority: system plist → CFPreferences (jailbreak bundle writes) → NSUserDefaults suite (sandboxed fallback).
 static NSDictionary *ads_read_prefs(void) {
-    // 1. Try the shared system plist (jailbreak / unsandboxed TrollStore).
     NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
     if (d) return d;
 
-    // 2. Try CFPreferences (picks up prefs written by the jailbreak bundle).
     CFArrayRef keyList = CFPreferencesCopyKeyList((__bridge CFStringRef)kADSTFSuite,
                                                   kCFPreferencesCurrentUser,
                                                   kCFPreferencesAnyHost);
@@ -222,14 +181,12 @@ static NSDictionary *ads_read_prefs(void) {
         if (dict) return (__bridge_transfer NSDictionary *)dict;
     }
 
-    // 3. Fall back to NSUserDefaults suite (sandboxed TrollFools app container).
     NSUserDefaults *ud = [[NSUserDefaults alloc] initWithSuiteName:kADSTFSuite];
     NSDictionary *all  = [ud dictionaryRepresentation];
     return (all && all.count > 0) ? all : nil;
 }
 
 static void ads_write_prefs(NSDictionary *prefs) {
-    // 1. Try the shared system plist first.
     NSString *path = ads_prefs_path();
     NSString *dir  = [path stringByDeletingLastPathComponent];
     [[NSFileManager defaultManager] createDirectoryAtPath:dir
@@ -238,27 +195,18 @@ static void ads_write_prefs(NSDictionary *prefs) {
                                                     error:nil];
     if ([prefs writeToFile:path atomically:YES]) return;
 
-    // 2. Sandboxed fallback: NSUserDefaults suite in the app's own container.
-    //    Wipes then rewrites so deleted keys don't linger.
+    // Sandboxed fallback: wipe then rewrite so deleted keys don't linger.
     NSUserDefaults *ud = [[NSUserDefaults alloc] initWithSuiteName:kADSTFSuite];
-    
-    // Remove any keys not in the new dict (handles deletions / master disable).
     for (NSString *existing in [[ud dictionaryRepresentation] allKeys]) {
         if (!prefs[existing]) [ud removeObjectForKey:existing];
     }
-    
     [prefs enumerateKeysAndObjectsUsingBlock:^(NSString *key, id obj, BOOL *stop) {
         [ud setObject:obj forKey:key];
     }];
     [ud synchronize];
 }
 
-// =========================================================
-// PREFERENCES LOADING
-// =========================================================
-
-// Helper: read a BOOL from per-app rules → global prefs key → hardcoded default.
-// All three layers are optional; the first one present wins.
+// Reads a BOOL: per-app rules → global prefs key → hardcoded default (first present wins).
 static BOOL ads_read_bool(NSDictionary *rules,
                           NSDictionary *prefs,
                           NSString     *ruleKey,
@@ -274,16 +222,12 @@ static BOOL ads_read_bool(NSDictionary *rules,
 }
 
 static void loadPrefs() {
-    // Atomic compare-and-swap: only one caller loads at a time.
-    // reloadPrefsNotification resets the flag before calling back in.
     BOOL expected = NO;
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
-    // Read from whichever storage backend has data (system plist → CFPrefs → NSUserDefaults suite).
     NSDictionary *prefs = ads_read_prefs();
 
-    // Master enable — default OFF so the dylib is dormant until the user
-    // opts in via the three-finger overlay.
+    // Master switch defaults OFF — dylib is dormant until user opts in via overlay.
     BOOL masterEnabled = NO;
     id enabledVal = prefs[@"enabled"];
     if (enabledVal && [enabledVal respondsToSelector:@selector(boolValue)])
@@ -291,26 +235,21 @@ static void loadPrefs() {
         
     if (!masterEnabled) {
         shouldSpoofUA = applyDisableJIT = applyDisableJIT15 = applyDisableJS =
-            applyDisableMedia = applyDisableRTC = applyDisableFileAccess = NO;
+            applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
+            applyBlockRemoteContent = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
         return;
     }
 
     BOOL isIOS16 = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
-    
-    // Per-app rules from TargetRules_<bundleID> take priority over global keys.
+
     NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
     NSString *dictKey  = [NSString stringWithFormat:@"TargetRules_%@", bundleID];
     NSDictionary *rules = ([prefs isKindOfClass:[NSDictionary class]]) ? prefs[dictKey] : nil;
     if (![rules isKindOfClass:[NSDictionary class]]) rules = nil;
 
-    // Defaults when no prefs have been saved yet (first use after injection):
-    //   UA spoof  → ON   (non-breaking, immediate privacy benefit)
-    //   JIT       → ON   (low breakage, meaningful exploit-surface reduction)
-    //   JS        → OFF  (breaks most apps; user must opt in)
-    //   Media     → OFF  (user must opt in)
-    //   WebRTC    → OFF  (breaks video/audio calls; user must opt in)
-    //   File acc. → OFF  (user must opt in)
+    // Defaults on first use: UA spoof ON (non-breaking), JIT ON (low breakage),
+    // JS/Media/WebRTC/FileAccess OFF (user opts in explicitly — these break most apps).
     applyDisableJIT        = isIOS16  ? ads_read_bool(rules, prefs, @"disableJIT",        @"globalDisableJIT",        YES) : NO;
     applyDisableJIT15      = !isIOS16 ? ads_read_bool(rules, prefs, @"disableJIT15",      @"globalDisableJIT15",      YES) : NO;
     applyDisableJS         =            ads_read_bool(rules, prefs, @"disableJS",         @"globalDisableJS",         NO);
@@ -319,7 +258,6 @@ static void loadPrefs() {
     applyDisableFileAccess  =           ads_read_bool(rules, prefs, @"disableFileAccess",  @"globalDisableFileAccess",  NO);
     applyBlockRemoteContent =           ads_read_bool(rules, prefs, @"blockRemoteContent", @"globalBlockRemoteContent", NO);
 
-    // ---- User Agent Spoofing ----
     NSString *defaultUA = @"Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) "
                            "AppleWebKit/605.1.15 (KHTML, like Gecko) "
                            "Version/18.0 Mobile/15E148 Safari/604.1";
@@ -338,8 +276,7 @@ static void loadPrefs() {
         customUAString = selectedUA;
     }
 
-    // UA spoof active if: global override ON, or per-app rule ON, or no rule at all
-    // (TrollFools users opted in explicitly — default ON is the right call).
+    // TrollFools default: UA spoof ON (user opted in by injecting the dylib explicitly).
     BOOL globalUA = NO;
     id globalUAVal = prefs[@"globalUASpoofingEnabled"];
     if (globalUAVal && [globalUAVal respondsToSelector:@selector(boolValue)])
@@ -367,10 +304,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     prefsLoaded = NO;
     loadPrefs();
 }
-
-// =========================================================
-// WEBKIT EXPLOIT MITIGATIONS
-// =========================================================
 
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
@@ -423,23 +356,21 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
-    if (applyBlockRemoteContent && adsContentBlocker)
-        [configuration.userContentController addContentRuleList:adsContentBlocker];
+    WKContentRuleList *localBlocker = adsContentBlocker;
+    if (applyBlockRemoteContent && localBlocker)
+        [configuration.userContentController addContentRuleList:localBlocker];
 
     if (shouldSpoofUA) injectUAScript(configuration.userContentController);
 }
-
-// =========================================================
-// WEBKIT HOOKS
-// =========================================================
 
 %hook WKWebViewConfiguration
 
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
-    if (applyBlockRemoteContent && adsContentBlocker && userContentController)
-        [userContentController addContentRuleList:adsContentBlocker];
+    WKContentRuleList *localBlocker = adsContentBlocker;
+    if (applyBlockRemoteContent && localBlocker && userContentController)
+        [userContentController addContentRuleList:localBlocker];
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
@@ -505,7 +436,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     }
     if (shouldSpoofUA && [self respondsToSelector:@selector(setCustomUserAgent:)])
         self.customUserAgent = customUAString;
-        
     return %orig;
 }
 
@@ -579,10 +509,6 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 %end
 
-// =========================================================
-// LEGACY UIWebView NEUTRALIZATION
-// =========================================================
-
 %hook UIWebView
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
     if (applyDisableJS) return @"";
@@ -590,15 +516,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 %end
 
-// =========================================================
-// IN-APP SETTINGS OVERLAY
-// Three-finger double-tap on any screen → modal settings panel
-// where the user can toggle per-app protections and save.
-// =========================================================
-
 static BOOL ads_gesture_installed = NO;
 
-// Returns the current key window across UIWindowScene (iOS 13+) and legacy API.
 static UIWindow *ads_key_window(void) {
     if (@available(iOS 13, *)) {
         for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
@@ -617,31 +536,24 @@ static UIWindow *ads_key_window(void) {
 #pragma clang diagnostic pop
 }
 
-// Returns the top-most presented view controller from a root.
 static UIViewController *ads_top_vc(UIViewController *root) {
     while (root.presentedViewController) root = root.presentedViewController;
     return root;
 }
 
-// ---- Row model ----
-// Each entry drives one table row. The "enabled" key controls whether the row
-// is interactive — grayed-out rows are shown but not actionable because the
-// underlying API doesn't exist on this iOS version.
+// Builds the row model for the settings overlay. "enabled"=NO rows are shown
+// grayed-out when the underlying API is unavailable on this iOS version.
 static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     NSInteger major = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion;
     NSMutableArray *rows = [NSMutableArray array];
-    
-    // 1. Spoof User Agent — works on all versions.
+
     [rows addObject:@{@"title":   @"Spoof User Agent",
                       @"detail":  @"Masks the real browser fingerprint",
                       @"key":     @"spoofUA",
                       @"enabled": @YES}];
-                      
-    // 2. Block JIT — mechanism differs by iOS version:
-    //      iOS 16+  → WKWebpagePreferences lockdownModeEnabled  (reliable)
-    //      iOS 15   → _WKProcessPoolConfiguration.JITEnabled    (private API, best-effort)
-    //      iOS 14-  → neither API is available; show grayed row so the user
-    //                 knows the option exists but can't be enabled here.
+
+    // iOS 16+: lockdownModeEnabled (reliable). iOS 15: _WKProcessPoolConfiguration.JITEnabled (private, best-effort).
+    // iOS 14-: neither API available; row shown grayed.
     if (major >= 16) {
         [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
                           @"detail":  @"Enables WebKit lockdown mode (iOS 16, 17+)",
@@ -659,7 +571,6 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
                           @"enabled": @NO}];
     }
 
-    // 3–6. Features that work on all supported iOS versions.
     [rows addObject:@{@"title":   @"Block JavaScript",
                       @"detail":  @"Prevents JS execution in WebViews",
                       @"key":     @"disableJS",
@@ -688,8 +599,6 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     return rows;
 }
 
-// Returns the intended out-of-the-box default for each toggle.
-// Used by the overlay when no saved value exists for a key yet.
 // Must stay in sync with the hardcoded defaults in loadPrefs().
 static BOOL ads_default_value_for_key(NSString *key) {
     if ([key isEqualToString:@"spoofUA"])           return YES;
@@ -700,16 +609,14 @@ static BOOL ads_default_value_for_key(NSString *key) {
 }
 
 
-// ---- Settings view controller ----
-
 @interface ADSTFSettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
-@property (nonatomic, strong) UITableView           *tableView;
-@property (nonatomic, strong) NSMutableDictionary   *pendingRules;   // TargetRules_<bundleID> working copy
-@property (nonatomic, strong) NSMutableDictionary   *pendingPrefs;   // full prefs working copy
-@property (nonatomic, copy)   NSString              *bundleID;
+@property (nonatomic, strong) UITableView             *tableView;
+@property (nonatomic, strong) NSMutableDictionary     *pendingRules;
+@property (nonatomic, strong) NSMutableDictionary     *pendingPrefs;
+@property (nonatomic, copy)   NSString                *bundleID;
 @property (nonatomic, strong) NSArray<NSDictionary *> *rows;
-// YES while "Block JavaScript" is ON — keeps the JIT row locked and forced-on.
-@property (nonatomic)         BOOL                    jsLocked;
+// YES while JS blocking is ON — keeps the JIT row locked and forced-on (JIT must be off when JS is off).
+@property (nonatomic)         BOOL                     jsLocked;
 @end
 
 @implementation ADSTFSettingsViewController
@@ -730,7 +637,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
                              ? [existing mutableCopy]
                              : [NSMutableDictionary dictionary];
                              
-    // Mirror the current JS state so the JIT row opens in the right locked/unlocked state.
     id savedJS     = self.pendingRules[@"disableJS"];
     self.jsLocked  = savedJS ? [savedJS boolValue] : ads_default_value_for_key(@"disableJS");
     return self;
@@ -739,20 +645,17 @@ static BOOL ads_default_value_for_key(NSString *key) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // --- Dimmed / blurred backdrop ---
     UIBlurEffect *blur        = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
     UIVisualEffectView *bgView = [[UIVisualEffectView alloc] initWithEffect:blur];
     bgView.frame              = self.view.bounds;
     bgView.autoresizingMask   = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:bgView];
 
-    // Tap outside card to dismiss
     UITapGestureRecognizer *dismissTap = [[UITapGestureRecognizer alloc]
         initWithTarget:self action:@selector(tappedBackground:)];
     dismissTap.numberOfTouchesRequired = 1;
     [bgView addGestureRecognizer:dismissTap];
 
-    // --- Shadow wrapper (no masksToBounds so the shadow is visible) ---
     UIView *shadowWrapper = [[UIView alloc] init];
     shadowWrapper.translatesAutoresizingMaskIntoConstraints = NO;
     shadowWrapper.backgroundColor       = [UIColor clearColor];
@@ -763,7 +666,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     shadowWrapper.layer.shadowOffset    = CGSizeMake(0, 6);
     [self.view addSubview:shadowWrapper];
 
-    // --- Card (masksToBounds clips subviews to rounded corners; no shadow here) ---
     UIView *card                = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor        = [UIColor colorWithRed:0.11 green:0.11 blue:0.13 alpha:0.97];
@@ -771,7 +673,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     card.layer.masksToBounds    = YES;
     [shadowWrapper addSubview:card];
     
-    // --- Header ---
     UILabel *titleLabel                 = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text                     = @"AntiDarkSword";
@@ -790,7 +691,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     subLabel.minimumScaleFactor         = 0.7;
     [card addSubview:subLabel];
     
-    // --- Master enabled row ---
     UIView *masterRow               = [[UIView alloc] init];
     masterRow.translatesAutoresizingMaskIntoConstraints = NO;
     [card addSubview:masterRow];
@@ -810,21 +710,18 @@ static BOOL ads_default_value_for_key(NSString *key) {
     UISwitch *masterSwitch          = [[UISwitch alloc] init];
     masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     masterSwitch.onTintColor        = [UIColor systemGreenColor];
-    masterSwitch.tag                = NSIntegerMax; // sentinel for master switch
+    masterSwitch.tag                = NSIntegerMax; // sentinel distinguishes master from feature rows
     
     id masterVal                    = self.pendingPrefs[@"enabled"];
     BOOL isMasterEnabled            = masterVal ? [masterVal boolValue] : NO;
     masterSwitch.on                 = isMasterEnabled;
-    
-    // Set initial background color: dark green if ON, dark red if OFF
-    masterRow.backgroundColor = isMasterEnabled 
+    masterRow.backgroundColor = isMasterEnabled
         ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
         : [UIColor colorWithRed:0.25 green:0.08 blue:0.08 alpha:1.0];
         
     [masterSwitch addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
     [masterRow addSubview:masterSwitch];
     
-    // --- Table view for per-feature toggles ---
     self.tableView                       = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.dataSource            = self;
@@ -837,7 +734,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     self.tableView.tableFooterView       = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 1)];
     [card addSubview:self.tableView];
     
-    // --- Buttons ---
     UIView *buttonBar               = [[UIView alloc] init];
     buttonBar.translatesAutoresizingMaskIntoConstraints = NO;
     buttonBar.backgroundColor       = [UIColor colorWithWhite:0.15 alpha:1];
@@ -864,39 +760,32 @@ static BOOL ads_default_value_for_key(NSString *key) {
     [saveBtn addTarget:self action:@selector(saveAndRestart) forControlEvents:UIControlEventTouchUpInside];
     [buttonBar addSubview:saveBtn];
     
-    // --- Divider between cancel/save ---
     UIView *btnDivider              = [[UIView alloc] init];
     btnDivider.translatesAutoresizingMaskIntoConstraints = NO;
     btnDivider.backgroundColor      = [UIColor colorWithWhite:0.28 alpha:1];
     [buttonBar addSubview:btnDivider];
     
-    // --- Auto Layout ---
     CGFloat rowH  = 52.0;
     CGFloat maxTH = rowH * (CGFloat)self.rows.count; // table height, scrolls if needed
 
     [NSLayoutConstraint activateConstraints:@[
-        // Shadow wrapper: centered, 88% wide, max 84% tall
         [shadowWrapper.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [shadowWrapper.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [shadowWrapper.widthAnchor   constraintEqualToAnchor:self.view.widthAnchor multiplier:0.88],
         [shadowWrapper.heightAnchor  constraintLessThanOrEqualToAnchor:self.view.heightAnchor multiplier:0.84],
-        // Card fills shadow wrapper
         [card.topAnchor      constraintEqualToAnchor:shadowWrapper.topAnchor],
         [card.leadingAnchor  constraintEqualToAnchor:shadowWrapper.leadingAnchor],
         [card.trailingAnchor constraintEqualToAnchor:shadowWrapper.trailingAnchor],
         [card.bottomAnchor   constraintEqualToAnchor:shadowWrapper.bottomAnchor],
 
-        // Title
         [titleLabel.topAnchor     constraintEqualToAnchor:card.topAnchor constant:18],
         [titleLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
         [titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
 
-        // Subtitle
         [subLabel.topAnchor      constraintEqualToAnchor:titleLabel.bottomAnchor constant:3],
         [subLabel.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor constant:16],
         [subLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
 
-        // Master row
         [masterRow.topAnchor      constraintEqualToAnchor:subLabel.bottomAnchor constant:14],
         [masterRow.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [masterRow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
@@ -908,32 +797,27 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [masterSwitch.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor constant:-16],
         [masterSwitch.centerYAnchor  constraintEqualToAnchor:masterRow.centerYAnchor],
         
-        // Bottom separator line on master row
         [separator.leadingAnchor  constraintEqualToAnchor:masterRow.leadingAnchor],
         [separator.trailingAnchor constraintEqualToAnchor:masterRow.trailingAnchor],
         [separator.bottomAnchor   constraintEqualToAnchor:masterRow.bottomAnchor],
         [separator.heightAnchor   constraintEqualToConstant:0.5],
 
-        // Table view
         [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
         [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
 
-        // Button bar
         [buttonBar.topAnchor      constraintEqualToAnchor:self.tableView.bottomAnchor],
         [buttonBar.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [buttonBar.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
         [buttonBar.bottomAnchor   constraintEqualToAnchor:card.bottomAnchor],
         [buttonBar.heightAnchor   constraintEqualToConstant:54],
         
-        // Top separator on button bar
         [btnSep.topAnchor    constraintEqualToAnchor:buttonBar.topAnchor],
         [btnSep.leadingAnchor constraintEqualToAnchor:buttonBar.leadingAnchor],
         [btnSep.trailingAnchor constraintEqualToAnchor:buttonBar.trailingAnchor],
         [btnSep.heightAnchor  constraintEqualToConstant:0.5],
-        
-        // Cancel left, Save right, vertical divider between
+
         [cancelBtn.leadingAnchor  constraintEqualToAnchor:buttonBar.leadingAnchor],
         [cancelBtn.topAnchor      constraintEqualToAnchor:buttonBar.topAnchor constant:0.5],
         [cancelBtn.bottomAnchor   constraintEqualToAnchor:buttonBar.bottomAnchor],
@@ -951,8 +835,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     ]];
 }
 
-// ---- UITableViewDataSource ----
-
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 1; }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -968,7 +850,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
     NSDictionary *row = self.rows[(NSUInteger)indexPath.row];
     NSString     *key = row[@"key"];
     
-    // A row is interactive if the iOS API exists AND it isn't locked by JS being on.
     BOOL isJITRow    = [key isEqualToString:@"disableJIT"] || [key isEqualToString:@"disableJIT15"];
     BOOL rowEnabled  = [row[@"enabled"] boolValue] && !(isJITRow && self.jsLocked);
 
@@ -984,7 +865,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
         cell.detailTextLabel.textColor  = [UIColor colorWithWhite:0.48 alpha:1];
         cell.userInteractionEnabled     = YES;
     } else {
-        // Gray out rows whose underlying API is not available on this iOS version.
         cell.textLabel.textColor        = [UIColor colorWithWhite:0.35 alpha:1];
         cell.detailTextLabel.textColor  = [UIColor colorWithWhite:0.30 alpha:1];
         cell.userInteractionEnabled     = NO;
@@ -1003,10 +883,8 @@ static BOOL ads_default_value_for_key(NSString *key) {
     sw.enabled = rowEnabled;
     sw.onTintColor = rowEnabled ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.25 alpha:1];
 
-    // Saved value takes priority; fall back to intended out-of-the-box default.
-    // (Live state is not used here — if master is off all live values are NO,
-    //  which would make the overlay look blank even though JIT and UA are
-    //  intended to be pre-enabled on first use.)
+    // Use saved value, not live state: when master is OFF all live values are NO,
+    // which would make the overlay look blank even though JIT/UA default to ON.
     id saved = self.pendingRules[key];
     sw.on = saved ? [saved boolValue] : ads_default_value_for_key(key);
 
@@ -1017,14 +895,9 @@ static BOOL ads_default_value_for_key(NSString *key) {
     return 52;
 }
 
-// ---- Actions ----
-
 - (void)switchChanged:(UISwitch *)sender {
     if (sender.tag == NSIntegerMax) {
-        // Master toggle
         self.pendingPrefs[@"enabled"] = @(sender.on);
-        
-        // Animate the background color change
         [UIView animateWithDuration:0.25 animations:^{
             sender.superview.backgroundColor = sender.on 
                 ? [UIColor colorWithRed:0.08 green:0.25 blue:0.12 alpha:1.0] 
@@ -1036,13 +909,10 @@ static BOOL ads_default_value_for_key(NSString *key) {
     NSString *key = self.rows[(NSUInteger)sender.tag][@"key"];
     self.pendingRules[key] = @(sender.on);
     
-    // When JS is toggled, cascade to the JIT row:
-    //   JS ON  → lock JIT on (JIT is meaningless without JS; force it enabled, grey it out)
-    //   JS OFF → unlock JIT and turn it off (let the user decide independently)
+    // JS cascade: JS ON → lock JIT on (JIT must be off when JS is disabled).
+    //             JS OFF → unlock JIT (user decides independently).
     if ([key isEqualToString:@"disableJS"]) {
         self.jsLocked = sender.on;
-        
-        // Find the JIT row regardless of which key name it uses.
         NSInteger jitIdx = -1;
         for (NSUInteger i = 0; i < self.rows.count; i++) {
             NSString *k = self.rows[i][@"key"];
@@ -1054,7 +924,6 @@ static BOOL ads_default_value_for_key(NSString *key) {
 
         if (jitIdx >= 0) {
             NSString *jitKey       = self.rows[(NSUInteger)jitIdx][@"key"];
-            // Force JIT ON when JS is disabled; turn it OFF when JS is re-enabled.
             self.pendingRules[jitKey] = @(sender.on);
             
             NSIndexPath *jitPath = [NSIndexPath indexPathForRow:(NSInteger)jitIdx inSection:0];
@@ -1073,15 +942,10 @@ static BOOL ads_default_value_for_key(NSString *key) {
 }
 
 - (void)saveAndRestart {
-    // Write TargetRules back, then flush the full plist.
     NSString *rulesKey       = [NSString stringWithFormat:@"TargetRules_%@", self.bundleID];
     self.pendingPrefs[rulesKey] = [self.pendingRules copy];
-    
-    // ads_write_prefs tries the system path first, falls back to NSUserDefaults
-    // suite — the fallback always succeeds on sandboxed TrollStore devices.
     ads_write_prefs(self.pendingPrefs);
 
-    // Notify the live-reload path for settings that take effect immediately.
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
                                          NULL, NULL, YES);

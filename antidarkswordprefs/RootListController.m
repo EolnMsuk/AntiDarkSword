@@ -502,6 +502,11 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
 }
 @end
 
+static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    AntiDarkSwordPrefsRootListController *controller = (__bridge AntiDarkSwordPrefsRootListController *)observer;
+    if (controller) { NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; dispatch_async(dispatch_get_main_queue(), ^{ controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot); }); }
+}
+
 @implementation AntiDarkSwordPrefsRootListController
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated]; NSUserDefaults *defaults = ads_defaults();
@@ -676,10 +681,6 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     }
 }
 - (void)dealloc { CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), ADS_NOTIF_SAVED, NULL); }
-static void PrefsChangedNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
-    AntiDarkSwordPrefsRootListController *controller = (__bridge AntiDarkSwordPrefsRootListController *)observer;
-    if (controller) { NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; dispatch_async(dispatch_get_main_queue(), ^{ controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot); }); }
-}
 - (void)flagSaveRequirement {
     NSUserDefaults *defaults = ads_defaults(); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
     BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
