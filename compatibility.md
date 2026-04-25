@@ -1,6 +1,6 @@
 # AntiDarkSword — Compatibility & Conflict Audit
 
-Generated: 2026-04-25.
+Generated: 2026-04-25. **Supported range: iOS 15.0 – 17.0. iOS 13–14 is not officially supported; users on those versions must self-build using the legacy commands in CLAUDE.md.**
 
 ---
 
@@ -8,19 +8,21 @@ Generated: 2026-04-25.
 
 | SoC Family | Chip Examples | Arch | iOS Range | Status |
 |---|---|---|---|---|
-| A8 / A8X | iPhone 6, iPad mini 4 | arm64 (no e) | 13.0–16.x | Legacy .deb only. arm64e slice absent; `ARCHS=arm64`. All hooks functional. Corellium decoy runs if jailbroken. |
-| A9 / A9X | iPhone 6s, iPad Pro (1st gen) | arm64 | 13.0–16.x | Same as A8. Fully supported on all four build variants. |
-| A10 / A10X | iPhone 7, iPad Pro 10.5 | arm64 | 14.0–16.x | Modern .deb (arm64 slice). All features available. |
-| A11 | iPhone 8, iPhone X | arm64 | 13.0–16.x | iOS 15+: CI-built modern .deb (arm64 slice). iOS 13–14: CI-built legacy `_iphoneos-arm_legacy.deb` (arm64, `AltList_Old`). PAC not enforced on jailbreaks (PACSIM disabled). Full support. |
-| A12 | iPhone XS, XR | arm64e | 15.0–17.x | Modern .deb arm64e slice. PPL active; Substrate patches via trustcache. Full support. |
-| A13 | iPhone 11 | arm64e | 15.0–17.x | As A12. Full support. |
-| A14 | iPhone 12 | arm64e | 15.0–17.x | As A12. Full support. Rootless path tested. |
-| A15 | iPhone 13/14 | arm64e | 15.0–17.x | Primary test target. All features validated rootful + rootless. |
-| A16 | iPhone 14 Pro | arm64e | 16.0–17.x | LockdownModeEnabled API available natively; no forward-declare needed. Full support. |
+| A8 / A8X | iPad mini 4, iPad Air 2 | arm64 (no e) | 15.0–15.8 | CI-built modern .deb (arm64 slice). iPhone 6 (A8) max iOS is 12 — incompatible. iOS 13–14 on eligible iPads requires self-build. |
+| A9 / A9X | iPhone 6s, iPad Pro (1st gen) | arm64 | 15.0–16.7 | CI-built modern .deb (arm64 slice). All hooks functional. iOS 13–14 requires self-build. |
+| A10 / A10X | iPhone 7, iPad Pro 10.5 | arm64 | 15.0–16.7 | CI-built modern .deb (arm64 slice). All features available. iOS 13–14 requires self-build. |
+| A11 | iPhone 8, iPhone X | arm64 | 15.0–16.7 | CI-built modern .deb (arm64 slice). PAC not enforced on jailbreaks (PACSIM disabled). iOS 13–14 requires self-build. |
+| A12 | iPhone XS, XR | arm64e | 15.0–17.0 | Modern .deb arm64e slice. PPL active; Substrate patches via trustcache. Full support. |
+| A13 | iPhone 11 | arm64e | 15.0–17.0 | As A12. Full support. |
+| A14 | iPhone 12 | arm64e | 15.0–17.0 | As A12. Full support. Rootless path tested. |
+| A15 | iPhone 13/14 | arm64e | 15.0–17.0 | Primary test target. All features validated rootful + rootless. |
+| A16 | iPhone 14 Pro | arm64e | 16.0–17.0 | LockdownModeEnabled API available natively; no forward-declare needed. Full support. |
 | A17 Pro | iPhone 15 Pro | arm64e | 17.0+ | Not formally tested. Binary format compatible; SDK 16.5 headers sufficient for tested API surface. Hook points unchanged. |
 
 **Edge cases:**
-- **A8/A9 with iOS 15+**: Apple dropped these chips from iOS 16. If jailbroken at iOS 15.x, the modern .deb (arm64 slice) applies. Corellium decoy path spoofing is rootless-only; rootful builds deploy the real binary.
+- **A8 on iPhone**: iPhone 6 (A8) max iOS is 12 — cannot run AntiDarkSword. iPad mini 4 / iPad Air 2 (A8/A8X) support iOS 15.x and are compatible with the modern .deb.
+- **A8/A9 with iOS 15**: Apple dropped these chips from iOS 16. The modern .deb (arm64 slice) applies for iOS 15.x. Corellium decoy path spoofing is rootless-only; rootful builds deploy the real binary.
+- **iOS 13–14 self-build**: All mitigations exist in the codebase. Use `AltList_Old.framework`, `iPhoneOS14.5.sdk`, and the legacy commands in CLAUDE.md. CI does not build or test these targets.
 - **A12+ PAC**: `%hookf` and `MSHookFunction` on `stat`/`sysctl` are installed by Substrate which handles PAC stripping via `JAILBREAK_ENTITLEMENT`. No code change required.
 
 ---
@@ -29,9 +31,8 @@ Generated: 2026-04-25.
 
 | iOS | JIT API | JS API | Notes |
 |---|---|---|---|
-| 13.0–13.x | `_WKProcessPoolConfiguration.JITEnabled` (private) | `javaScriptEnabled` (WKPreferences) | `allowsContentJavaScript` unavailable; `#if < 140000` guard skips it. `lockdownModeEnabled` unavailable. CI-built legacy `_iphoneos-arm_legacy.deb` (arm64, `AltList_Old`) required. |
-| 14.0–14.x | `_WKProcessPoolConfiguration.JITEnabled` + `allowsContentJavaScript` (iOS 14 API) | Both | CI-built legacy `_iphoneos-arm_legacy.deb` (arm64, `AltList_Old`, iOS 13–14). No lockdown mode. |
-| 15.0–15.x | Same as 14 + pool config still relevant | Both | Rootless available (Dopamine, palera1n rootless). `disableJIT15` path active. |
+| 13.0–14.x | — | — | **Not officially supported.** CI does not build for these versions. Self-build using `iPhoneOS14.5.sdk`, `AltList_Old`, and the legacy commands in CLAUDE.md. All major mitigations are present in the codebase. |
+| 15.0–15.x | `_WKProcessPoolConfiguration.JITEnabled` + `allowsContentJavaScript` | Both | Rootless available (Dopamine, palera1n rootless). `disableJIT15` path active. |
 | 16.0–16.x | `lockdownModeEnabled` public (SDK 160000). Pool config still hooking for belt-and-suspenders. | Both | `disableJIT` path via lockdown mode. UA Client Hints `userAgentData` available. |
 | 17.0+ | Same as 16. | Both | Not yet formally tested against jailbreaks targeting A17. Binary compatible. |
 
