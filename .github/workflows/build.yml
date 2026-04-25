@@ -79,7 +79,7 @@ jobs:
             Automated builds of AntiDarkSword v${{ env.VERSION }}.
 
             ### Compatibility Guide
-            > **Legacy Rootful:** → iOS 13-14. You must clone this repo, `make package` or `make package THEOS_PACKAGE_SCHEME=rootless` while using arm64e.old ABI version of `AltList.framework`. 
+            > **Legacy Rootful:** → iOS 13-14. You must clone this repo, `make package` while using arm64e.old + old ABI version of `AltList.framework`. 
 
             | File | For |
             |---|---|
