@@ -37,10 +37,9 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | File | Jailbreak | iOS | Chip |
 | :--- | :--- | :--- | :--- |
 | `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 16.6.1 | A12+ · A8–A11 |
-| `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 13.0¹ – 15.x | N/A |
-| `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 14.0¹ – 16.x | N/A |    
-> **¹ Installation on iOS 13/14 requires manual compilation**   
-> **Legacy Rootful:** → iOS 13-14. Clone this repo, `make package` while using arm64e.old `AltList.framework`.  
+| `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 15.0 – 16.x | A8+ |
+| `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 15.0 – 16.x | A8+ |
+> **iOS 13–14 (Legacy Rootful):** Not produced by CI — requires manual compilation. Clone this repo and `make package` using `AltList_Old.framework` + `iPhoneOS14.5.sdk`. See build commands in [CLAUDE.md](CLAUDE.md).  
 
 ---
 

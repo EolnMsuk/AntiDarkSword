@@ -11,7 +11,7 @@ Generated: 2026-04-25.
 | A8 / A8X | iPhone 6, iPad mini 4 | arm64 (no e) | 13.0–16.x | Legacy .deb only. arm64e slice absent; `ARCHS=arm64`. All hooks functional. Corellium decoy runs if jailbroken. |
 | A9 / A9X | iPhone 6s, iPad Pro (1st gen) | arm64 | 13.0–16.x | Same as A8. Fully supported on all four build variants. |
 | A10 / A10X | iPhone 7, iPad Pro 10.5 | arm64 | 14.0–16.x | Modern .deb (arm64 slice). All features available. |
-| A11 | iPhone 8, iPhone X | arm64 | 14.0–16.x | Modern .deb. PAC not enforced on jailbreaks (PACSIM disabled). Full support. |
+| A11 | iPhone 8, iPhone X | arm64 | 14.0–16.x | iOS 15+: CI-built modern .deb (arm64 slice). iOS 14.x: legacy manual build required (arm64, `AltList_Old`). PAC not enforced on jailbreaks (PACSIM disabled). Full support at iOS 15+. |
 | A12 | iPhone XS, XR | arm64e | 15.0–17.x | Modern .deb arm64e slice. PPL active; Substrate patches via trustcache. Full support. |
 | A13 | iPhone 11 | arm64e | 15.0–17.x | As A12. Full support. |
 | A14 | iPhone 12 | arm64e | 15.0–17.x | As A12. Full support. Rootless path tested. |
@@ -30,7 +30,7 @@ Generated: 2026-04-25.
 | iOS | JIT API | JS API | Notes |
 |---|---|---|---|
 | 13.0–13.x | `_WKProcessPoolConfiguration.JITEnabled` (private) | `javaScriptEnabled` (WKPreferences) | `allowsContentJavaScript` unavailable; `#if < 140000` guard skips it. `lockdownModeEnabled` unavailable. Legacy .deb required. |
-| 14.0–14.x | `_WKProcessPoolConfiguration.JITEnabled` + `allowsContentJavaScript` (iOS 14 API) | Both | Modern or legacy .deb. No lockdown mode. |
+| 14.0–14.x | `_WKProcessPoolConfiguration.JITEnabled` + `allowsContentJavaScript` (iOS 14 API) | Both | Legacy .deb only (manual build — CI artifacts require iOS 15.0+). No lockdown mode. |
 | 15.0–15.x | Same as 14 + pool config still relevant | Both | Rootless available (Dopamine, palera1n rootless). `disableJIT15` path active. |
 | 16.0–16.x | `lockdownModeEnabled` public (SDK 160000). Pool config still hooking for belt-and-suspenders. | Both | `disableJIT` path via lockdown mode. UA Client Hints `userAgentData` available. |
 | 17.0+ | Same as 16. | Both | Not yet formally tested against jailbreaks targeting A17. Binary compatible. |
