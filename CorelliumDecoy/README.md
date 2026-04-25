@@ -52,6 +52,24 @@ These hooks only activate when `globalDecoyEnabled` is `YES` — they pass throu
 
 Every intercepted probe increments a persistent `corelliumProbeCount` counter in CFPreferences, visible as a live-updating cell in the Settings.app preferences panel. The counter is debounced (2-second window) to collapse the rapid multi-syscall burst a single probe generates into one count. Writes are dispatched asynchronously on a private serial queue to avoid deadlocking `apsd`'s synchronous cfprefsd calls. A separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) is posted after each increment so Settings.app refreshes the counter cell independently of a full prefs reload.
 
+### 5. sysctl / sysctlbyname spoofing (daemon tweak)
+
+File-path checks are not the only environment probe a payload may use. Hardware queries via `sysctl` and `sysctlbyname` return real device identifiers — model name, machine string, CPU subtype, and boot time — that are distinct from a Corellium-virtualized environment and can expose a real device to fingerprinting.
+
+`AntiDarkSwordDaemon` hooks both C functions via `MSHookFunction` and returns values consistent with a genuine Corellium instance:
+
+| Key | Spoofed value |
+|---|---|
+| `hw.model` / `hw.machine` | `"iPhone15,2"` |
+| `hw.cpusubtype` | `2` (`CPU_SUBTYPE_ARM64E`) |
+| `kern.boottime` | `now − 10800 − (getpid() % 3600)` — stable PID-seeded uptime of 3–4 hours |
+
+The helper `ads_spoof_bytes` implements the correct POSIX two-pass sysctl contract: a first call with `oldp == NULL` writes the required size to `*oldlenp` and returns 0; a second call copies the spoofed value after validating buffer size, returning `ENOMEM` on undersize.
+
+A thread-local `_ads_sysctl_active` flag prevents re-entrancy: GCD's `dispatch_async` internally calls `sysctl("hw.ncpu")` on the same thread during queue enqueue. Without the guard, the hook would recurse when `ads_increment_probe_counter()` dispatches its counter write. The flag is set immediately before the dispatch call and cleared immediately after.
+
+All intercepted sysctl queries call `ads_increment_probe_counter()`, feeding the same debounced probe counter as the file-path hooks.
+
 ---
 
 ## Rootful vs. Rootless
@@ -127,8 +145,11 @@ A payload performing standard Corellium detection on a device running AntiDarkSw
 - `stat("/usr/libexec/corelliumd", &buf)` → `0`, buffer filled with a plausible regular-file stat ✅
 - `[NSFileManager fileExistsAtPath:@"/usr/libexec/corelliumd"]` → `YES` ✅
 - `ps` / process enumeration → `corelliumd` is a real running process with a real PID ✅
+- `sysctl`/`sysctlbyname("hw.model")` → `"iPhone15,2"` ✅
+- `sysctl`/`sysctlbyname("hw.cpusubtype")` → `CPU_SUBTYPE_ARM64E` ✅
+- `sysctl`/`sysctlbyname("kern.boottime")` → plausible 3–4 hour uptime ✅
 
-All four checks pass. The payload concludes it is inside a Corellium research environment and aborts.
+All checks pass. The payload concludes it is inside a Corellium research environment and aborts.
 
 ---
 

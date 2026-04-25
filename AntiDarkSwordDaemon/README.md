@@ -60,6 +60,20 @@ Every time a Corellium-path probe is intercepted (across all four hook types), a
 
 After writing, the counter posts a separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) so Settings.app can refresh the counter cell without triggering a full prefs reload in all other injected tweak instances.
 
+### Corellium Honeypot — sysctl Spoofing
+
+File-path checks are not the only environment probe a payload may use. Hardware queries via `sysctl` and `sysctlbyname` return real device identifiers — model name, machine string, CPU subtype, and boot time — that distinguish a real physical device from a Corellium-virtualized instance. Both C functions are hooked via `MSHookFunction`:
+
+| Key | Spoofed value |
+|---|---|
+| `hw.model` / `hw.machine` | `"iPhone15,2"` |
+| `hw.cpusubtype` | `2` (`CPU_SUBTYPE_ARM64E`) |
+| `kern.boottime` | `now − 10800 − (getpid() % 3600)` — stable PID-seeded uptime of 3–4 hours |
+
+The `ads_spoof_bytes` helper implements the correct POSIX two-pass sysctl contract: a first call with `oldp == NULL` writes the required size to `*oldlenp` and returns 0; a second call copies the spoofed value after validating buffer size, returning `ENOMEM` on undersize.
+
+Both hooks are installed in `%ctor` immediately after the existing `access`/`stat`/`lstat` hooks, gated on `globalDecoyEnabled`. All intercepted calls feed `ads_increment_probe_counter()`.
+
 ---
 
 ## How targeting works
@@ -108,6 +122,8 @@ All three must be true. If any is false, every file-path hook passes through to 
 
 Hook functions can be called from any thread. All flags read at hook call time (`applyDisableIMessageDL`, `globalDecoyEnabled`, `currentProcessRestricted`) are declared `_Atomic`. Intermediate variables computed inside `loadPrefs()` itself use plain `BOOL` since they are not shared across threads.
 
+The `_ads_sysctl_active` thread-local flag used by the sysctl hooks is `static __thread BOOL` — it is private to each OS thread and requires no additional synchronization.
+
 ---
 
 ## How it differs from AntiDarkSwordUI
@@ -136,3 +152,5 @@ Hook functions can be called from any thread. All flags read at hook call time (
 | `access` (C function via `MSHookFunction`) | POSIX existence check for Corellium path |
 | `stat` (C function via `MSHookFunction`) | POSIX metadata query for Corellium path |
 | `lstat` (C function via `MSHookFunction`) | POSIX metadata query (symlink-aware) for Corellium path |
+| `sysctl` (C function via `MSHookFunction`) | Hardware query; spoofs `hw.model`/`hw.machine` → `"iPhone15,2"`, `hw.cpusubtype` → `CPU_SUBTYPE_ARM64E`, `kern.boottime` → stable PID-seeded uptime |
+| `sysctlbyname` (C function via `MSHookFunction`) | Named sysctl variant; same spoof targets as `sysctl` |

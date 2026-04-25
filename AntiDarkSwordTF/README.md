@@ -1,4 +1,4 @@
-# AntiDarkSword ⚔️ — TrollFools / TrollStore
+# AntiDarkSword — TrollFools / TrollStore
 
 A standalone `.dylib` build of AntiDarkSword for **TrollFools** and **TrollStore** users. No jailbreak required — inject it per-app directly from TrollFools to harden that app's WebKit engine against 1-click and browser-based exploits.
 
@@ -6,7 +6,7 @@ A standalone `.dylib` build of AntiDarkSword for **TrollFools** and **TrollStore
 
 ---
 
-## ✨ What it protects
+## What it protects
 
 Injected per-app. All mitigations apply only inside the app you injected into.
 
@@ -22,31 +22,31 @@ Injected per-app. All mitigations apply only inside the app you injected into.
 
 ---
 
-## 🚫 What's NOT included vs. the jailbreak version
+## What is NOT included vs. the jailbreak version
 
 The dylib is sandboxed to the injected app and has no system-level access. These features require a jailbreak:
 
 | Feature | Jailbreak | TrollFools |
 |---|---|---|
-| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | ✅ | ❌ — TrollFools cannot inject into system daemons; `IMFileTransfer` hooks are intentionally absent from this build. **Mail.app** (`com.apple.mobilemail`) is a valid TrollFools target — the WebKit hooks harden HTML email rendering. Use "Block Remote Content" in the overlay to block external resource loads in HTML emails as a zero-click mitigation |
-| Corellium Honeypot (file-path spoofing + `corelliumd` process) | ✅ | ❌ — needs POSIX hook installation and LaunchDaemon |
-| System-wide auto-protection tiers (Level 1/2/3) | ✅ | ❌ — no PreferenceLoader; settings are per-app in-overlay |
-| Settings.app preferences UI | ✅ | ❌ — replaced by in-app three-finger double-tap overlay |
-| MobileSubstrate / ElleKit | required | ❌ — not used; hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
-| Protects all apps at once | ✅ | ❌ — you inject per-app via TrollFools |
+| iMessage zero-click blocking (`imagent`, `IMDPersistenceAgent`) | Yes | No — TrollFools cannot inject into system daemons; `IMFileTransfer` hooks are intentionally absent from this build. **Mail.app** (`com.apple.mobilemail`) is a valid TrollFools target — the WebKit hooks harden HTML email rendering. Use "Block Remote Content" in the overlay to block external resource loads in HTML emails as a zero-click mitigation |
+| Corellium Honeypot (file-path spoofing + `corelliumd` process) | Yes | No — needs POSIX hook installation and LaunchDaemon |
+| System-wide auto-protection tiers (Level 1/2/3) | Yes | No — no PreferenceLoader; settings are per-app in-overlay |
+| Settings.app preferences UI | Yes | No — replaced by in-app three-finger double-tap overlay |
+| MobileSubstrate / ElleKit | required | Not used — hooks use the ObjC runtime directly (`LOGOS_DEFAULT_GENERATOR = internal`) |
+| Protects all apps at once | Yes | No — you inject per-app via TrollFools |
 
 ---
 
-## 📱 Requirements
+## Requirements
 
 - **TrollStore 2** installed on your device ([opa334/TrollStore](https://github.com/opa334/TrollStore))
 - **TrollFools** installed via TrollStore ([Lessica/TrollFools](https://github.com/Lessica/TrollFools))
-- iOS **14.5 – 17.0** (arm64 / arm64e) — exact device support depends on your TrollStore install method (see [Device Compatibility](#-device-compatibility) below)
+- iOS **14.5 – 17.0** (arm64 / arm64e) — exact device support depends on your TrollStore install method (see [Device Compatibility](#device-compatibility) below)
 - The target app must be a **third-party App Store app** — Apple system apps cannot be injected by TrollFools
 
 ---
 
-## 🛠️ Installation
+## Installation
 
 1. Install [TrollStore](https://github.com/opa334/TrollStore) on your device.
 2. Install [TrollFools](https://github.com/Lessica/TrollFools/releases) via TrollStore.
@@ -58,11 +58,11 @@ To **remove**: open TrollFools, tap the app, and remove the dylib entry.
 
 ---
 
-## ⚙️ Configuration (In-App Overlay)
+## Configuration (In-App Overlay)
 
 There is no Settings.app UI for the TrollFools build. Settings are configured inside each injected app:
 
-**Double-tap with three fingers** anywhere on screen → the AntiDarkSword overlay appears.
+**Double-tap with three fingers** anywhere on screen to open the AntiDarkSword overlay.
 
 The overlay shows:
 - **Enable Protection** master toggle (defaults OFF — tap to activate). The row background is **green** when protection is ON and **red** when OFF, making the active state immediately obvious at a glance.
@@ -77,7 +77,7 @@ The overlay shows:
 
 ---
 
-## 🔒 Should I jailbreak instead?
+## Should I jailbreak instead?
 
 If your device and iOS version support a jailbreak, the full tweak gives meaningfully stronger protection:
 
@@ -90,7 +90,7 @@ Use TrollFools when you cannot or do not want to jailbreak, or when you want sur
 
 ---
 
-## 📲 Device Compatibility
+## Device Compatibility
 
 ### TrollStore (no jailbreak)
 
@@ -98,17 +98,17 @@ TrollStore's availability depends on which exploit method is available for your 
 
 | iOS Range | Architecture | TrollStore Status |
 |---|---|---|
-| 14.0 – 14.8.1 | arm64, arm64e | ✅ Supported |
-| 15.0 – 16.6.1 | arm64, arm64e | ✅ Supported |
-| 16.7.x | arm64 (A12+) | ⚠️ Limited — check TrollStore docs |
-| 17.0 | arm64e (select devices) | ⚠️ Limited — check TrollStore docs |
-| 17.1+ | all | ❌ Not supported (as of this writing) |
+| 14.0 – 14.8.1 | arm64, arm64e | Supported |
+| 15.0 – 16.6.1 | arm64, arm64e | Supported |
+| 16.7.x | arm64 (A12+) | Limited — check TrollStore docs |
+| 17.0 | arm64e (select devices) | Limited — check TrollStore docs |
+| 17.1+ | all | Not supported (as of this writing) |
 
 > Check [TrollStore](https://github.com/opa334/TrollStore) directly — supported iOS versions expand as new exploits are found.
 
 ---
 
-## 🏗️ Building
+## Building
 
 Requires [Theos](https://theos.dev/) with `$THEOS` set.
 
@@ -124,7 +124,7 @@ The dylib uses `LOGOS_DEFAULT_GENERATOR = internal` — no CydiaSubstrate or Ell
 
 ---
 
-## 👨‍💻 Developer
+## Developer
 
 Created by: [EolnMsuk](https://github.com/EolnMsuk) / [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/)
 
