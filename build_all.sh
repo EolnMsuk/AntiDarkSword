@@ -20,6 +20,12 @@ swap_altlist() {
 SDK_14="$THEOS/sdks/iPhoneOS14.5.sdk"
 SDK_16="$THEOS/sdks/iPhoneOS16.5.sdk"
 
+# Darwin ptrauth ABI — Linux/WSL LLVM clang doesn't mark arm64e objects with
+# the new Apple ptrauth ABI by default. This flag makes it do so, silencing
+# "incompatible arm64e ABI compiler" linker warnings and preventing the
+# resulting dylib from crashing at bind time (SafeMode) on ptrauth devices.
+export ADDITIONAL_CFLAGS="-Xclang -target-abi -Xclang darwinpcs"
+
 # ==========================================
 # LEGACY TARGETS (iOS 13 - 14) → Native arm64
 # ==========================================

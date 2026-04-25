@@ -3,6 +3,9 @@ TARGET ?= iphone:clang:latest:14.0
 
 TARGET_CODESIGN_FLAGS = -S -Hsha1 -Hsha256
 
+# Darwin ptrauth ABI — required for arm64e on Linux/WSL LLVM clang.
+ADDITIONAL_CFLAGS += -Xclang -target-abi -Xclang darwinpcs
+
 include $(THEOS)/makefiles/common.mk
 
 # Use the ObjC-runtime Logos backend so the dylib has no CydiaSubstrate
