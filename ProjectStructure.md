@@ -138,9 +138,9 @@ AntiDarkSword/
 └── .github/
     └── workflows/
         └── build.yml                     # GitHub Actions CI workflow (macos-14 runner). Installs Theos via
-                                          # Randomblock1/theos-action, downloads iPhoneOS16.5.sdk only, swaps
-                                          # AltList_New into vendor/, and builds three modern targets (rootful
-                                          # arm.deb, rootless arm64.deb, TrollFools dylib — all iOS 15.0+).
-                                          # Publishes a draft GitHub Release on every push to main. The legacy
-                                          # iOS 13–14 build is NOT produced by CI; it requires manual compilation.
+                                          # Randomblock1/theos-action, downloads iPhoneOS16.5.sdk and
+                                          # iPhoneOS14.5.sdk, and builds four targets: modern rootful arm.deb,
+                                          # modern rootless arm64.deb, TrollFools dylib (all iOS 15+, arm64 +
+                                          # arm64e), and legacy rootful arm_legacy.deb (iOS 13–14, arm64 only,
+                                          # AltList_Old). Publishes a draft GitHub Release on every push to main.
 ```
