@@ -23,7 +23,7 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 1. Add repo in Sileo/Zebra: https://f0rd0w.github.io/
 2. Or install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
 > Use `arm.deb` for rootful, `arm64.deb` for rootless (if roothide, use patcher on rootless deb).
-> iOS 13–14 is not officially supported. Users on iOS 13–14 must [build from source](https://github.com/EolnMsuk/AntiDarkSword) using the legacy commands.
+> On iOS 13–14 use `arm_legacy.deb` (rootful only).
 
 **TrollFools Dylib**
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
@@ -39,27 +39,26 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | :--- | :--- | :--- | :--- |
 | `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 17.0 | A12+ · A9–A11 |
 | `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 15.0 – 17.0 | A9+ |
+| `*_iphoneos-arm_legacy.deb` | unc0ver, checkra1n, Taurine **rootful** | 13.0 – 14.8 | A9–A11 (arm64) |
 | `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 15.0 – 17.0 | A9+ |
-
-> iOS 13–14 is not officially supported. Build from source using the legacy commands.
 
 ---
 
 ## 🛡️ Protections
 
-| **Jailbreak (tweak)** | iOS 15 | iOS 16+ |
-| :--- | :--- | :--- |
-| Disable JIT | ✅ | ✅ |
-| Disable JavaScript | ✅ | ✅ |
-| UA Spoofing | ✅ | ✅ |
-| UA Client Hints | ❌ | ✅ |
-| Disable WebRTC / WebGL | ✅ | ✅ |
-| Disable media autoplay | ✅ | ✅ |
-| Disable local file access | ✅ | ✅ |
-| Mail auto-download block | ✅ | ✅ |
-| iMessage auto-download block | ✅ | ✅ |
-| Daemon protection | ✅ | ✅ |
-| Corellium decoy | ✅ | ✅ |
+| **Jailbreak (tweak)** | iOS 13–14 | iOS 15 | iOS 16+ |
+| :--- | :--- | :--- | :--- |
+| Disable JIT | ✅ | ✅ | ✅ |
+| Disable JavaScript | ✅ | ✅ | ✅ |
+| UA Spoofing | ✅ | ✅ | ✅ |
+| UA Client Hints | ❌ | ❌ | ✅ |
+| Disable WebRTC / WebGL | ✅ | ✅ | ✅ |
+| Disable media autoplay | ✅ | ✅ | ✅ |
+| Disable local file access | ✅ | ✅ | ✅ |
+| Mail auto-download block | ✅ | ✅ | ✅ |
+| iMessage auto-download block | ✅ | ✅ | ✅ |
+| Daemon protection | ✅ | ✅ | ✅ |
+| Corellium decoy | ✅ | ✅ | ✅ |
 
 <br>
 
