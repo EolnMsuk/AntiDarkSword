@@ -134,8 +134,10 @@
     }
     if ([_btnPyEater containsPoint:loc]) {
         playTap();
-        [self playSFX:440.0 dur:0.1];
-        if (self.onSelectGame) self.onSelectGame(0);
+        [self playSFX:440.0 dur:0.08];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self.onSelectGame) self.onSelectGame(0);
+        });
     } else if ([_btnJailTris containsPoint:loc]) {
         playTap();
         [self playSFX:660.0 dur:0.1];

@@ -285,7 +285,14 @@ static int jt_blocks[7][4][4][2] = {
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]]; return;
     }
     if ([_menuBg containsPoint:loc]) { playTap(); [self playSFX:440.0 dur:0.08]; if (self.exitHandler) self.exitHandler(); return; }
-    if ([self.musicBtnBg containsPoint:loc]) { playTap(); [self playSFX2:523.25 freq2:659.25 dur:0.1]; _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
+    if ([self.musicBtnBg containsPoint:loc]) { 
+        playTap(); 
+        _musicEnabled = !_musicEnabled;
+        if (_musicEnabled) { [self playSFX2:523.25 freq2:659.25 dur:0.1]; }
+        else { [self playSFX2:329.63 freq2:261.63 dur:0.1]; }
+        [self updateMusicBtn]; 
+        return; 
+    }
     if (!_highScoreBg.hidden && [_highScoreBg containsPoint:loc]) { playTap(); [self showLeaderboard]; return; }
     if ([_restartBtn containsPoint:loc]) { playTap(); [self playSFXSweep:440.0 sweep:440.0 dur:0.15]; [self resetGame]; return; }
     if (_isDead) { playTap(); [self playSFXSweep:440.0 sweep:440.0 dur:0.15]; [self resetGame]; return; }
@@ -297,13 +304,13 @@ static int jt_blocks[7][4][4][2] = {
             playTap(); _isPaused = !_isPaused;
             if (_isPaused) {
                 [self playSFX2:330.0 freq2:220.0 dur:0.1];
-                _startBtn.text = @"▶ RESUME"; _startBg.hidden = NO; _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
+                _startBtn.text = @"▶ RESUME"; _startBg.hidden = NO; _startBg.lineWidth = 6.0; _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
                 _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 35);
                 _highScoreBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 25);
                 if (_synthState) _synthState->playBGM = 0;
             } else {
                 [self playSFX2:880.0 freq2:1108.73 dur:0.1];
-                _startBg.hidden = YES; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
+                _startBg.hidden = YES; _startBg.lineWidth = 3.0; _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
                 if (_synthState && _musicEnabled) _synthState->playBGM = 1;
             }
         }

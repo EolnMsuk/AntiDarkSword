@@ -322,8 +322,22 @@ static const CGFloat kGridSize = 20.0;
         [node runAction:[SKAction sequence:@[[SKAction fadeOutWithDuration:0.2], [SKAction removeFromParent]]]];
         return;
     }
-    if ([_menuBg containsPoint:loc]) { playTap(); [self playSFX:440.0 dur:0.08]; if (self.exitHandler) self.exitHandler(); return; }
-    if ([self.musicBtnBg containsPoint:loc]) { playTap(); [self playSFX2:523.25 freq2:659.25 dur:0.1]; _musicEnabled = !_musicEnabled; [self updateMusicBtn]; return; }
+    if ([_menuBg containsPoint:loc]) { 
+        playTap(); 
+        [self playSFX:660.0 dur:0.1]; 
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (self.exitHandler) self.exitHandler(); 
+        });
+        return; 
+    }
+    if ([self.musicBtnBg containsPoint:loc]) { 
+        playTap(); 
+        _musicEnabled = !_musicEnabled;
+        if (_musicEnabled) { [self playSFX2:523.25 freq2:659.25 dur:0.1]; }
+        else { [self playSFX2:329.63 freq2:261.63 dur:0.1]; }
+        [self updateMusicBtn]; 
+        return; 
+    }
     if ([self.highScoreBtn containsPoint:loc]) {
         playTap();
         if (self.gameState == ADSGameStatePlaying) {
