@@ -10,7 +10,6 @@ An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit
 ---
 
 [<img width="1280" height="1030" alt="ReadMeNew" src="https://github.com/user-attachments/assets/0564c070-59a3-4667-8328-924ce73e685d" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
-
 > **Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
 > **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
 > **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856
@@ -20,9 +19,10 @@ An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit
 ## 🛠️ Installation
 
 **Jailbreak Tweak**
-1. Install the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
-> On iOS 15+ use `arm.deb` for rootful, `arm64.deb` for rootless.  
-> On iOS 13–14 use `arm_legacy.deb`.  
+1. Download the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases) (see guide below).
+2. If roothide, convert with patcher before installing via package manager.
+> **iOS 15+** use `arm.deb` for rootful, `arm64.deb` for rootless.  
+> **iOS 13–14** use `arm_legacy.deb`.  
 
 **TrollFools Dylib**
 1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
@@ -57,12 +57,12 @@ An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit
 | Mail auto-download block | ✅ | ✅ | ✅ |
 | iMessage auto-download block | ✅ | ✅ | ✅ |
 | Block remote content | ✅ | ✅ | ✅ |
-| Block risky attachments¹ | ✅ | ✅ | ✅ |
-| NSE interception² | ✅ | ✅ | ✅ |
+| Block risky attachments | ✅ | ✅ | ✅ |
+| NSE interception | ✅ | ✅ | ✅ |
 | Daemon protection | ✅ | ✅ | ✅ |
 | Corellium decoy | ✅ | ✅ | ✅ |
 
-<br>
+---
 
 | **TrollStore (dylib)** | iOS 15 | iOS 16+ |
 | :--- | :--- | :--- |
@@ -79,11 +79,8 @@ An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit
 | Block risky attachments¹ | ✅ | ✅ |
 | Daemon protection | ❌ | ❌ |
 | Corellium decoy | ❌ | ❌ |
-| Mitigation Shortcut³ | ✅ | ✅ |
-
-> ¹ **Block risky attachments:** Suppresses full-size previews of HEIC, HEIF, WebP, and PDF attachments in Messages — formats historically exploited via ImageIO/CoreGraphics parsing bugs.  
-> ² **NSE interception:** Hooks load inside `com.apple.messages.NotificationServiceExtension` and `com.apple.MailNotificationServiceExtension` to apply WebKit and attachment mitigations before a zero-click payload can reach the parser.  
-> ³ **Mitigation Shortcut:** Three-finger double-tap on open app to trigger the settings overlay (biometric-gated).
+| Mitigation Shortcut¹ | ✅ | ✅ |
+> ¹ **Mitigation Shortcut:** Three-finger double-tap on open app to trigger the settings overlay (biometric-gated).  
 
 ---
 
