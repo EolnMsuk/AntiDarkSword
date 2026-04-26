@@ -4,8 +4,8 @@ Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
 Version: 4.8.0
 Architecture: iphoneos-arm
 Description: Security framework for mitigating Coruna - DarkSword - zero-click messaging exploits / browser RCE chains through daemon restrictions and granular WebKit isolation.
-Maintainer: eolnmsuk
-Author: eolnmsuk
+Maintainer: EolnMsuk
+Author: EolnMsuk
 Section: Tweaks
 SileoIcon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png
 Depiction: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/depiction.json
