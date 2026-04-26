@@ -5,7 +5,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = AntiDarkSwordPrefs
 AntiDarkSwordPrefs_FILES = RootListController.m ADSCreditsMenu.m ADSPyEater.m ADSJailTris.m
-AntiDarkSwordPrefs_FRAMEWORKS = UIKit
+AntiDarkSwordPrefs_FRAMEWORKS = UIKit MobileCoreServices
 AntiDarkSwordPrefs_PRIVATE_FRAMEWORKS = Preferences
 AntiDarkSwordPrefs_EXTRA_FRAMEWORKS = AltList
 AntiDarkSwordPrefs_INSTALL_PATH = /Library/PreferenceBundles

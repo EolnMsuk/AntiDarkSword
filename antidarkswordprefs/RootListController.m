@@ -173,27 +173,73 @@ static NSSet *ads_relevant_plugin_categories(void) {
 }
 
 // Returns an array of @{bundleID, category, name} dicts for security-relevant plugins of parentID.
+// Strategy 1: LSPlugInKitProxy (PlugInKit daemon-backed, fast).
+// Strategy 2: direct PlugIns/ bundle scan — fallback when PlugInKit returns empty (e.g. daemon
+//   hasn't indexed yet, system-partition extension DB is separate, or fresh restore).
 static NSArray<NSDictionary *> *ads_plugins_for_bundle_id(NSString *parentID) {
     if (!parentID.length) return @[];
     NSMutableArray *result = [NSMutableArray array];
+    NSSet *relevant = ads_relevant_plugin_categories();
+
+    // --- Strategy 1: LSPlugInKitProxy ---
     @try {
         Class cls = NSClassFromString(@"LSPlugInKitProxy");
-        if (!cls || ![cls respondsToSelector:@selector(pluginKitProxiesForHostBundleIdentifier:)]) return @[];
-        NSArray *proxies = [cls pluginKitProxiesForHostBundleIdentifier:parentID];
-        NSSet *relevant  = ads_relevant_plugin_categories();
-        for (LSPlugInKitProxy *proxy in proxies) {
-            @try {
-                NSString *category   = [proxy pluginCategory];
-                if (![relevant containsObject:category]) continue;
-                NSString *identifier = [proxy pluginIdentifier];
-                if (!identifier.length) continue;
-                NSString *name = nil;
-                @try { name = [proxy localizedName]; } @catch (__unused id) {}
-                if (!name.length) name = identifier;
-                [result addObject:@{@"bundleID": identifier, @"category": category, @"name": name}];
-            } @catch (__unused NSException *e) {}
+        if (cls && [cls respondsToSelector:@selector(pluginKitProxiesForHostBundleIdentifier:)]) {
+            NSArray *proxies = [cls pluginKitProxiesForHostBundleIdentifier:parentID];
+            for (LSPlugInKitProxy *proxy in proxies) {
+                @try {
+                    NSString *category   = [proxy pluginCategory];
+                    if (![relevant containsObject:category]) continue;
+                    NSString *identifier = [proxy pluginIdentifier];
+                    if (!identifier.length) continue;
+                    NSString *name = nil;
+                    @try { name = [proxy localizedName]; } @catch (__unused id) {}
+                    if (!name.length) name = identifier;
+                    [result addObject:@{@"bundleID": identifier, @"category": category, @"name": name}];
+                } @catch (__unused NSException *e) {}
+            }
         }
     } @catch (__unused NSException *e) {}
+
+    if (result.count > 0) return [result copy];
+
+    // --- Strategy 2: PlugIns/ directory scan ---
+    // Reads NSExtensionPointIdentifier and CFBundleIdentifier directly from each .appex Info.plist.
+    // Reliable regardless of PlugInKit daemon state or extension registration partition.
+    @try {
+        Class LSAppProxy = NSClassFromString(@"LSApplicationProxy");
+        if (!LSAppProxy) return @[];
+        id proxy = [LSAppProxy applicationProxyForIdentifier:parentID];
+        if (!proxy || ![proxy respondsToSelector:@selector(bundleURL)]) return @[];
+        NSURL *bundleURL = [proxy bundleURL];
+        if (!bundleURL) return @[];
+
+        NSURL *pluginsURL = [bundleURL URLByAppendingPathComponent:@"PlugIns"];
+        NSArray *contents = [[NSFileManager defaultManager]
+            contentsOfDirectoryAtURL:pluginsURL
+            includingPropertiesForKeys:nil
+            options:NSDirectoryEnumerationSkipsHiddenFiles
+            error:nil];
+        if (!contents.count) return @[];
+
+        for (NSURL *extURL in contents) {
+            if (![[extURL pathExtension] isEqualToString:@"appex"]) continue;
+            NSDictionary *infoPlist = [NSDictionary dictionaryWithContentsOfURL:
+                [extURL URLByAppendingPathComponent:@"Info.plist"]];
+            if (!infoPlist) continue;
+            NSDictionary *nsExt = infoPlist[@"NSExtension"];
+            if (!nsExt) continue;
+            NSString *category = nsExt[@"NSExtensionPointIdentifier"];
+            if (!category || ![relevant containsObject:category]) continue;
+            NSString *identifier = infoPlist[@"CFBundleIdentifier"];
+            if (!identifier.length) continue;
+            NSString *name = infoPlist[@"CFBundleDisplayName"]
+                          ?: infoPlist[@"CFBundleName"]
+                          ?: identifier;
+            [result addObject:@{@"bundleID": identifier, @"category": category, @"name": name}];
+        }
+    } @catch (__unused NSException *e) {}
+
     return [result copy];
 }
 
