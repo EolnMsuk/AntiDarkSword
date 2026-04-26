@@ -1,4 +1,4 @@
-# AntiDarkSword [⛨](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
+# [⛨](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/) AntiDarkSword
 An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
 
   - [Installation](#%EF%B8%8F-installation)
