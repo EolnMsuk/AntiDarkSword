@@ -994,10 +994,10 @@ static BOOL ads_default_value_for_key(NSString *key) {
     [self dismissViewControllerAnimated:YES completion:^{
         UIAlertController *alert = [UIAlertController
             alertControllerWithTitle:@"Settings Saved"
-            message:@"Changes to WebKit configuration only take effect after a full restart. Restart now?"
+            message:@"Restart app now to save?"
             preferredStyle:UIAlertControllerStyleAlert];
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Restart App Now"
                                                   style:UIAlertActionStyleDestructive
                                                 handler:^(UIAlertAction *a) {
             exit(0);
