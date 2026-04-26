@@ -592,7 +592,7 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
     // iOS 14-: neither API available; row shown grayed.
     if (major >= 16) {
         [rows addObject:@{@"title":   @"Block JIT / Lockdown Mode",
-                          @"detail":  @"Enables WebKit lockdown mode (iOS 16, 17+)",
+                          @"detail":  @"Enables WebKit lockdown mode (iOS 16+)",
                           @"key":     @"disableJIT",
                           @"enabled": @YES}];
     } else if (major >= 15) {
@@ -628,12 +628,12 @@ static NSArray<NSDictionary *> *ads_tf_setting_rows(void) {
                       @"enabled": @YES}];
 
     [rows addObject:@{@"title":   @"Block Remote Content",
-                      @"detail":  @"Blocks external resource loads — recommended for Mail",
+                      @"detail":  @"Blocks external loads (eg Mail)",
                       @"key":     @"blockRemoteContent",
                       @"enabled": @YES}];
 
     [rows addObject:@{@"title":   @"Block Risky Attachment Previews",
-                      @"detail":  @"Suppresses HEIC/WebP/PDF previews (zero-click attack surface)",
+                      @"detail":  @"Suppresses HEIC/WebP/PDF previews",
                       @"key":     @"blockRiskyAttachments",
                       @"enabled": @YES}];
 
