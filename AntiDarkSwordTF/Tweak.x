@@ -846,7 +846,7 @@ static BOOL ads_default_value_for_key(NSString *key) {
         [self.tableView.topAnchor      constraintEqualToAnchor:masterRow.bottomAnchor constant:16],
         [self.tableView.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [self.tableView.heightAnchor   constraintEqualToConstant:MIN(maxTH, 330)],
+        [self.tableView.heightAnchor   constraintEqualToConstant:maxTH],
 
         [buttonBar.topAnchor      constraintEqualToAnchor:self.tableView.bottomAnchor],
         [buttonBar.leadingAnchor  constraintEqualToAnchor:card.leadingAnchor],
