@@ -141,6 +141,7 @@ static inline NSString *ads_root_path(NSString *path) {
 @interface AntiDarkSwordAppController : PSListController
 @property (nonatomic, strong) NSString *targetID;
 @property (nonatomic, assign) NSInteger ruleType;
+@property (nonatomic, assign) BOOL isPlugin;
 + (BOOL)isDaemonTarget:(NSString *)targetID;
 + (BOOL)isApplicableFeature:(NSString *)featureKey forTarget:(NSString *)targetID;
 - (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey;
@@ -552,7 +553,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     return YES;
 }
 - (void)setSpecifier:(PSSpecifier *)specifier {
-    [super setSpecifier:specifier]; self.targetID = [specifier propertyForKey:@"targetID"]; self.ruleType = [[specifier propertyForKey:@"ruleType"] integerValue]; self.title = [specifier name] ?: self.targetID;
+    [super setSpecifier:specifier]; self.targetID = [specifier propertyForKey:@"targetID"]; self.ruleType = [[specifier propertyForKey:@"ruleType"] integerValue]; self.isPlugin = [[specifier propertyForKey:@"isPlugin"] boolValue]; self.title = [specifier name] ?: self.targetID;
 }
 - (BOOL)isGlobalOverrideActiveForFeature:(NSString *)featureKey {
     NSUserDefaults *defaults = ads_defaults(); NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
@@ -577,7 +578,10 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
         
         BOOL isRuleEnabled = [[self getMasterEnable:enableSpec] boolValue];
         PSSpecifier *featGroup = [PSSpecifier preferenceSpecifierNamed:@"Mitigation Features" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [featGroup setProperty:@"Features not applicable to this target type, or currently enforced by a Global Rule, are locked." forKey:@"footerText"]; [specs addObject:featGroup];
+        NSString *featFooter = (self.isPlugin && !isRuleEnabled)
+            ? @"Inheriting parent app rules. Enable the rule to configure plugin-specific overrides."
+            : @"Features not applicable to this target type, or currently enforced by a Global Rule, are locked.";
+        [featGroup setProperty:featFooter forKey:@"footerText"]; [specs addObject:featGroup];
         
         NSArray *features = @[ @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}, @{@"key": @"disableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"disableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}, @{@"key": @"blockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"blockRiskyAttachments", @"label": @"Block Attachment Previews"} ];
         
@@ -631,6 +635,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
                     cell:PSLinkCell edit:nil];
                 [pspec setProperty:pluginBundleID forKey:@"targetID"];
                 [pspec setProperty:@(1) forKey:@"ruleType"];
+                [pspec setProperty:@YES forKey:@"isPlugin"];
                 UIImage *icon = [rootCtrl iconForTargetID:pluginBundleID];
                 if (icon) [pspec setProperty:icon forKey:@"iconImage"];
                 [specs addObject:pspec];
@@ -765,7 +770,37 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return nil;
 }
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
-    NSUserDefaults *defaults = ads_defaults(); if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) return;
+    NSUserDefaults *defaults = ads_defaults();
+    if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
+        // One-time migration for existing installs: write restrictedApps-{pluginBundleID}=YES
+        // for any plugin that already has non-trivial TargetRules_ entries but is missing
+        // its enable key (written by prior builds that predated this logic).
+        if (![defaults boolForKey:@"ADSPluginEnablesMigrated_v1"]) {
+            NSMutableArray *allTargets = [NSMutableArray arrayWithArray:[self autoProtectedItemsForLevel:3]];
+            [allTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent",
+                @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd",
+                @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"]];
+            for (NSString *parentID in allTargets) {
+                for (NSDictionary *plugin in ads_plugins_for_bundle_id(parentID)) {
+                    NSString *pluginBundleID = plugin[@"bundleID"];
+                    NSDictionary *existingRules = [defaults dictionaryForKey:
+                        [NSString stringWithFormat:@"TargetRules_%@", pluginBundleID]];
+                    if (!existingRules) continue;
+                    BOOL hasNonTrivial = [existingRules[@"blockRemoteContent"] boolValue] ||
+                                         [existingRules[@"blockRiskyAttachments"] boolValue] ||
+                                         [existingRules[@"disableMedia"] boolValue];
+                    if (!hasNonTrivial) continue;
+                    NSString *enableKey = [NSString stringWithFormat:@"restrictedApps-%@", pluginBundleID];
+                    if ([defaults objectForKey:enableKey]) continue;
+                    [defaults setBool:YES forKey:enableKey];
+                    ads_cfwrite(enableKey, @YES);
+                }
+            }
+            [defaults setBool:YES forKey:@"ADSPluginEnablesMigrated_v1"];
+            [defaults synchronize];
+        }
+        return;
+    }
     BOOL isIOS16 = ads_is_ios16();
     NSArray *browsers = @[@"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"];
     NSArray *msgAndMail = ads_msg_and_mail_apps(); NSArray *allProtected = [self autoProtectedItemsForLevel:3];
@@ -842,6 +877,20 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
             [defaults setObject:pluginRules forKey:pluginKey];
             ads_cfwrite(pluginKey, pluginRules);
+
+            // If the plugin has non-trivial category-specific mitigations, initialize
+            // Enable Rule = ON so the UI shows an active override rather than contradicting
+            // the disabled-toggles state. Plugins without meaningful overrides start with
+            // Enable Rule = OFF, meaning pure parent inheritance (tweak falls back to
+            // TargetRules_{parentBundleID} when restrictedApps-{pluginID} is absent).
+            BOOL hasNonTrivialOverride = [pluginRules[@"blockRemoteContent"] boolValue] ||
+                                         [pluginRules[@"blockRiskyAttachments"] boolValue] ||
+                                         [pluginRules[@"disableMedia"] boolValue];
+            if (hasNonTrivialOverride) {
+                NSString *enableKey = [NSString stringWithFormat:@"restrictedApps-%@", pluginBundleID];
+                [defaults setBool:YES forKey:enableKey];
+                ads_cfwrite(enableKey, @YES);
+            }
         }
     }
 
