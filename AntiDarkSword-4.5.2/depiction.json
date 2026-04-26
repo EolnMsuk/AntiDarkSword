@@ -1,0 +1,23 @@
+{
+    "minVersion": "0.1",
+    "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/header.png",
+    "tintColor": "#2CB1BE",
+    "class": "DepictionTabView",
+    "tabs": [
+        {
+            "tabname": "Details",
+            "class": "DepictionStackView",
+            "views": [
+                {
+                    "class": "DepictionHeaderView",
+                    "title": "AntiDarkSword ⛨",
+                    "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png"
+                },
+                {
+                    "class": "DepictionMarkdownView",
+                    "markdown": "A security framework that mitigates zero-click messaging payloads and browser RCEs through daemon restrictions and granular WebKit isolation: github.com/EolnMsuk/AntiDarkSword"
+                }
+            ]
+        }
+    ]
+}

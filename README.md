@@ -1,5 +1,5 @@
 # AntiDarkSword [⛨](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
-An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
+An iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
 
   - [Installation](#%EF%B8%8F-installation)
   - [Compatibility](#-compatibility)
@@ -57,6 +57,9 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | Disable local file access | ✅ | ✅ | ✅ |
 | Mail auto-download block | ✅ | ✅ | ✅ |
 | iMessage auto-download block | ✅ | ✅ | ✅ |
+| Block remote content | ✅ | ✅ | ✅ |
+| Block risky attachments¹ | ✅ | ✅ | ✅ |
+| NSE interception² | ✅ | ✅ | ✅ |
 | Daemon protection | ✅ | ✅ | ✅ |
 | Corellium decoy | ✅ | ✅ | ✅ |
 
@@ -73,11 +76,15 @@ An iOS tweak and TrollStore dylib that hardens Jailbroken devices against WebKit
 | Disable local file access | ✅ | ✅ |
 | Mail auto-download block | ✅ | ✅ |
 | iMessage auto-download block | ❌ | ❌ |
+| Block remote content | ✅ | ✅ |
+| Block risky attachments¹ | ✅ | ✅ |
 | Daemon protection | ❌ | ❌ |
 | Corellium decoy | ❌ | ❌ |
-| Mitigation Shortcut² | ✅ | ✅ |
+| Mitigation Shortcut³ | ✅ | ✅ |
 
-> ² **Mitigation Shortcut:** Three-finger double-tap on open app to trigger a shortcut mitigation settings panel.
+> ¹ **Block risky attachments:** Suppresses full-size previews of HEIC, HEIF, WebP, and PDF attachments in Messages — formats historically exploited via ImageIO/CoreGraphics parsing bugs.  
+> ² **NSE interception:** Hooks load inside `com.apple.messages.NotificationServiceExtension` and `com.apple.MailNotificationServiceExtension` to apply WebKit and attachment mitigations before a zero-click payload can reach the parser.  
+> ³ **Mitigation Shortcut:** Three-finger double-tap on open app to trigger the settings overlay (biometric-gated).
 
 ---
 
@@ -104,8 +111,11 @@ Level 1
     ├── Disable Local File Access: ON (Mail)
     └── Spoof User Agent: OFF
 
+  (Block Remote Content is added to Apple Messages & Mail at Level 2+)
+
 Level 2
 ├── 📱 All Level 1 Apps & Rules
+│   └── 💬 Apple Messages & Mail: Block Remote Content: ON (added at this level)
 │
 ├── 🌐 3rd-Party Browsers (Chrome, Firefox, Brave, DuckDuckGo)
 │   ├── OS Baseline (JIT/JS Lockdown)
@@ -116,6 +126,7 @@ Level 2
 │   ├── Disable Media Auto-Play: ON
 │   ├── Disable WebGL & WebRTC: ON
 │   ├── Disable Local File Access: ON
+│   ├── Block Remote Content: ON
 │   └── Spoof User Agent: ON
 │
 └── 🏦 Social, Finance & JB Apps (TikTok, Facebook, PayPal, CashApp, Sileo, Zebra, Filza)

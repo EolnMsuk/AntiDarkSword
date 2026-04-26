@@ -35,8 +35,12 @@ AntiDarkSword/
 │   ├── Tweak.x                           # Daemon-layer Logos tweak. Hooks IMFileTransfer to block iMessage
 │   │                                     # auto-download; hooks access/stat/lstat/NSFileManager via MSHookFunction
 │   │                                     # for Corellium path spoofing on rootless (fabricated stat with plausible
-│   │                                     # timestamps derived from ads_spoofed_boottime); increments probe counter on
-│   │                                     # a serial async queue to avoid cfprefsd deadlock.
+│   │                                     # timestamps derived from ads_spoofed_boottime); hooks sysctl/sysctlbyname
+│   │                                     # (hw.model/machine/cpusubtype, kern.boottime/osversion) and getenv
+│   │                                     # (CORELLIUM_ENV) as pure spoofs; hooks access for /var/db/uuidtext/ silently.
+│   │                                     # Probe counter fires only on explicit /usr/libexec/corelliumd path probes
+│   │                                     # (access/stat/lstat/NSFileManager); written on a serial async queue to avoid
+│   │                                     # cfprefsd deadlock.
 │   └── README.md                         # Subproject notes for AntiDarkSwordDaemon.
 │
 ├── AntiDarkSwordUI/

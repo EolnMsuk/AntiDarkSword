@@ -1,0 +1,83 @@
+name: Compile & Release Tweak
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Theos Environment
+        uses: Randomblock1/theos-action@v1
+        with:
+          theos-sdks: 'https://github.com/theos/sdks'
+
+      - name: Fix Script Permissions
+        run: |
+          chmod +x layout/DEBIAN/prerm || true
+          chmod +x layout/DEBIAN/postinst || true
+
+      - name: Extract Tweak Version
+        id: get_version
+        run: |
+          VERSION=$(grep -i '^Version:' control | awk '{print $2}')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Prepare Output Directory
+        run: mkdir -p output
+
+      - name: Compile Rootful
+        run: |
+          make clean
+          rm -rf packages/*
+          # The custom Makefile internal-stage handles dyld patching now
+          make package FINALPACKAGE=1
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm.deb
+
+      - name: Compile Rootless
+        run: |
+          make clean
+          rm -rf packages/*
+          # The custom Makefile internal-stage handles dyld patching now
+          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME=rootless
+          mv packages/*.deb output/com.eolnmsuk.antidarksword_${{ env.VERSION }}_iphoneos-arm64.deb
+
+      - name: Compile TrollFools Dylib
+        run: |
+          cd AntiDarkSwordTF
+          make clean ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:13.0"
+          make FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:13.0"
+          DYLIB=$(find .theos/obj -name "AntiDarkSword*.dylib" | head -1)
+          cp "$DYLIB" ../output/AntiDarkSword_${{ env.VERSION }}_TrollFools.dylib
+
+      - name: Upload All Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntiDarkSword-Packages
+          path: output/*
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "AntiDarkSword v${{ env.VERSION }} (Build #${{ github.run_number }})"
+          body: |
+            Automated builds of AntiDarkSword v${{ env.VERSION }}.
+
+            | File | For |
+            |---|---|
+            | `*_iphoneos-arm64.deb` | Rootless jailbreaks (Dopamine, palera1n, meowbrek2) |
+            | `*_iphoneos-arm.deb` | Rootful jailbreaks (checkra1n, Taurine, unc0ver) |
+            | `*_TrollFools.dylib` | TrollStore / TrollFools (no jailbreak required) |
+          files: output/*
+          draft: true
+          prerelease: false
+          make_latest: false

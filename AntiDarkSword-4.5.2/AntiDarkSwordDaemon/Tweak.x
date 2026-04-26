@@ -3,22 +3,25 @@
 #import <CoreFoundation/CoreFoundation.h>
 #include <stdatomic.h>
 #include <sys/stat.h>
-#include <sys/sysctl.h>
-#include <sys/time.h>
 #include <unistd.h>
-#include <stdlib.h>
 #include <time.h>
 #include <substrate.h>
 
 #import "../ADSLogging.h"
 
+// =========================================================
+// PRIVATE INTERFACES — iMessage transfer blocking
+// =========================================================
 @interface IMFileTransfer : NSObject
 - (BOOL)isAutoDownloadable;
 - (BOOL)canAutoDownload;
 @end
 
+// Pure C check — safe for %ctor
 static BOOL isRootlessJB = NO;
 
+// Returns the correct prefs path for the active jailbreak type.
+// Relies on isRootlessJB being set in %ctor before first use.
 static NSString *ads_prefs_path(void) {
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
@@ -61,13 +64,16 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 }
 
 static void loadPrefs() {
+    // CAS gate — same pattern as the UI tweak.
+    // reloadDaemonPrefsNotification resets prefsLoaded before calling back in.
     BOOL expected = NO;
     if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
 
     NSDictionary *prefs = nil;
     NSString *prefsFilePath = ads_prefs_path();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath])
+    if ([[NSFileManager defaultManager] fileExistsAtPath:prefsFilePath]) {
         prefs = [NSDictionary dictionaryWithContentsOfFile:prefsFilePath];
+    }
 
     if (!prefs || ![prefs isKindOfClass:[NSDictionary class]]) {
         CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
@@ -87,12 +93,9 @@ static void loadPrefs() {
 
     if (prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         parseRestrictedApps(prefs, restrictedAppsArray);
-        globalTweakEnabled       = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]
-                                   ? [prefs[@"enabled"] boolValue] : NO;
-        globalDisableIMessageDL  = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)]
-                                   ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
-        autoProtectLevel         = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]
-                                   ? [prefs[@"autoProtectLevel"] integerValue] : 1;
+        globalTweakEnabled       = [prefs[@"enabled"] respondsToSelector:@selector(boolValue)]               ? [prefs[@"enabled"] boolValue]               : NO;
+        globalDisableIMessageDL  = [prefs[@"globalDisableIMessageDL"] respondsToSelector:@selector(boolValue)] ? [prefs[@"globalDisableIMessageDL"] boolValue] : NO;
+        autoProtectLevel         = [prefs[@"autoProtectLevel"] respondsToSelector:@selector(integerValue)]    ? [prefs[@"autoProtectLevel"] integerValue]    : 1;
 
         id customDaemonIDsRaw = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"];
         if ([customDaemonIDsRaw isKindOfClass:[NSArray class]]) activeCustomDaemonIDs = customDaemonIDsRaw;
@@ -107,6 +110,7 @@ static void loadPrefs() {
     NSString *matchedID   = nil;
     NSString *targetsToCheck[] = { bundleID, processName };
 
+    // Check custom / manually-added daemon IDs first
     for (int i = 0; i < 2; i++) {
         NSString *target = targetsToCheck[i];
         if (!target) continue;
@@ -117,6 +121,9 @@ static void loadPrefs() {
         }
     }
 
+    // Auto-protection tier matching — only tier3 daemon IDs are ever present in
+    // processes the daemon plist injects into. Tier1/2 UIKit app IDs are handled
+    // exclusively by AntiDarkSwordUI and have no role here.
     if (!isTargetRestricted && globalTweakEnabled) {
         NSArray *tier3 = @[
             @"com.apple.imagent",             @"imagent",
@@ -125,8 +132,11 @@ static void loadPrefs() {
             @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"
         ];
 
-        // Cross-alias check: disabling "apsd" via UI stores the short name, but the process
-        // may first report its bundleID "com.apple.apsd" — both aliases must be checked.
+        // A daemon is disabled if ANY of its known aliases (short process name OR
+        // bundle-ID prefix) appears in disabledPresetRules. Without this cross-alias
+        // check, disabling "apsd" via the UI (which stores the short name) would not
+        // suppress the hook when the process reports its bundleID "com.apple.apsd"
+        // first in the targetsToCheck loop.
         BOOL isDisabledByUser = NO;
         for (int i = 0; i < 2; i++) {
             if (targetsToCheck[i] && [disabledPresetRules containsObject:targetsToCheck[i]]) {
@@ -139,6 +149,7 @@ static void loadPrefs() {
             for (int i = 0; i < 2; i++) {
                 NSString *target = targetsToCheck[i];
                 if (!target) continue;
+
                 if (autoProtectLevel >= 3 && [tier3 containsObject:target]) {
                     isTargetRestricted = YES;
                     matchedID = target;
@@ -150,14 +161,16 @@ static void loadPrefs() {
 
     currentProcessRestricted = (globalTweakEnabled && isTargetRestricted);
 
+    // Corellium decoy: only active at level 3+ (currentProcessRestricted requires a tier3 match)
     BOOL decoyPref = (prefs && [prefs[@"corelliumDecoyEnabled"] respondsToSelector:@selector(boolValue)])
                      ? [prefs[@"corelliumDecoyEnabled"] boolValue] : NO;
     globalDecoyEnabled = (globalTweakEnabled && decoyPref && currentProcessRestricted);
     countersEnabled    = (prefs && [prefs[@"countersEnabled"] respondsToSelector:@selector(boolValue)])
                          ? [prefs[@"countersEnabled"] boolValue] : NO;
 
-    // identityservicesd/apsd: Corellium spoof only — IMCore not guaranteed to load there,
-    // so the IMFileTransfer hook simply won't fire; safe to include in tier3.
+    // iMessage auto-download blocking applies to imagent and IMDPersistenceAgent by default.
+    // identityservicesd / apsd are included via tier3 for Corellium spoofing only;
+    // IMCore is not guaranteed to load there so the hook simply won't fire — safe.
     disableIMessageDL = NO;
     if (matchedID) {
         if ([matchedID isEqualToString:@"com.apple.imagent"]             ||
@@ -168,6 +181,7 @@ static void loadPrefs() {
         }
     }
 
+    // Per-target rule override from preferences
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
         NSDictionary *appRules = prefs[dictKey];
@@ -190,6 +204,10 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
     loadPrefs();
 }
 
+// =========================================================
+// iMESSAGE ZERO-CLICK MITIGATIONS
+// =========================================================
+
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
     if (applyDisableIMessageDL) {
@@ -208,20 +226,38 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
 }
 %end
 
+// =========================================================
+// CORELLIUM PROBE COUNTER
+// Debounced — collapses the rapid access+stat+lstat burst
+// that a single probe event generates into one count.
+// Fires for both rootless (spoof path) and rootful (real
+// binary present, but we still detect the probe call).
+// =========================================================
+
 static void ads_increment_probe_counter(void) {
     if (!countersEnabled) return;
     time_t now = time(NULL);
     time_t prev = atomic_load(&lastProbeTime);
     if (now - prev < 2) return;
-    // CAS collapses the rapid access+stat+lstat burst from a single probe into one count,
-    // even before the async block has executed.
+    // CAS here — synchronous, before dispatch — so rapid probe bursts are
+    // collapsed even if the async block hasn't run yet.
     if (!atomic_compare_exchange_strong(&lastProbeTime, &prev, now)) return;
 
-    // Async dispatch on a serial queue prevents deadlock: this fires inside POSIX hooks called
-    // from apsd, which calls cfprefsd synchronously. Calling CFPreferences here on the same
-    // thread creates an apsd→cfprefsd→apsd cycle that blocks push notification delivery.
-    // CFPreferencesSynchronize (not CFPreferencesAppSynchronize) targets kCFPreferencesAnyHost
-    // to match the host key used by SetValue/CopyValue, ensuring the value reaches the plist.
+    // All CFPreferences calls are dispatched async on a serial queue for two reasons:
+    //
+    // 1. DEADLOCK PREVENTION: this function is called from inside POSIX hooks
+    //    (access/stat/lstat) that fire within apsd. apsd itself calls cfprefsd
+    //    synchronously for APNs configuration. Calling CFPreferences here on the
+    //    same thread would make apsd wait on cfprefsd while cfprefsd waits on apsd
+    //    → deadlock → push notification delivery fails → no haptics, sounds, or
+    //    incoming call/video alerts.
+    //
+    // 2. LAYER MISMATCH FIX: CFPreferencesAppSynchronize implicitly targets
+    //    kCFPreferencesCurrentHost, but SetValue/CopyValue use kCFPreferencesAnyHost.
+    //    Using CFPreferencesSynchronize with the matching user/host pair below
+    //    ensures the written value is actually flushed to the plist file that both
+    //    loadPrefs() (dictionaryWithContentsOfFile:) and Settings.app (NSUserDefaults
+    //    suite) read from.
     if (!ads_counter_queue) return;
     dispatch_async(ads_counter_queue, ^{
         CFPropertyListRef val = CFPreferencesCopyValue(
@@ -243,14 +279,14 @@ static void ads_increment_probe_counter(void) {
             kCFPreferencesCurrentUser,
             kCFPreferencesAnyHost);
         CFRelease(newCount);
-        // Flush the any-host layer — must match the user/host pair used by SetValue.
+        // Flush the any-host layer — must match the user/host used by SetValue.
         CFPreferencesSynchronize(
             CFSTR("com.eolnmsuk.antidarkswordprefs"),
             kCFPreferencesCurrentUser,
             kCFPreferencesAnyHost);
 
-        // Separate notification so Settings.app refreshes the counter cell without
-        // triggering a full prefs reload across all other tweaks.
+        // Separate notification so Settings.app refreshes the counter cell
+        // without triggering a full prefs reload in all other tweaks.
         CFNotificationCenterPostNotification(
             CFNotificationCenterGetDarwinNotifyCenter(),
             CFSTR("com.eolnmsuk.antidarkswordprefs/counter"),
@@ -260,122 +296,21 @@ static void ads_increment_probe_counter(void) {
     });
 }
 
-static int (*orig_sysctl)(int *, u_int, void *, size_t *, void *, size_t);
-static int (*orig_sysctlbyname)(const char *, void *, size_t *, void *, size_t);
-
-static const char     kADSSpoofModel[]   = "iPhone15,2";
-// kern.osversion consistent with a real iPhone 14 Pro Max (iPhone15,2) running iOS 17.2.
-static const char     kADSSpoofOSVersion[] = "21C62";
-static struct timeval ads_spoofed_boottime;
-
-// Thread-local re-entrancy guard: GCD queries sysctl (e.g. hw.ncpu) during dispatch_async
-// enqueue on the same thread. Without this, ads_increment_probe_counter → dispatch_async
-// → sysctl → hook → dispatch_async → ... causes a stack overflow.
-static __thread BOOL _ads_sysctl_active = NO;
-
-// Two-pass sysctl contract:
-//   pass 1 — oldp == NULL: caller queries required size; set *oldlenp, return 0.
-//   pass 2 — oldp != NULL: caller supplies buffer of *oldlenp bytes; validate before writing.
-// Writing without validating *oldlenp corrupts the caller's heap/stack.
-static int ads_spoof_bytes(const void *src, size_t required,
-                           void *oldp, size_t *oldlenp) {
-    if (oldp) {
-        size_t avail = oldlenp ? *oldlenp : 0;
-        if (avail < required) {
-            if (oldlenp) *oldlenp = required;
-            errno = ENOMEM;
-            return -1;
-        }
-        memcpy(oldp, src, required);
-    }
-    if (oldlenp) *oldlenp = required;
-    return 0;
-}
-
-int hook_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (_ads_sysctl_active || !globalDecoyEnabled || !name)
-        return orig_sysctlbyname(name, oldp, oldlenp, newp, newlen);
-
-    if (strcmp(name, "hw.model") == 0 || strcmp(name, "hw.machine") == 0) {
-        return ads_spoof_bytes(kADSSpoofModel, sizeof(kADSSpoofModel), oldp, oldlenp);
-    }
-    if (strcmp(name, "hw.cpusubtype") == 0) {
-        static const uint32_t kSubtype = 2; // CPU_SUBTYPE_ARM64E
-        return ads_spoof_bytes(&kSubtype, sizeof(kSubtype), oldp, oldlenp);
-    }
-    if (strcmp(name, "kern.boottime") == 0) {
-        return ads_spoof_bytes(&ads_spoofed_boottime, sizeof(ads_spoofed_boottime), oldp, oldlenp);
-    }
-    // Spoof kern.osversion to match the spoofed model — Corellium may leave a mismatched
-    // build string that fingerprints the VM even when hw.model is patched.
-    if (strcmp(name, "kern.osversion") == 0) {
-        return ads_spoof_bytes(kADSSpoofOSVersion, sizeof(kADSSpoofOSVersion), oldp, oldlenp);
-    }
-    return orig_sysctlbyname(name, oldp, oldlenp, newp, newlen);
-}
-
-int hook_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (_ads_sysctl_active || !globalDecoyEnabled || !name || namelen < 2)
-        return orig_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
-
-    if (name[0] == CTL_HW && (name[1] == HW_MODEL || name[1] == HW_MACHINE)) {
-        return ads_spoof_bytes(kADSSpoofModel, sizeof(kADSSpoofModel), oldp, oldlenp);
-    }
-    if (name[0] == CTL_KERN && name[1] == KERN_BOOTTIME) {
-        return ads_spoof_bytes(&ads_spoofed_boottime, sizeof(ads_spoofed_boottime), oldp, oldlenp);
-    }
-    return orig_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
-}
-
-static char *(*orig_getenv)(const char *name);
-char *hook_getenv(const char *name) {
-    // Corellium sets CORELLIUM_ENV in some configurations; returning NULL makes the
-    // process behave as if it is running on real hardware.
-    if (globalDecoyEnabled && name && strcmp(name, "CORELLIUM_ENV") == 0)
-        return NULL;
-    return orig_getenv(name);
-}
+// =========================================================
+// CORELLIUM HONEYPOT — POSIX FILE PATH SPOOFING
+// Spoofs /usr/libexec/corelliumd for rootless installs so
+// that advanced payloads checking for the Corellium path
+// (at the expected rootful location) see it as present.
+// On rootful the binary IS at that path, no spoof needed.
+// =========================================================
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (!globalDecoyEnabled || !path) return orig_access(path, amode);
-    if (strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) return 0;
     }
-    // Corellium may replace /var/db/uuidtext/ with synthetic content; on a real device
-    // this directory always exists. Return success silently — this path is hit by OSLog
-    // during normal logging and must not feed the probe counter.
-    if (strncmp(path, "/var/db/uuidtext", 16) == 0)
-        return 0;
     return orig_access(path, amode);
-}
-
-// Fills buf with a plausible stat for the decoy corelliumd binary.
-// Timestamps are derived from ads_spoofed_boottime so they are internally
-// consistent: birth ≈ one week before "boot", access ≈ 30 s after "boot".
-// Zero timestamps (epoch) are immediately detectable by any detector that
-// compares st_birthtimespec against system uptime or install history.
-static void ads_fill_corellium_stat(struct stat *buf) {
-    if (!buf) return;
-    memset(buf, 0, sizeof(struct stat));
-    buf->st_dev     = 1;          // root filesystem device
-    buf->st_ino     = 0x00c12a7f; // plausible inode
-    buf->st_mode    = S_IFREG | 0755;
-    buf->st_nlink   = 1;
-    buf->st_uid     = 0;
-    buf->st_gid     = 0;
-    buf->st_size    = 34520;
-    buf->st_blksize = 4096;
-    buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
-
-    // Binary was "installed" one week before boot; last accessed 30 s after boot.
-    time_t installTime = ads_spoofed_boottime.tv_sec - (86400 * 7);
-    time_t accessTime  = ads_spoofed_boottime.tv_sec + 30;
-    buf->st_birthtimespec.tv_sec = installTime;
-    buf->st_ctimespec.tv_sec     = installTime;
-    buf->st_mtimespec.tv_sec     = installTime;
-    buf->st_atimespec.tv_sec     = accessTime;
 }
 
 static int (*orig_stat)(const char *path, struct stat *buf);
@@ -383,7 +318,18 @@ int hook_stat(const char *path, struct stat *buf) {
     if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
-            ads_fill_corellium_stat(buf);
+            if (buf) {
+                memset(buf, 0, sizeof(struct stat));
+                buf->st_dev     = 1;          // root filesystem device
+                buf->st_ino     = 0x00c12a7f; // plausible inode
+                buf->st_mode    = S_IFREG | 0755;
+                buf->st_nlink   = 1;
+                buf->st_uid     = 0;
+                buf->st_gid     = 0;
+                buf->st_size    = 34520;
+                buf->st_blksize = 4096;
+                buf->st_blocks  = 72; // 9 × 4096-byte APFS blocks in 512-byte units
+            }
             return 0;
         }
     }
@@ -395,7 +341,18 @@ int hook_lstat(const char *path, struct stat *buf) {
     if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
-            ads_fill_corellium_stat(buf);
+            if (buf) {
+                memset(buf, 0, sizeof(struct stat));
+                buf->st_dev     = 1;
+                buf->st_ino     = 0x00c12a7f;
+                buf->st_mode    = S_IFREG | 0755;
+                buf->st_nlink   = 1;
+                buf->st_uid     = 0;
+                buf->st_gid     = 0;
+                buf->st_size    = 34520;
+                buf->st_blksize = 4096;
+                buf->st_blocks  = 72;
+            }
             return 0;
         }
     }
@@ -424,7 +381,8 @@ int hook_lstat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
-    // Must be set before %init so NSFileManager hook has the correct value the instant it becomes active.
+    // isRootlessJB must be set before %init so that the NSFileManager hook
+    // has the correct value the instant it becomes active.
     isRootlessJB = (access("/var/jb", F_OK) == 0);
 
     %init;
@@ -444,19 +402,14 @@ int hook_lstat(const char *path, struct stat *buf) {
         CFSTR("com.eolnmsuk.antidarkswordprefs/saved"),
         NULL, CFNotificationSuspensionBehaviorCoalesce);
 
-    // Queue must exist before POSIX hooks install so ads_increment_probe_counter() is safe immediately.
+    // Create the counter queue before installing POSIX hooks so it is ready
+    // the instant any hook fires and calls ads_increment_probe_counter().
     ads_counter_queue = dispatch_queue_create("com.eolnmsuk.ads.counter", DISPATCH_QUEUE_SERIAL);
 
-    // Stable spoofed boot time: 3–4 h before process start, pid-seeded for per-process variation.
-    time_t _t = time(NULL);
-    ads_spoofed_boottime = (struct timeval){ .tv_sec = _t - 10800 - (getpid() % 3600), .tv_usec = 0 };
+    // Hooks check globalDecoyEnabled at call time; install unconditionally
+    // so pref changes take effect immediately without re-hooking.
 
-    // Installed unconditionally; globalDecoyEnabled checked at call time so pref changes
-    // take effect without re-hooking.
-    MSHookFunction((void *)access,       (void *)hook_access,       (void **)&orig_access);
-    MSHookFunction((void *)stat,         (void *)hook_stat,         (void **)&orig_stat);
-    MSHookFunction((void *)lstat,        (void *)hook_lstat,        (void **)&orig_lstat);
-    MSHookFunction((void *)sysctl,       (void *)hook_sysctl,       (void **)&orig_sysctl);
-    MSHookFunction((void *)sysctlbyname, (void *)hook_sysctlbyname, (void **)&orig_sysctlbyname);
-    MSHookFunction((void *)getenv,       (void *)hook_getenv,       (void **)&orig_getenv);
+    MSHookFunction((void *)access, (void *)hook_access, (void **)&orig_access);
+    MSHookFunction((void *)stat,   (void *)hook_stat,   (void **)&orig_stat);
+    MSHookFunction((void *)lstat,  (void *)hook_lstat,  (void **)&orig_lstat);
 }
