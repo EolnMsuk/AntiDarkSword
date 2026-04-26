@@ -113,6 +113,13 @@ static inline NSString *ads_root_path(NSString *path) {
 - (BOOL)applicationIsInstalled:(NSString *)appIdentifier;
 @end
 
+@interface LSPlugInKitProxy : NSObject
++ (NSArray *)pluginKitProxiesForHostBundleIdentifier:(NSString *)identifier;
+- (NSString *)pluginIdentifier;
+- (NSString *)pluginCategory;
+- (NSString *)localizedName;
+@end
+
 @interface UIImage (Private)
 + (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(int)format scale:(CGFloat)scale;
 @end
@@ -146,6 +153,48 @@ static NSDictionary *ads_daemon_alias_map(void) {
     static NSDictionary *map; static dispatch_once_t once;
     dispatch_once(&once, ^{ map = @{ @"imagent": @"com.apple.imagent", @"IMDPersistenceAgent": @"com.apple.IMDPersistenceAgent", @"apsd": @"com.apple.apsd", @"identityservicesd": @"com.apple.identityservicesd" }; });
     return map;
+}
+
+// Security-relevant extension point categories.
+// NSEs and notification content extensions receive attachment payloads before user interaction.
+// Share extensions accept arbitrary content from the share sheet.
+// iMessage app extensions run in the Messages compose/view context.
+static NSSet *ads_relevant_plugin_categories(void) {
+    static NSSet *s; static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        s = [NSSet setWithObjects:
+            @"com.apple.usernotifications.service",
+            @"com.apple.usernotifications.content-extension",
+            @"com.apple.share-services",
+            @"com.apple.message-payload-provider",
+            nil];
+    });
+    return s;
+}
+
+// Returns an array of @{bundleID, category, name} dicts for security-relevant plugins of parentID.
+static NSArray<NSDictionary *> *ads_plugins_for_bundle_id(NSString *parentID) {
+    if (!parentID.length) return @[];
+    NSMutableArray *result = [NSMutableArray array];
+    @try {
+        Class cls = NSClassFromString(@"LSPlugInKitProxy");
+        if (!cls || ![cls respondsToSelector:@selector(pluginKitProxiesForHostBundleIdentifier:)]) return @[];
+        NSArray *proxies = [cls pluginKitProxiesForHostBundleIdentifier:parentID];
+        NSSet *relevant  = ads_relevant_plugin_categories();
+        for (LSPlugInKitProxy *proxy in proxies) {
+            @try {
+                NSString *category   = [proxy pluginCategory];
+                if (![relevant containsObject:category]) continue;
+                NSString *identifier = [proxy pluginIdentifier];
+                if (!identifier.length) continue;
+                NSString *name = nil;
+                @try { name = [proxy localizedName]; } @catch (__unused id) {}
+                if (!name.length) name = identifier;
+                [result addObject:@{@"bundleID": identifier, @"category": category, @"name": name}];
+            } @catch (__unused NSException *e) {}
+        }
+    } @catch (__unused NSException *e) {}
+    return [result copy];
 }
 
 static void ProbeCounterNotification(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
@@ -448,7 +497,12 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     if ([featureKey isEqualToString:@"disableJIT15"]) return !isIOS16 && !isDaemon;
     if ([featureKey isEqualToString:@"disableJS"] || [featureKey isEqualToString:@"disableRTC"] || [featureKey isEqualToString:@"disableMedia"] || [featureKey isEqualToString:@"disableFileAccess"]) return !isDaemon;
     if ([featureKey isEqualToString:@"blockRemoteContent"]) return !isDaemon;
-    if ([featureKey isEqualToString:@"blockRiskyAttachments"]) return isMessageApp || [targetID isEqualToString:@"com.apple.mobilemail"] || [targetID isEqualToString:@"com.apple.MailCompositionService"] || [targetID hasPrefix:@"com.google.Gmail"] || [targetID isEqualToString:@"com.microsoft.Office.Outlook"] || [targetID isEqualToString:@"ch.protonmail.protonmail"];
+    if ([featureKey isEqualToString:@"blockRiskyAttachments"]) {
+        if (isMessageApp || [targetID isEqualToString:@"com.apple.mobilemail"] || [targetID isEqualToString:@"com.apple.MailCompositionService"] || [targetID hasPrefix:@"com.google.Gmail"] || [targetID isEqualToString:@"com.microsoft.Office.Outlook"] || [targetID isEqualToString:@"ch.protonmail.protonmail"]) return YES;
+        // Also applicable to extension processes that receive notification payloads or share content.
+        if ([targetID containsString:@"NotificationService"] || [targetID containsString:@"ShareExtension"] || [targetID containsString:@".share."]) return YES;
+        return NO;
+    }
     return YES;
 }
 - (void)setSpecifier:(PSSpecifier *)specifier {
@@ -496,6 +550,47 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
             } else { [spec setProperty:@NO forKey:@"enabled"]; }
             [specs addObject:spec];
         }
+
+        // App Plugins — enumerate security-relevant extension processes for this app.
+        // Each plugin cell pushes a nested AntiDarkSwordAppController for the plugin bundle ID,
+        // letting the user configure per-plugin rules independently of the parent app.
+        NSArray<NSDictionary *> *plugins = ads_plugins_for_bundle_id(self.targetID);
+        if (plugins.count > 0) {
+            PSSpecifier *pluginGroup = [PSSpecifier preferenceSpecifierNamed:@"App Plugins"
+                target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
+            [pluginGroup setProperty:@"Security rules for this app's extension processes. Plugins inherit the parent app's rules unless overridden here."
+                             forKey:@"footerText"];
+            [specs addObject:pluginGroup];
+
+            static NSDictionary *categoryLabels;
+            static dispatch_once_t catOnce;
+            dispatch_once(&catOnce, ^{
+                categoryLabels = @{
+                    @"com.apple.usernotifications.service":          @"Notification Service",
+                    @"com.apple.usernotifications.content-extension":@"Notification Content",
+                    @"com.apple.share-services":                     @"Share Extension",
+                    @"com.apple.message-payload-provider":           @"iMessage App Extension"
+                };
+            });
+
+            AntiDarkSwordPrefsRootListController *rootCtrl = [[AntiDarkSwordPrefsRootListController alloc] init];
+            for (NSDictionary *plugin in plugins) {
+                NSString *pluginBundleID = plugin[@"bundleID"];
+                NSString *category       = plugin[@"category"];
+                NSString *catLabel       = categoryLabels[category] ?: category;
+                NSString *displayName    = [NSString stringWithFormat:@"%@ (%@)", plugin[@"name"], catLabel];
+
+                PSSpecifier *pspec = [PSSpecifier preferenceSpecifierNamed:displayName
+                    target:self set:nil get:nil detail:[AntiDarkSwordAppController class]
+                    cell:PSLinkCell edit:nil];
+                [pspec setProperty:pluginBundleID forKey:@"targetID"];
+                [pspec setProperty:@(1) forKey:@"ruleType"];
+                UIImage *icon = [rootCtrl iconForTargetID:pluginBundleID];
+                if (icon) [pspec setProperty:icon forKey:@"iconImage"];
+                [specs addObject:pspec];
+            }
+        }
+
         _specifiers = [specs copy];
     }
     return _specifiers;
@@ -653,6 +748,57 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
         [defaults setObject:rules forKey:dictKey];
     }
+    // Populate default rules for security-relevant plugins of all protected parent apps.
+    // Plugin defaults follow the parent's risk profile: NSEs and notification content extensions
+    // are attachment delivery vectors; share extensions receive arbitrary share-sheet content.
+    for (NSString *parentID in expandedTargets) {
+        NSArray<NSDictionary *> *plugins = ads_plugins_for_bundle_id(parentID);
+        for (NSDictionary *plugin in plugins) {
+            NSString *pluginBundleID = plugin[@"bundleID"];
+            NSString *category       = plugin[@"category"];
+            NSString *pluginKey      = [NSString stringWithFormat:@"TargetRules_%@", pluginBundleID];
+            if (!force && [defaults objectForKey:pluginKey]) continue;
+
+            NSMutableDictionary *pluginRules = [NSMutableDictionary dictionary];
+            // JIT rules match non-daemon apps; extensions can host WKWebViews.
+            pluginRules[@"disableJIT"]        = (isIOS16) ? @YES : @NO;
+            pluginRules[@"disableJIT15"]      = (!isIOS16) ? @YES : @NO;
+            pluginRules[@"disableJS"]         = (!isIOS16) ? @YES : @NO;
+            pluginRules[@"disableMedia"]      = @NO;
+            pluginRules[@"disableRTC"]        = @NO;
+            pluginRules[@"disableFileAccess"] = @NO;
+            // IMFileTransfer hook is Messages UI-layer only; never applicable to extension processes.
+            pluginRules[@"disableIMessageDL"] = @NO;
+            // UA spoofing is not useful in extension contexts (no visible browser UA surface).
+            pluginRules[@"spoofUA"]           = @NO;
+            pluginRules[@"blockRemoteContent"]    = @NO;
+            pluginRules[@"blockRiskyAttachments"] = @NO;
+
+            BOOL parentIsMessagingOrMail = [msgAndMail containsObject:parentID] ||
+                                           [parentID isEqualToString:@"com.apple.mobilemail"];
+
+            if ([category isEqualToString:@"com.apple.usernotifications.service"] ||
+                [category isEqualToString:@"com.apple.usernotifications.content-extension"]) {
+                // NSEs and notification content extensions are the primary silent-delivery surface.
+                // Block remote content unconditionally; block risky attachments for messaging/mail parents.
+                pluginRules[@"blockRemoteContent"]    = @YES;
+                pluginRules[@"blockRiskyAttachments"] = parentIsMessagingOrMail ? @YES : @NO;
+                pluginRules[@"disableMedia"]          = parentIsMessagingOrMail ? @YES : @NO;
+            } else if ([category isEqualToString:@"com.apple.share-services"]) {
+                // Share extensions for messaging/mail apps receive user-forwarded content
+                // which may include exploit-bearing attachments or remote-loading HTML.
+                pluginRules[@"blockRemoteContent"]    = parentIsMessagingOrMail ? @YES : @NO;
+                pluginRules[@"blockRiskyAttachments"] = parentIsMessagingOrMail ? @YES : @NO;
+            } else if ([category isEqualToString:@"com.apple.message-payload-provider"]) {
+                // iMessage app extensions run inside the Messages compose/view context.
+                pluginRules[@"blockRemoteContent"] = @YES;
+            }
+
+            [defaults setObject:pluginRules forKey:pluginKey];
+            ads_cfwrite(pluginKey, pluginRules);
+        }
+    }
+
     [defaults setBool:YES forKey:@"hasInitializedDefaultRules"]; [defaults synchronize];
 }
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {

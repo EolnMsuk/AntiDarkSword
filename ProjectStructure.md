@@ -1,6 +1,6 @@
 # ProjectStructure.md
 
-AntiDarkSword ⛨: iOS tweak and TrollStore dylib that hardens jailbroken devices against WebKit RCE and iMessage zero-click exploits. Blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
+AntiDarkSword ⛨: An iOS jailbreak tweak and TrollStore dylib that hardens vulnerable iOS devices against WebKit RCE (DarkSword / Coruna) and iMessage zero-click (BLASTPASS) exploits. Selectively blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
 
 Annotated file tree:
 
@@ -58,10 +58,16 @@ AntiDarkSword/
 │   │                                     # WKContentRuleList remote-content blocking, risky attachment preview
 │   │                                     # suppression (HEIC/WebP/PDF), and UA spoofing with Client Hints injection.
 │   │                                     # Generation-based UCC dedup guard (adsUAGeneration) allows re-injection
-│   │                                     # after UA pref changes without UCC dealloc. NSE bundle IDs
-│   │                                     # (com.apple.messages.NotificationServiceExtension,
-│   │                                     # com.apple.MailNotificationServiceExtension) exempted from .appex fast-exit
-│   │                                     # and added to tier1 + allowedServices.
+│   │                                     # after UA pref changes without UCC dealloc.
+│   │                                     # %ctor extension gate: Apple NSEs pass unconditionally; all other .appex
+│   │                                     # processes pass only if the parent app is in tier1/tier2 or is a manual
+│   │                                     # override. ads_parent_bundle_id_for_appex() resolves parent bundle ID via
+│   │                                     # path strip (.appex→PlugIns→.app). Tier arrays in ads_tier1_ids() /
+│   │                                     # ads_tier2_ids() (dispatch_once) shared by %ctor gate and loadPrefs().
+│   │                                     # loadPrefs() uses a three-slot targetsToCheck[] (bundleID, processName,
+│   │                                     # parentBundleID); prefers TargetRules_{extensionBundleID} over
+│   │                                     # TargetRules_{parentBundleID}; suppresses disableIMessageDL for all
+│   │                                     # extension processes (IMFileTransfer is Messages UI-layer only).
 │   └── README.md                         # Subproject notes for AntiDarkSwordUI.
 │
 ├── AntiDarkSwordTF/
@@ -74,6 +80,9 @@ AntiDarkSword/
 │   │                                     # three-finger double-tap gesture via %hook UIWindow makeKeyAndVisible,
 │   │                                     # associated-object UCC dedup guard, and a three-tier prefs storage
 │   │                                     # fallback (system plist → CFPrefs → NSUserDefaults suite).
+│   │                                     # ads_parent_bundle_id_for_appex() resolves parent bundle ID for extension
+│   │                                     # processes; loadPrefs() falls back to TargetRules_{parentBundleID} when
+│   │                                     # no plugin-specific rules exist (supports TrollFools .appex injection).
 │   │                                     # No daemon hooks or JSEvaluateScript C hook.
 │   └── README.md                         # Subproject notes for AntiDarkSwordTF.
 │
@@ -99,6 +108,14 @@ AntiDarkSword/
 │   │                                     # bundle ID / process name entry, AltList app picker integration, daemon
 │   │                                     # toggle subcontroller, and global override switches. Posts Darwin
 │   │                                     # com.eolnmsuk.antidarkswordprefs/saved on every save.
+│   │                                     # ads_plugins_for_bundle_id() enumerates security-relevant extension
+│   │                                     # point categories via LSPlugInKitProxy. AntiDarkSwordAppController
+│   │                                     # appends an "App Plugins" section with per-plugin disclosure cells
+│   │                                     # (each pushes a nested AntiDarkSwordAppController for the plugin
+│   │                                     # bundle ID). populateDefaultRulesForLevel:force: writes plugin-specific
+│   │                                     # defaults (NSEs: blockRemoteContent/blockRiskyAttachments; share
+│   │                                     # extensions: blockRemoteContent/blockRiskyAttachments for msg/mail
+│   │                                     # parents; iMessage extensions: blockRemoteContent).
 │   ├── ADSCreditsMenu.m                  # PSListController subclass rendering the Credits screen (authors,
 │   │                                     # acknowledgements, links). Easter-egg SKView mini-game launcher;
 │   │                                     # private _table KVC access wrapped in @try/@catch for forward-compat.

@@ -44,11 +44,74 @@
 @end
 
 static BOOL isRootlessJB = NO;
+// Set in %ctor when the current process is an app extension; holds the parent app bundle ID.
+static NSString *currentExtensionParentBundleID = nil;
 
 static NSString *ads_prefs_path(void) {
     return isRootlessJB
         ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+}
+
+// Resolves the parent app bundle ID for an app extension process.
+// Extension path pattern: …/Parent.app/PlugIns/Extension.appex
+static NSString *ads_parent_bundle_id_for_appex(void) {
+    NSString *p = [[NSBundle mainBundle] bundlePath];
+    if (![p hasSuffix:@".appex"]) return nil;
+    NSString *pluginsDir = [p stringByDeletingLastPathComponent];
+    if (![[pluginsDir lastPathComponent] isEqualToString:@"PlugIns"]) return nil;
+    NSString *parentApp = [pluginsDir stringByDeletingLastPathComponent];
+    if (![parentApp hasSuffix:@".app"]) return nil;
+    return [[NSBundle bundleWithPath:parentApp] bundleIdentifier];
+}
+
+// Shared tier arrays — used by both loadPrefs() and the %ctor extension gate to avoid duplication.
+static NSArray *ads_tier1_ids(void) {
+    static NSArray *t; static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        t = @[
+            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
+            @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news",
+            @"com.apple.podcasts", @"com.apple.stocks",
+            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
+            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
+            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
+            @"com.apple.messages.NotificationServiceExtension",
+            @"com.apple.MailNotificationServiceExtension"
+        ];
+    });
+    return t;
+}
+
+static NSArray *ads_tier2_ids(void) {
+    static NSArray *t; static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        t = @[
+            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
+            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
+            @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
+            @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
+            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile",
+            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser",
+            @"com.duckduckgo.mobile.ios", @"pinterest", @"com.tumblr.tumblr",
+            @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram",
+            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit",
+            @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini",
+            @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
+            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
+            @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
+            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
+            @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
+            @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
+            @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
+            @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile",
+            @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile",
+            @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone",
+            @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
+            @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
+        ];
+    });
+    return t;
 }
 
 // Non-atomic globals are only written inside loadPrefs() under the prefsLoaded CAS gate
@@ -375,16 +438,20 @@ static void loadPrefs() {
         }
     }
 
-    NSString *bundleID    = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSString *processName = [[NSProcessInfo processInfo] processName] ?: @"";
-    BOOL isTargetRestricted = NO;
-    BOOL isPresetMatch      = NO;
-    NSString *matchedID   = nil;
-    NSString *targetsToCheck[] = { bundleID, processName };
+    NSString *bundleID       = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    NSString *processName    = [[NSProcessInfo processInfo] processName] ?: @"";
+    // When running inside an app extension, parentBundleID is the host app; used for tier
+    // matching and as a fallback when the plugin has no plugin-specific TargetRules_ entry.
+    NSString *parentBundleID = currentExtensionParentBundleID ?: @"";
+    BOOL isTargetRestricted  = NO;
+    BOOL isPresetMatch       = NO;
+    NSString *matchedID      = nil;
+    // Three-slot check: own bundle ID, process name, then parent app (for extension processes).
+    NSString *targetsToCheck[] = { bundleID, processName, parentBundleID };
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         NSString *target = targetsToCheck[i];
-        if (!target) continue;
+        if (!target || target.length == 0) continue;
         if ([activeCustomDaemonIDs containsObject:target] || [restrictedAppsArray containsObject:target]) {
             isTargetRestricted = YES;
             matchedID = target;
@@ -393,46 +460,12 @@ static void loadPrefs() {
     }
 
     if (!isTargetRestricted && globalTweakEnabled) {
-        NSArray *tier1 = @[
-            @"com.apple.mobilesafari", @"com.apple.MobileSMS", @"com.apple.mobilemail",
-            @"com.apple.mobilenotes", @"com.apple.iBooks", @"com.apple.news",
-            @"com.apple.podcasts", @"com.apple.stocks",
-            @"com.apple.SafariViewService", @"com.apple.MailCompositionService",
-            @"com.apple.iMessageAppsViewService", @"com.apple.ActivityMessagesApp",
-            @"com.apple.quicklook.QuickLookUIService", @"com.apple.QuickLookDaemon",
-            // Notification Service Extensions: receive rich notifications before the user
-            // opens the app — a silent-delivery zero-click attack surface on iOS 15+.
-            @"com.apple.messages.NotificationServiceExtension",
-            @"com.apple.MailNotificationServiceExtension"
-        ];
-        NSArray *tier2 = @[
-            @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram",
-            @"ch.protonmail.protonmail", @"org.whispersystems.signal", @"ph.telegra.Telegraph",
-            @"com.facebook.Messenger", @"com.toyopagroup.picaboo", @"com.tinyspeck.chatlyio",
-            @"com.microsoft.skype.teams", @"com.tencent.xin", @"com.viber", @"jp.naver.line",
-            @"net.whatsapp.WhatsApp", @"com.hammerandchisel.discord", @"com.google.GoogleMobile",
-            @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser",
-            @"com.duckduckgo.mobile.ios", @"pinterest", @"com.tumblr.tumblr",
-            @"com.facebook.Facebook", @"com.atebits.Tweetie2", @"com.burbn.instagram",
-            @"com.zhiliaoapp.musically", @"com.linkedin.LinkedIn", @"com.reddit.Reddit",
-            @"com.google.ios.youtube", @"tv.twitch", @"com.google.gemini",
-            @"com.openai.chat", @"com.deepseek.chat", @"com.github.stormbreaker.prod",
-            @"org.coolstar.SileoStore", @"xyz.willy.Zebra", @"com.tigisoftware.Filza",
-            @"com.squareup.cash", @"net.kortina.labs.Venmo", @"com.yourcompany.PPClient",
-            @"com.robinhood.release.Robinhood", @"com.vilcsak.bitcoin2", @"com.sixdays.trust",
-            @"io.metamask.MetaMask", @"app.phantom.phantom", @"com.chase",
-            @"com.bankofamerica.BofAMobileBanking", @"com.wellsfargo.net.mobilebanking",
-            @"com.citi.citimobile", @"com.capitalone.enterprisemobilebanking",
-            @"com.americanexpress.amelia", @"com.fidelity.iphone", @"com.schwab.mobile",
-            @"com.etrade.mobilepro.iphone", @"com.discoverfinancial.mobile",
-            @"com.usbank.mobilebanking", @"com.monzo.ios", @"com.revolut.iphone",
-            @"com.binance.dev", @"com.kraken.invest", @"com.barclays.ios.bmb",
-            @"com.ally.auto", @"com.navyfederal.navyfederal.mydata", @"com.1debit.ChimeProdApp"
-        ];
+        NSArray *tier1 = ads_tier1_ids();
+        NSArray *tier2 = ads_tier2_ids();
         // Tier 3 handled exclusively by AntiDarkSwordDaemon; preserved here to maintain the tier loop structure.
         NSArray *tier3 = @[];
 
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < 3; i++) {
             NSString *target = targetsToCheck[i];
             if (!target || target.length == 0) continue;
 
@@ -509,8 +542,20 @@ static void loadPrefs() {
         }
     }
 
+    // IMFileTransfer hooks are injected into the Messages UI layer only. Extension processes
+    // (share extensions, NSEs, etc.) do not host that class — suppress the preset default.
+    if (parentBundleID.length > 0) disableIMessageDL = NO;
+
     if (currentProcessRestricted && matchedID && prefs && [prefs isKindOfClass:[NSDictionary class]]) {
-        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", matchedID];
+        // For extension processes: check for a plugin-specific TargetRules_ entry first.
+        // If none exists, fall back to the parent app's rules (matchedID = parent bundle ID).
+        NSString *rulesID = matchedID;
+        if (parentBundleID.length > 0 && ![matchedID isEqualToString:bundleID]) {
+            NSString *pluginKey = [NSString stringWithFormat:@"TargetRules_%@", bundleID];
+            if ([prefs[pluginKey] isKindOfClass:[NSDictionary class]])
+                rulesID = bundleID;
+        }
+        NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", rulesID];
         NSDictionary *appRules = prefs[dictKey];
         if (appRules && [appRules isKindOfClass:[NSDictionary class]]) {
             if ([appRules[@"disableJIT"]           respondsToSelector:@selector(boolValue)]) disableJIT           = [appRules[@"disableJIT"] boolValue];
@@ -791,10 +836,29 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     if ([ignored containsObject:processName]) return;
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
-    // Allow specific Notification Service Extensions through the .appex fast-exit.
-    // NSEs receive rich notifications (including attachment payloads) before the user
-    // opens the app, making them a silent zero-click attack surface on iOS 15+.
+
+    // Read prefs early — used by both the extension gate and the manual-override check below.
+    // Falls back to CFPreferences for Roothide installs and fresh installs where the plist
+    // has not yet been flushed to disk.
+    NSDictionary *earlyPrefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
+    if (!earlyPrefs) {
+        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (keyList) {
+            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
+                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            if (dict) earlyPrefs = (__bridge_transfer NSDictionary *)dict;
+            CFRelease(keyList);
+        }
+    }
+
+    // App extension gate: Apple NSEs pass unconditionally (zero-click primary surface).
+    // All other extensions require the parent app to be a protected target — share extensions,
+    // notification content extensions, and iMessage app extensions of tier1/tier2 apps carry
+    // the same web-content and attachment attack surface as their parent.
     if ([path hasSuffix:@".appex"]) {
+        currentExtensionParentBundleID = ads_parent_bundle_id_for_appex();
+
         static NSArray *allowedNSEBundleIDs;
         static dispatch_once_t nseOnce;
         dispatch_once(&nseOnce, ^{
@@ -803,7 +867,26 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
                 @"com.apple.MailNotificationServiceExtension"
             ];
         });
-        if (![allowedNSEBundleIDs containsObject:bundleID]) return;
+
+        if (![allowedNSEBundleIDs containsObject:bundleID]) {
+            NSString *parentID  = currentExtensionParentBundleID;
+            BOOL parentProtected = NO;
+            if (parentID.length > 0) {
+                NSInteger lvl = [earlyPrefs[@"autoProtectLevel"] integerValue] ?: 1;
+                parentProtected = [ads_tier1_ids() containsObject:parentID] ||
+                                  (lvl >= 2 && [ads_tier2_ids() containsObject:parentID]);
+                if (!parentProtected) {
+                    NSArray *customD = earlyPrefs[@"activeCustomDaemonIDs"] ?: earlyPrefs[@"customDaemonIDs"] ?: @[];
+                    NSString *pKey   = [NSString stringWithFormat:@"restrictedApps-%@", parentID];
+                    id legacyApps    = earlyPrefs[@"restrictedApps"];
+                    parentProtected  =
+                        [customD containsObject:parentID] ||
+                        ([earlyPrefs[pKey] respondsToSelector:@selector(boolValue)] && [earlyPrefs[pKey] boolValue]) ||
+                        ([legacyApps isKindOfClass:[NSDictionary class]] && [legacyApps[parentID] boolValue]);
+                }
+            }
+            if (!parentProtected) return;
+        }
     }
 
     BOOL isUserApp       = [path localizedCaseInsensitiveContainsString:@"/Containers/Bundle/Application/"];
@@ -818,31 +901,17 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     ];
     BOOL isAllowedService = [allowedServices containsObject:bundleID];
 
-    // Reads prefs early to check manual overrides before the full loadPrefs() path.
-    // Falls back to CFPreferences for Roothide installs and fresh installs where the plist
-    // has not yet been flushed to disk.
     BOOL isManualOverride = NO;
-    NSDictionary *prefs = [NSDictionary dictionaryWithContentsOfFile:ads_prefs_path()];
-    if (!prefs) {
-        CFArrayRef keyList = CFPreferencesCopyKeyList(CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                      kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-        if (keyList) {
-            CFDictionaryRef dict = CFPreferencesCopyMultiple(keyList, CFSTR("com.eolnmsuk.antidarkswordprefs"),
-                                                             kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-            if (dict) prefs = (__bridge_transfer NSDictionary *)dict;
-            CFRelease(keyList);
-        }
-    }
-    if (prefs) {
-        NSArray *customDaemons = prefs[@"activeCustomDaemonIDs"] ?: prefs[@"customDaemonIDs"] ?: @[];
+    if (earlyPrefs) {
+        NSArray *customDaemons = earlyPrefs[@"activeCustomDaemonIDs"] ?: earlyPrefs[@"customDaemonIDs"] ?: @[];
         if ([customDaemons containsObject:bundleID] || [customDaemons containsObject:processName])
             isManualOverride = YES;
         if (!isManualOverride && bundleID.length > 0) {
             NSString *prefKey = [NSString stringWithFormat:@"restrictedApps-%@", bundleID];
-            if ([prefs[prefKey] boolValue]) {
+            if ([earlyPrefs[prefKey] respondsToSelector:@selector(boolValue)] && [earlyPrefs[prefKey] boolValue]) {
                 isManualOverride = YES;
             } else {
-                NSDictionary *restrictedApps = prefs[@"restrictedApps"];
+                NSDictionary *restrictedApps = earlyPrefs[@"restrictedApps"];
                 if ([restrictedApps isKindOfClass:[NSDictionary class]] && [restrictedApps[bundleID] boolValue])
                     isManualOverride = YES;
             }

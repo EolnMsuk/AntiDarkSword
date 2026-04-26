@@ -44,6 +44,19 @@ static NSString *ads_prefs_path(void) {
         : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
 }
 
+// Resolves the parent app bundle ID for an app extension process.
+// Extension path pattern: …/Parent.app/PlugIns/Extension.appex
+// Used in loadPrefs() to inherit the parent app's rules when no plugin-specific rules exist.
+static NSString *ads_parent_bundle_id_for_appex(void) {
+    NSString *p = [[NSBundle mainBundle] bundlePath];
+    if (![p hasSuffix:@".appex"]) return nil;
+    NSString *pluginsDir = [p stringByDeletingLastPathComponent];
+    if (![[pluginsDir lastPathComponent] isEqualToString:@"PlugIns"]) return nil;
+    NSString *parentApp = [pluginsDir stringByDeletingLastPathComponent];
+    if (![parentApp hasSuffix:@".app"]) return nil;
+    return [[NSBundle bundleWithPath:parentApp] bundleIdentifier];
+}
+
 static _Atomic BOOL prefsLoaded              = NO;
 static _Atomic BOOL shouldSpoofUA            = NO;
 static _Atomic BOOL applyDisableJIT          = NO;
@@ -257,9 +270,22 @@ static void loadPrefs() {
 
     BOOL isIOS16 = [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16;
 
-    NSString *bundleID = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
-    NSString *dictKey  = [NSString stringWithFormat:@"TargetRules_%@", bundleID];
-    NSDictionary *rules = ([prefs isKindOfClass:[NSDictionary class]]) ? prefs[dictKey] : nil;
+    NSString *bundleID      = [[NSBundle mainBundle] bundleIdentifier] ?: @"";
+    // When running inside an .appex, inherit the parent app's TargetRules_ if the plugin
+    // has no explicit per-plugin rules. TrollFools can be injected per-extension binary
+    // via TrollFools' multi-target support.
+    NSString *parentBundleID = ads_parent_bundle_id_for_appex() ?: @"";
+
+    NSString *dictKey   = [NSString stringWithFormat:@"TargetRules_%@", bundleID];
+    NSDictionary *rules = nil;
+    if ([prefs isKindOfClass:[NSDictionary class]]) {
+        rules = prefs[dictKey];
+        // Plugin has no explicit rules — inherit from parent app if available.
+        if (![rules isKindOfClass:[NSDictionary class]] && parentBundleID.length > 0) {
+            NSString *parentKey = [NSString stringWithFormat:@"TargetRules_%@", parentBundleID];
+            rules = prefs[parentKey];
+        }
+    }
     if (![rules isKindOfClass:[NSDictionary class]]) rules = nil;
 
     // Defaults on first use: UA spoof ON (non-breaking), JIT ON (low breakage),

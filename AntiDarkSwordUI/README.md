@@ -13,7 +13,13 @@ The injection filter (`AntiDarkSwordUI.plist`) targets any process that loads `c
 - **Specific Apple services** — `SafariViewService`, `MailCompositionService`, `iMessageAppsViewService`, `ActivityMessagesApp`, `QuickLookUIService`, `QuickLookDaemon`
 - **Manual overrides** — any bundle ID or process name the user has explicitly added in the custom rules list or app selection screen
 
-App Extensions (`.appex` bundles) are filtered out immediately in `%ctor`, with two exemptions: `com.apple.messages.NotificationServiceExtension` and `com.apple.MailNotificationServiceExtension` are allowed through because they process iMessage and Mail attachment payloads before the user opens the app, making them a silent zero-click attack surface. Known noisy background processes (`cfprefsd`, `Spotlight`, `Preferences`, `Tunnel`, etc.) are also filtered out to avoid unnecessary memory and log overhead.
+App Extensions (`.appex` bundles) are gated in `%ctor` via a parent-aware check rather than a blanket block:
+
+- **Apple NSEs** (`com.apple.messages.NotificationServiceExtension`, `com.apple.MailNotificationServiceExtension`) pass unconditionally — they process iMessage and Mail attachment payloads before the user opens the app, making them a silent zero-click surface.
+- **All other extension types** (share extensions, notification content extensions, iMessage app extensions) pass only if their parent app is a protected target — either in tier1/tier2 or added as a manual override. The parent app bundle ID is resolved by stripping the extension path (`Extension.appex` → `PlugIns/` → `Parent.app`) and reading the parent bundle's `NSBundle.bundleIdentifier`. Extensions of protected parents carry the same web-content and attachment attack surface as the parent app.
+- Extensions of unprotected apps are fast-exited and incur no overhead.
+
+Known noisy background processes (`cfprefsd`, `Spotlight`, `Preferences`, `Tunnel`, etc.) are also filtered out to avoid unnecessary memory and log overhead.
 
 ---
 
@@ -112,7 +118,7 @@ Default behaviour: enabled automatically for messaging and mail apps and QuickLo
 
 ### Process matching
 
-The current process's bundle ID and process name are both checked (in that order) against:
+The current process's bundle ID, process name, and (for extension processes) the parent app bundle ID are checked in that order against:
 
 1. **Custom daemon IDs** (`activeCustomDaemonIDs`) — user-added process names
 2. **Manual app rules** (`restrictedApps`, `restrictedApps-<bundleID>`) — apps enabled via the app selection screen
@@ -129,7 +135,7 @@ Each mitigation flag (`applyDisableJIT`, `applyDisableJS`, etc.) is resolved as:
 global override  OR  (process is restricted  AND  per-app rule is ON)
 ```
 
-Global overrides apply the mitigation to every process the tweak loads into, regardless of the tier or app list. Per-app rules come from `TargetRules_<bundleID>` preference keys, which the settings UI writes when you configure a specific app in the preset rules list or manual rules screen.
+Global overrides apply the mitigation to every process the tweak loads into, regardless of the tier or app list. Per-app rules come from `TargetRules_<bundleID>` preference keys, which the settings UI writes when you configure a specific app in the preset rules list or manual rules screen. For extension processes, `TargetRules_<extensionBundleID>` (plugin-specific, configured via the "App Plugins" sub-menu) takes priority over `TargetRules_<parentBundleID>`; if no plugin-specific entry exists the parent app's rules are inherited.
 
 ### Thread safety
 
