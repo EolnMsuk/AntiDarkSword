@@ -19,6 +19,7 @@ Injected per-app. All mitigations apply only inside the app you injected into.
 | **Block WebGL & WebRTC** | OFF | Disables GPU and peer-connection APIs used by some exploit kits |
 | **Block `file://` Access** | OFF | Prevents local file exfiltration via WebView |
 | **Block Remote Content** | OFF | Blocks all external `http`/`https` resource loads (images, scripts, fonts, media) via `WKContentRuleList`. Strongly recommended for Mail.app — removes the primary zero-click attack surface in HTML email rendering |
+| **Block Risky Attachment Previews** | OFF | Returns `nil` from `CKAttachmentMessagePartChatItem.fullSizeImageURL` for HEIC, HEIF, WebP, and PDF attachments, preventing ImageIO/CoreGraphics from processing attacker-controlled files (FORCEDENTRY and BLASTPASS attack surface) |
 
 ---
 
@@ -66,7 +67,7 @@ There is no Settings.app UI for the TrollFools build. Settings are configured in
 
 The overlay shows:
 - **Enable Protection** master toggle (defaults OFF — tap to activate). The row background is **green** when protection is ON and **red** when OFF, making the active state immediately obvious at a glance.
-- Per-feature toggles for UA spoof, JIT, JS, media, WebRTC, file access, and **Block Remote Content**
+- Per-feature toggles for UA spoof, JIT, JS, media, WebRTC, file access, **Block Remote Content**, and **Block Risky Attachment Previews**
 - **Save & Restart** — writes settings and prompts to restart the app so WebKit picks up the new configuration
 
 > Settings are saved per-app. Each injected app stores its own configuration. If you inject into five apps, each has independent toggle states.

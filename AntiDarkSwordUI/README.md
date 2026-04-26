@@ -13,7 +13,7 @@ The injection filter (`AntiDarkSwordUI.plist`) targets any process that loads `c
 - **Specific Apple services** — `SafariViewService`, `MailCompositionService`, `iMessageAppsViewService`, `ActivityMessagesApp`, `QuickLookUIService`, `QuickLookDaemon`
 - **Manual overrides** — any bundle ID or process name the user has explicitly added in the custom rules list or app selection screen
 
-App Extensions (`.appex` bundles) and known noisy background processes (`cfprefsd`, `Spotlight`, `Preferences`, `Tunnel`, etc.) are filtered out immediately in `%ctor` to avoid unnecessary memory and log overhead.
+App Extensions (`.appex` bundles) are filtered out immediately in `%ctor`, with two exemptions: `com.apple.messages.NotificationServiceExtension` and `com.apple.MailNotificationServiceExtension` are allowed through because they process iMessage and Mail attachment payloads before the user opens the app, making them a silent zero-click attack surface. Known noisy background processes (`cfprefsd`, `Spotlight`, `Preferences`, `Tunnel`, etc.) are also filtered out to avoid unnecessary memory and log overhead.
 
 ---
 
@@ -94,7 +94,15 @@ Hooks `IMFileTransfer` (from IMCore) and `CKAttachmentMessagePartChatItem` (from
 - `IMFileTransfer.canAutoDownload` → `NO`
 - `CKAttachmentMessagePartChatItem._needsPreviewGeneration` → `NO`
 
+When `applyBlockRiskyAttachments` is active, `CKAttachmentMessagePartChatItem.fullSizeImageURL` additionally returns `nil` for attachments with HEIC, HEIF, WebP, or PDF extensions. This prevents the Messages/QuickLook preview pipeline from handing the raw file to ImageIO — a recurring zero-click attack surface (FORCEDENTRY used JBIG2-in-PDF; BLASTPASS used HEIC/WebP). Controlled by the `blockRiskyAttachments` per-app rule; defaults off.
+
 This is a second layer of defense. The daemon tweak hooks the same `IMFileTransfer` methods at the `imagent`/`IMDPersistenceAgent` level before content ever reaches the UI. If the daemon layer is bypassed or not active, these UI-layer hooks are a fallback that stops the attachment from being processed in the UI process.
+
+### Remote Content Blocking
+
+A `WKContentRuleList` rule (identifier `com.eolnmsuk.ads.remoteblock`) blocks all external `http`/`https` resource loads — images, scripts, fonts, and media — from inside WebViews. It is compiled once in `%ctor` asynchronously (WebKit caches the compiled result across launches) and applied per `WKWebView` when `applyBlockRemoteContent` is active.
+
+Default behaviour: enabled automatically for messaging and mail apps and QuickLook services; disabled for browsers and general apps so normal browsing is unaffected. Users can override per-app via the Settings UI or set `globalBlockRemoteContent` to enforce it everywhere.
 
 ---
 
@@ -141,6 +149,8 @@ Hook methods can fire on any thread. All flags that hooks read at call time (`ap
 | `WKWebViewConfiguration -setUserContentController:` | Injects UA script when a new content controller is assigned |
 | `WKWebViewConfiguration -setApplicationNameForUserAgent:` | Clears app name UA suffix |
 | `WKWebpagePreferences -setAllowsContentJavaScript:` | Blocks re-enabling JS via the page preference object |
+| `WKWebpagePreferences -setLockdownModeEnabled:` | Drops calls that try to disable lockdown mode when `applyDisableJIT` is active |
+| `_WKProcessPoolConfiguration -setJITEnabled:` | Drops calls that try to re-enable JIT when `applyDisableJIT` or `applyDisableJIT15` is active |
 | `WKPreferences -setJavaScriptEnabled:` | Blocks re-enabling JS via the legacy preference |
 | `WKWebView -evaluateJavaScript:...` (3 variants) | Blocks runtime JS execution calls |
 | `JSEvaluateScript` (C function) | Blocks C-level JS execution |
@@ -148,3 +158,4 @@ Hook methods can fire on any thread. All flags that hooks read at call time (`ap
 | `IMFileTransfer -isAutoDownloadable` | iMessage attachment auto-download (UI layer) |
 | `IMFileTransfer -canAutoDownload` | iMessage attachment auto-download (UI layer) |
 | `CKAttachmentMessagePartChatItem -_needsPreviewGeneration` | Attachment preview generation |
+| `CKAttachmentMessagePartChatItem -fullSizeImageURL` | Returns `nil` for HEIC/HEIF/WebP/PDF attachments when `applyBlockRiskyAttachments` is active |

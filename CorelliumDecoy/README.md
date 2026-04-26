@@ -63,12 +63,17 @@ File-path checks are not the only environment probe a payload may use. Hardware 
 | `hw.model` / `hw.machine` | `"iPhone15,2"` |
 | `hw.cpusubtype` | `2` (`CPU_SUBTYPE_ARM64E`) |
 | `kern.boottime` | `now − 10800 − (getpid() % 3600)` — stable PID-seeded uptime of 3–4 hours |
+| `kern.osversion` | `"21C62"` (iOS 17.2 build for iPhone15,2) |
 
 The helper `ads_spoof_bytes` implements the correct POSIX two-pass sysctl contract: a first call with `oldp == NULL` writes the required size to `*oldlenp` and returns 0; a second call copies the spoofed value after validating buffer size, returning `ENOMEM` on undersize.
 
-A thread-local `_ads_sysctl_active` flag prevents re-entrancy: GCD's `dispatch_async` internally calls `sysctl("hw.ncpu")` on the same thread during queue enqueue. Without the guard, the hook would recurse when `ads_increment_probe_counter()` dispatches its counter write. The flag is set immediately before the dispatch call and cleared immediately after.
+A thread-local `_ads_sysctl_active` flag exists as a forward-safety sentinel at the top of `hook_sysctlbyname`; it is no longer actively set. Sysctl hooks do not call `ads_increment_probe_counter()` — sysctl is invoked constantly during normal ObjC/Foundation initialisation and does not constitute a Corellium probe.
 
-All intercepted sysctl queries call `ads_increment_probe_counter()`, feeding the same debounced probe counter as the file-path hooks.
+Three additional environment vectors are also spoofed when `globalDecoyEnabled` is active:
+
+- **`getenv("CORELLIUM_ENV")`** (via `MSHookFunction`) — returns `NULL`. Corellium sets this environment variable in some configurations; the hook prevents it from leaking into env-var scans inside the daemon processes.
+- **`kern.osversion`** (via `sysctlbyname`) — returns `"21C62"`, consistent with the spoofed `hw.model`. A mismatched build string is trivially detectable by any checker that cross-references model against expected OS version.
+- **`/var/db/uuidtext/` path probes** (via `hook_access`) — any `access` call into this path returns `0`. Corellium may replace the UUID log directory; its absence fingerprints the VM. OSLog hits this path on every log write throughout daemon lifetime, so these calls do not feed the probe counter.
 
 ---
 
@@ -148,6 +153,7 @@ A payload performing standard Corellium detection on a device running AntiDarkSw
 - `sysctl`/`sysctlbyname("hw.model")` → `"iPhone15,2"` ✅
 - `sysctl`/`sysctlbyname("hw.cpusubtype")` → `CPU_SUBTYPE_ARM64E` ✅
 - `sysctl`/`sysctlbyname("kern.boottime")` → plausible 3–4 hour uptime ✅
+- `sysctlbyname("kern.osversion")` → `"21C62"` (iOS 17.2, consistent with iPhone15,2) ✅
 
 All checks pass. The payload concludes it is inside a Corellium research environment and aborts.
 
@@ -156,7 +162,7 @@ All checks pass. The payload concludes it is inside a Corellium research environ
 ## Limitations
 
 - **Rootless spoofing scope**: The file-path hooks only run inside the tier-3 daemon processes the tweak injects into (`imagent`, `apsd`, `identityservicesd`, `IMDPersistenceAgent`). A payload that checks for `corelliumd` from within a sandboxed app process it controls separately would not see the spoofed path from those hooks — though process-level visibility (`ps`, PID enumeration) still holds system-wide.
-- **Detection fingerprint**: Determined adversaries can probe for inconsistencies (e.g., the fake `stat` buffer returns a fixed size and zeroed timestamps). The decoy is effective against automated payload abort logic, not against a human analyst actively examining a device.
+- **Detection fingerprint**: Determined adversaries can probe for inconsistencies — the fake `stat` buffer returns a fixed file size and PID-derived timestamps that a careful examiner could distinguish from a real binary's metadata. The decoy is effective against automated payload abort logic, not against a human analyst actively examining a device.
 - **TrollFools build**: CorelliumDecoy is not included. The dylib cannot install a LaunchDaemon or hook POSIX syscalls with `MSHookFunction` — both require a jailbreak. See the [TrollFools README](../AntiDarkSwordTF/README.md).
 
 ---

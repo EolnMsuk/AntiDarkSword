@@ -60,6 +60,8 @@ Every time a Corellium-path probe is intercepted (across all four hook types), a
 
 After writing, the counter posts a separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) so Settings.app can refresh the counter cell without triggering a full prefs reload in all other injected tweak instances.
 
+**Rootful vs rootless:** On a rootful install the binary exists at `/usr/libexec/corelliumd`; `hook_stat` and `hook_lstat` pass through to the real syscall without fabricating a `struct stat`. `hook_access` and `NSFileManager -fileExistsAtPath:` still intercept explicit checks on that path and increment the counter — a payload specifically probing for the binary is suspicious regardless of environment. On rootless the canonical path does not exist; all four hooks (`hook_access`, `hook_stat`, `hook_lstat`, `NSFileManager`) both fabricate a plausible result and increment the counter.
+
 ### Corellium Honeypot — sysctl Spoofing
 
 File-path checks are not the only environment probe a payload may use. Hardware queries via `sysctl` and `sysctlbyname` return real device identifiers — model name, machine string, CPU subtype, and boot time — that distinguish a real physical device from a Corellium-virtualized instance. Both C functions are hooked via `MSHookFunction`:
@@ -69,10 +71,17 @@ File-path checks are not the only environment probe a payload may use. Hardware 
 | `hw.model` / `hw.machine` | `"iPhone15,2"` |
 | `hw.cpusubtype` | `2` (`CPU_SUBTYPE_ARM64E`) |
 | `kern.boottime` | `now − 10800 − (getpid() % 3600)` — stable PID-seeded uptime of 3–4 hours |
+| `kern.osversion` | `"21C62"` (iOS 17.2 build for iPhone15,2) |
 
 The `ads_spoof_bytes` helper implements the correct POSIX two-pass sysctl contract: a first call with `oldp == NULL` writes the required size to `*oldlenp` and returns 0; a second call copies the spoofed value after validating buffer size, returning `ENOMEM` on undersize.
 
-Both hooks are installed in `%ctor` immediately after the existing `access`/`stat`/`lstat` hooks, gated on `globalDecoyEnabled`. All intercepted calls feed `ads_increment_probe_counter()`.
+Both hooks are installed in `%ctor` immediately after the existing `access`/`stat`/`lstat` hooks, gated on `globalDecoyEnabled`. Sysctl hooks do not increment the probe counter — `sysctl` and `sysctlbyname` are called constantly during normal ObjC/Foundation initialisation and do not indicate a Corellium probe.
+
+Three additional detection vectors are spoofed when `globalDecoyEnabled` is active:
+
+- **`getenv("CORELLIUM_ENV")`** (via `MSHookFunction`) — returns `NULL`. Corellium sets this environment variable in some configurations; the hook prevents it from leaking into env-var scans inside the daemon processes.
+- **`kern.osversion`** (via `sysctlbyname`) — returns `"21C62"`, consistent with the spoofed `hw.model`. A mismatched build string is trivially detectable by any checker that cross-references model against expected OS version.
+- **`/var/db/uuidtext/` path probes** (via `hook_access`) — any `access` call into this path returns `0` (success). Corellium may replace the UUID log directory; its absence fingerprints the VM. OSLog hits this path on every log write throughout daemon lifetime, so these calls do not feed the probe counter.
 
 ---
 
@@ -122,7 +131,7 @@ All three must be true. If any is false, every file-path hook passes through to 
 
 Hook functions can be called from any thread. All flags read at hook call time (`applyDisableIMessageDL`, `globalDecoyEnabled`, `currentProcessRestricted`) are declared `_Atomic`. Intermediate variables computed inside `loadPrefs()` itself use plain `BOOL` since they are not shared across threads.
 
-The `_ads_sysctl_active` thread-local flag used by the sysctl hooks is `static __thread BOOL` — it is private to each OS thread and requires no additional synchronization.
+The `_ads_sysctl_active` thread-local flag is `static __thread BOOL` and exists as a forward-safety sentinel at the top of `hook_sysctlbyname`; it is no longer actively set.
 
 ---
 
@@ -149,8 +158,9 @@ The `_ads_sysctl_active` thread-local flag used by the sysctl hooks is `static _
 | `IMFileTransfer -canAutoDownload` | iMessage attachment download eligibility query |
 | `NSFileManager -fileExistsAtPath:` | ObjC-level file existence check for Corellium path; also triggers probe counter |
 | `NSFileManager -fileExistsAtPath:isDirectory:` | ObjC-level file existence + directory check; also triggers probe counter |
-| `access` (C function via `MSHookFunction`) | POSIX existence check for Corellium path |
+| `access` (C function via `MSHookFunction`) | POSIX existence check for Corellium path; also returns `0` for any path under `/var/db/uuidtext/`; increments probe counter on corelliumd path only |
 | `stat` (C function via `MSHookFunction`) | POSIX metadata query for Corellium path |
 | `lstat` (C function via `MSHookFunction`) | POSIX metadata query (symlink-aware) for Corellium path |
+| `getenv` (C function via `MSHookFunction`) | Returns `NULL` for `CORELLIUM_ENV`; all other env var lookups pass through |
 | `sysctl` (C function via `MSHookFunction`) | Hardware query; spoofs `hw.model`/`hw.machine` → `"iPhone15,2"`, `hw.cpusubtype` → `CPU_SUBTYPE_ARM64E`, `kern.boottime` → stable PID-seeded uptime |
-| `sysctlbyname` (C function via `MSHookFunction`) | Named sysctl variant; same spoof targets as `sysctl` |
+| `sysctlbyname` (C function via `MSHookFunction`) | Named sysctl variant; same hardware spoof targets as `sysctl`; also returns `"21C62"` for `kern.osversion` |
