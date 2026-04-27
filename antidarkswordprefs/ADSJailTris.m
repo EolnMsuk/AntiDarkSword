@@ -71,6 +71,12 @@ static int jt_blocks[7][4][4][2] = {
     _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 5);
     [self addChild:_gameLayer];
     [self setupUI]; [self setupGestures:view]; [self render];
+    if (@available(iOS 13.0, *)) {
+        if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            self.filter = [CIFilter filterWithName:@"CIColorInvert"];
+            self.shouldEnableEffects = YES;
+        }
+    }
 }
 
 - (void)setupAudio {

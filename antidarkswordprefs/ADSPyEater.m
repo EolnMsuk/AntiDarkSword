@@ -59,6 +59,12 @@ static const CGFloat kGridSize = 20.0;
     
     self.gameState = ADSGameStateMenu;
     self.snake = [NSMutableArray array];
+    if (@available(iOS 13.0, *)) {
+        if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            self.filter = [CIFilter filterWithName:@"CIColorInvert"];
+            self.shouldEnableEffects = YES;
+        }
+    }
 }
 
 - (void)setupAudio {

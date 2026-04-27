@@ -83,12 +83,24 @@ static inline void ads_post_notification(void) { CFNotificationCenterPostNotific
 static inline BOOL ads_is_ios16(void) { return [[NSProcessInfo processInfo] operatingSystemVersion].majorVersion >= 16; }
 
 static inline UIColor *ads_color_green(void) {
-    if (@available(iOS 13.0, *)) return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight)
+                return [UIColor colorWithRed:0.0 green:0.50 blue:0.0 alpha:0.25];
+            return [[UIColor systemGreenColor] colorWithAlphaComponent:0.15];
+        }];
+    }
     return [UIColor colorWithRed:0.2 green:0.8 blue:0.2 alpha:0.15];
 }
 
 static inline UIColor *ads_color_red(void) {
-    if (@available(iOS 13.0, *)) return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight)
+                return [UIColor colorWithRed:0.70 green:0.0 blue:0.0 alpha:0.25];
+            return [[UIColor systemRedColor] colorWithAlphaComponent:0.15];
+        }];
+    }
     return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
 }
 
@@ -1016,7 +1028,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self), (CFNotificationCallback)PrefsChangedNotification, ADS_NOTIF_SAVED, NULL, CFNotificationSuspensionBehaviorCoalesce); [self setupHeaderView];
 }
 - (void)setupHeaderView {
-    NSBundle *bundle = [NSBundle bundleForClass:[self class]]; NSString *imagePath = [bundle pathForResource:@"banner" ofType:@"png"]; UIImage *bannerImage = [UIImage imageWithContentsOfFile:imagePath];
+    NSBundle *bundle = [NSBundle bundleForClass:[self class]];
+    NSString *imageName = @"banner";
+    if (@available(iOS 13.0, *)) {
+        if (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            NSString *lightPath = [bundle pathForResource:@"banner2" ofType:@"png"];
+            if (lightPath) imageName = @"banner2";
+        }
+    }
+    NSString *imagePath = [bundle pathForResource:imageName ofType:@"png"]; UIImage *bannerImage = [UIImage imageWithContentsOfFile:imagePath];
     if (bannerImage) {
         CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width; CGFloat aspect = bannerImage.size.height / bannerImage.size.width; CGFloat height = screenWidth * aspect;
         UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenWidth, height)]; UIImageView *imageView = [[UIImageView alloc] initWithFrame:headerView.bounds]; imageView.image = bannerImage; imageView.contentMode = UIViewContentModeScaleAspectFill; imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight; imageView.clipsToBounds = YES; [headerView addSubview:imageView]; self.table.tableHeaderView = headerView;
