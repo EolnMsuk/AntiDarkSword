@@ -340,7 +340,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
         PSSpecifier *globalGroup = [PSSpecifier preferenceSpecifierNamed:@"⚠︎  Global Rules (BETA) ⚠︎ " target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
         [globalGroup setProperty:@"Global rules can break almost anything, for advanced users only." forKey:@"footerText"]; [specs addObject:globalGroup];
 
-        NSArray *globals = @[ @{@"key": @"globalUASpoofingEnabled", @"label": @"Spoof User Agent"}, @{@"key": @"globalDisableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"globalDisableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"globalDisableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"globalDisableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"globalDisableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"globalDisableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"globalDisableFileAccess", @"label": @"Disable Local File Access"}, @{@"key": @"globalBlockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"globalBlockRiskyAttachments", @"label": @"Block Attachment Previews"} ];
+        NSArray *globals = @[ @{@"key": @"globalUASpoofingEnabled", @"label": @"Spoof User Agent"}, @{@"key": @"globalDisableJIT", @"label": @"Block JIT (iOS 16+)"}, @{@"key": @"globalDisableJIT15", @"label": @"Block JIT (Legacy)"}, @{@"key": @"globalDisableJS", @"label": @"Block JavaScript ⚠︎"}, @{@"key": @"globalDisableRTC", @"label": @"Block WebGL & WebRTC"}, @{@"key": @"globalDisableMedia", @"label": @"Block Media Auto-Play"}, @{@"key": @"globalDisableIMessageDL", @"label": @"Block Msg Auto-Download"}, @{@"key": @"globalDisableFileAccess", @"label": @"Block Local File Access"}, @{@"key": @"globalBlockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"globalBlockRiskyAttachments", @"label": @"Block Attachment Previews"} ];
 
         BOOL isIOS16 = ads_is_ios16(); BOOL globalJSEnabled = [defaults boolForKey:@"globalDisableJS"];
         for (NSDictionary *g in globals) {
@@ -583,10 +583,13 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
             : @"Features not applicable to this target type, or currently enforced by a Global Rule, are locked.";
         [featGroup setProperty:featFooter forKey:@"footerText"]; [specs addObject:featGroup];
         
-        NSArray *features = @[ @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}, @{@"key": @"disableJIT", @"label": @"Disable JIT (iOS 16+)"}, @{@"key": @"disableJIT15", @"label": @"Disable JIT (Legacy)"}, @{@"key": @"disableJS", @"label": @"Disable JavaScript ⚠︎"}, @{@"key": @"disableRTC", @"label": @"Disable WebGL & WebRTC"}, @{@"key": @"disableMedia", @"label": @"Disable Media Auto-Play"}, @{@"key": @"disableIMessageDL", @"label": @"Disable Msg Auto-Download"}, @{@"key": @"disableFileAccess", @"label": @"Disable Local File Access"}, @{@"key": @"blockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"blockRiskyAttachments", @"label": @"Block Attachment Previews"} ];
+        NSArray *features = @[ @{@"key": @"spoofUA", @"label": @"Spoof User Agent"}, @{@"key": @"disableJIT", @"label": @"Block JIT (iOS 16+)"}, @{@"key": @"disableJIT15", @"label": @"Block JIT (Legacy)"}, @{@"key": @"disableJS", @"label": @"Block JavaScript ⚠︎"}, @{@"key": @"disableRTC", @"label": @"Block WebGL & WebRTC"}, @{@"key": @"disableMedia", @"label": @"Block Media Auto-Play"}, @{@"key": @"disableIMessageDL", @"label": @"Block Msg Auto-Download"}, @{@"key": @"disableFileAccess", @"label": @"Block Local File Access"}, @{@"key": @"blockRemoteContent", @"label": @"Block Remote Content"}, @{@"key": @"blockRiskyAttachments", @"label": @"Block Attachment Previews"} ];
         
         NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", self.targetID]; NSDictionary *rules = [defaults dictionaryForKey:dictKey]; BOOL isIOS16 = ads_is_ios16();
         BOOL isJSTurnedOn = (rules && rules[@"disableJS"] != nil) ? [rules[@"disableJS"] boolValue] : (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJS" forTarget:self.targetID]);
+        BOOL isJITOn = (rules && rules[@"disableJIT"] != nil) ? [rules[@"disableJIT"] boolValue] : isIOS16;
+        BOOL isJIT15On = (rules && rules[@"disableJIT15"] != nil) ? [rules[@"disableJIT15"] boolValue] : !isIOS16;
+        BOOL activeJITOn = isIOS16 ? isJITOn : isJIT15On;
         
         for (NSDictionary *feat in features) {
             NSString *featKey = feat[@"key"]; BOOL isApplicable = [AntiDarkSwordAppController isApplicableFeature:featKey forTarget:self.targetID]; BOOL isGlobalOverride = [self isGlobalOverrideActiveForFeature:featKey];
@@ -596,6 +599,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
                 if (isGlobalOverride) [spec setProperty:@NO forKey:@"enabled"];
                 else if (isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT"]) [spec setProperty:@NO forKey:@"enabled"];
                 else if (!isIOS16 && isJSTurnedOn && [featKey isEqualToString:@"disableJIT15"]) [spec setProperty:@NO forKey:@"enabled"];
+                else if ([featKey isEqualToString:@"disableMedia"] && !activeJITOn) [spec setProperty:@NO forKey:@"enabled"];
                 else [spec setProperty:@(isRuleEnabled) forKey:@"enabled"];
             } else { [spec setProperty:@NO forKey:@"enabled"]; }
             [specs addObject:spec];
@@ -636,6 +640,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
                 [pspec setProperty:pluginBundleID forKey:@"targetID"];
                 [pspec setProperty:@(1) forKey:@"ruleType"];
                 [pspec setProperty:@YES forKey:@"isPlugin"];
+                [pspec setProperty:@(isRuleEnabled) forKey:@"enabled"];
                 UIImage *icon = [rootCtrl iconForTargetID:pluginBundleID];
                 if (icon) [pspec setProperty:icon forKey:@"iconImage"];
                 [specs addObject:pspec];
@@ -708,9 +713,24 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     if ([featureKey isEqualToString:@"disableJS"]) {
         BOOL isIOS16 = ads_is_ios16();
         if ([value boolValue]) {
-            if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) rules[@"disableJIT"] = @YES;
-            else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) rules[@"disableJIT15"] = @YES;
-        } else { rules[@"disableJIT"] = @NO; rules[@"disableJIT15"] = @NO; }
+            // Save pre-lock JIT state so it can be restored when JS is toggled back off.
+            if (isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT" forTarget:self.targetID]) {
+                if (rules[@"disableJIT_savedBeforeJS"] == nil) rules[@"disableJIT_savedBeforeJS"] = rules[@"disableJIT"] ?: @NO;
+                rules[@"disableJIT"] = @YES;
+            } else if (!isIOS16 && [AntiDarkSwordAppController isApplicableFeature:@"disableJIT15" forTarget:self.targetID]) {
+                if (rules[@"disableJIT15_savedBeforeJS"] == nil) rules[@"disableJIT15_savedBeforeJS"] = rules[@"disableJIT15"] ?: @NO;
+                rules[@"disableJIT15"] = @YES;
+            }
+        } else {
+            // Restore saved state rather than blanket-resetting to OFF.
+            if (isIOS16) {
+                rules[@"disableJIT"] = rules[@"disableJIT_savedBeforeJS"] ?: @NO;
+                [rules removeObjectForKey:@"disableJIT_savedBeforeJS"];
+            } else {
+                rules[@"disableJIT15"] = rules[@"disableJIT15_savedBeforeJS"] ?: @NO;
+                [rules removeObjectForKey:@"disableJIT15_savedBeforeJS"];
+            }
+        }
         [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
         dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; }); ads_post_notification(); return;
     }
@@ -804,6 +824,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     BOOL isIOS16 = ads_is_ios16();
     NSArray *browsers = @[@"com.apple.mobilesafari", @"com.apple.SafariViewService", @"com.google.chrome.ios", @"org.mozilla.ios.Firefox", @"com.brave.ios.browser", @"com.duckduckgo.mobile.ios"];
     NSArray *msgAndMail = ads_msg_and_mail_apps(); NSArray *allProtected = [self autoProtectedItemsForLevel:3];
+    NSSet *mailOnlyApps = [NSSet setWithObjects:@"com.apple.mobilemail", @"com.apple.MailCompositionService", @"com.google.Gmail", @"com.microsoft.Office.Outlook", @"com.yahoo.Aerogram", @"ch.protonmail.protonmail", nil];
     NSMutableArray *expandedTargets = [NSMutableArray arrayWithArray:allProtected]; [expandedTargets addObjectsFromArray:@[@"com.apple.imagent", @"imagent", @"com.apple.apsd", @"apsd", @"com.apple.identityservicesd", @"identityservicesd", @"com.apple.IMDPersistenceAgent", @"IMDPersistenceAgent"]];
 
     for (NSString *targetID in expandedTargets) {
@@ -819,11 +840,15 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
             rules[@"disableRTC"] = [AntiDarkSwordAppController isApplicableFeature:@"disableRTC" forTarget:targetID] ? @YES : @NO;
             rules[@"disableFileAccess"] = [AntiDarkSwordAppController isApplicableFeature:@"disableFileAccess" forTarget:targetID] ? @YES : @NO;
             rules[@"disableIMessageDL"] = [AntiDarkSwordAppController isApplicableFeature:@"disableIMessageDL" forTarget:targetID] ? @YES : @NO;
-            rules[@"blockRemoteContent"] = @YES;
+            // Mail apps at L1/L2: blockRemoteContent=NO (too aggressive for normal email flow).
+            // Non-mail messaging apps: YES at all levels. All messaging/mail at L3: YES + risky attachments.
+            BOOL isMailApp = [mailOnlyApps containsObject:targetID];
+            rules[@"blockRemoteContent"] = (level >= 3 || !isMailApp) ? @YES : @NO;
+            rules[@"blockRiskyAttachments"] = (level >= 3) ? @YES : @NO;
             if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         } else if ([browsers containsObject:targetID]) {
             if ([targetID isEqualToString:@"com.apple.mobilesafari"] || [targetID isEqualToString:@"com.apple.SafariViewService"]) rules[@"spoofUA"] = @YES; else rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
-            if (level >= 3) { rules[@"disableRTC"] = @YES; rules[@"disableMedia"] = @YES; }
+            if (level >= 3) { rules[@"disableRTC"] = @YES; }
         } else if (![AntiDarkSwordAppController isDaemonTarget:targetID]) {
             if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         }
@@ -857,22 +882,26 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 
             BOOL parentIsMessagingOrMail = [msgAndMail containsObject:parentID] ||
                                            [parentID isEqualToString:@"com.apple.mobilemail"];
+            BOOL parentIsMailOnly = [mailOnlyApps containsObject:parentID];
+            // Level-aware: mail app plugins get blockRemoteContent=NO at L1/L2 (mirrors parent).
+            // Non-mail messaging plugins get YES at all levels. All get YES at L3.
+            BOOL pluginBlockRC = parentIsMessagingOrMail && (level >= 3 || !parentIsMailOnly);
+            BOOL pluginBlockRA = level >= 3 && parentIsMessagingOrMail;
 
             if ([category isEqualToString:@"com.apple.usernotifications.service"] ||
                 [category isEqualToString:@"com.apple.usernotifications.content-extension"]) {
                 // NSEs and notification content extensions are the primary silent-delivery surface.
-                // Block remote content unconditionally; block risky attachments for messaging/mail parents.
-                pluginRules[@"blockRemoteContent"]    = @YES;
-                pluginRules[@"blockRiskyAttachments"] = parentIsMessagingOrMail ? @YES : @NO;
+                pluginRules[@"blockRemoteContent"]    = pluginBlockRC ? @YES : @NO;
+                pluginRules[@"blockRiskyAttachments"] = pluginBlockRA ? @YES : @NO;
                 pluginRules[@"disableMedia"]          = parentIsMessagingOrMail ? @YES : @NO;
             } else if ([category isEqualToString:@"com.apple.share-services"]) {
-                // Share extensions for messaging/mail apps receive user-forwarded content
-                // which may include exploit-bearing attachments or remote-loading HTML.
-                pluginRules[@"blockRemoteContent"]    = parentIsMessagingOrMail ? @YES : @NO;
-                pluginRules[@"blockRiskyAttachments"] = parentIsMessagingOrMail ? @YES : @NO;
+                // Share extensions for messaging/mail apps receive user-forwarded content.
+                pluginRules[@"blockRemoteContent"]    = pluginBlockRC ? @YES : @NO;
+                pluginRules[@"blockRiskyAttachments"] = pluginBlockRA ? @YES : @NO;
             } else if ([category isEqualToString:@"com.apple.message-payload-provider"]) {
                 // iMessage app extensions run inside the Messages compose/view context.
-                pluginRules[@"blockRemoteContent"] = @YES;
+                pluginRules[@"blockRemoteContent"]    = pluginBlockRC ? @YES : @NO;
+                pluginRules[@"blockRiskyAttachments"] = pluginBlockRA ? @YES : @NO;
             }
 
             [defaults setObject:pluginRules forKey:pluginKey];
