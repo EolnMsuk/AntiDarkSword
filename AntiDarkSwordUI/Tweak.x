@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <stdatomic.h>
 #include <objc/runtime.h>
+#include <mach-o/dyld.h>
 
 #import "../ADSLogging.h"
 
@@ -834,6 +835,21 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     NSArray *ignored = @[@"PosterBoard", @"WeatherPoster", @"PassbookUIService", @"Spotlight",
                          @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
     if ([ignored containsObject:processName]) return;
+
+    // Gecko-based browsers (e.g. Reynard, com.minh-ton.Reynard) bundle libmozglue.dylib —
+    // Mozilla's jemalloc glue that registers a custom malloc zone and partially replaces the
+    // system allocator. Injecting WebKit hooks into these processes causes heap corruption:
+    // allocations made through WebKit's zone are seen as foreign by jemalloc, corrupting chunk
+    // headers. This manifests as a malloc abort (realloc → malloc_vreport) in unrelated
+    // background code (e.g. AltList's LSApplicationProxy enumeration). Gecko apps have no
+    // WKWebView attack surface to protect, so exit before any WebKit machinery runs.
+    {
+        uint32_t imageCount = _dyld_image_count();
+        for (uint32_t i = 0; i < imageCount; i++) {
+            const char *name = _dyld_get_image_name(i);
+            if (name && strstr(name, "mozglue")) return;
+        }
+    }
 
     NSString *path = [[NSBundle mainBundle] bundlePath] ?: @"";
 
