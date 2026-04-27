@@ -61,7 +61,7 @@ static int jt_blocks[7][4][4][2] = {
 }
 
 - (void)didMoveToView:(SKView *)view {
-    self.backgroundColor = [UIColor blackColor];
+    self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
     _board = [NSMutableDictionary dictionary]; _tickRate = 0.5;
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     _savedHighScore = [def integerForKey:@"ADS_JailTrisHighScore"];

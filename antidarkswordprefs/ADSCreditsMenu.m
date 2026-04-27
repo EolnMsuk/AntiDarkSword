@@ -215,13 +215,27 @@
     CGFloat height = 480.0; 
     
     UIView *footerContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, height + 40)];
-    footerContainer.backgroundColor = [UIColor clearColor];
-    
+    if (@available(iOS 13.0, *)) {
+        footerContainer.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
+            return tc.userInterfaceStyle == UIUserInterfaceStyleLight
+                ? [UIColor colorWithWhite:0.95 alpha:1.0] : [UIColor clearColor];
+        }];
+    } else {
+        footerContainer.backgroundColor = [UIColor clearColor];
+    }
+
     self.gameView = [[SKView alloc] initWithFrame:CGRectMake(16, 20, width - 32, height)];
     self.gameView.layer.cornerRadius = 12.0;
     self.gameView.clipsToBounds = YES;
+    if (@available(iOS 13.0, *)) {
+        self.gameView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
+            return tc.userInterfaceStyle == UIUserInterfaceStyleLight
+                ? [UIColor colorWithWhite:0.95 alpha:1.0] : [UIColor clearColor];
+        }];
+    }
     self.gameView.alpha = 0.0;
-    
+    table.separatorColor = [UIColor clearColor];
+
     [footerContainer addSubview:self.gameView];
     table.tableFooterView = footerContainer;
     
@@ -242,7 +256,7 @@
     UITableView *table = nil;
     @try { table = (UITableView *)[self valueForKey:@"_table"]; }
     @catch (NSException *) {}
-    if (table) table.scrollEnabled = YES;
+    if (table) { table.scrollEnabled = YES; table.separatorColor = nil; }
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 0.0;
     } completion:^(BOOL finished) {

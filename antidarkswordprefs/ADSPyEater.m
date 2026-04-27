@@ -35,7 +35,7 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)didMoveToView:(SKView *)view {
-    self.backgroundColor = [UIColor blackColor];
+    self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     _savedHighScore = [def integerForKey:@"ADS_SnakeHighScore"];
     
