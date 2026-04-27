@@ -103,6 +103,12 @@
     SKAction *pulseIn = [SKAction group:@[[SKAction scaleTo:0.95 duration:2.0], [SKAction fadeAlphaTo:0.2 duration:2.0]]];
     SKAction *pulseOut = [SKAction group:@[[SKAction scaleTo:1.05 duration:2.0], [SKAction fadeAlphaTo:0.8 duration:2.0]]];
     [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[pulseIn, pulseOut]]]];
+    if (@available(iOS 13.0, *)) {
+        if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            self.filter = [CIFilter filterWithName:@"CIColorInvert"];
+            self.shouldEnableEffects = YES;
+        }
+    }
 }
 
 - (void)playSFX:(float)freq dur:(float)dur {
