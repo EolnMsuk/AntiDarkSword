@@ -159,5 +159,5 @@ jobs:
             |---|---|
             | `*_iphoneos-arm64.deb` | iOS 15+ Rootless (all models) |
             | `*_iphoneos-arm.deb` | iOS 15+ Rootful (all models) |
-            | `*_iphoneos-arm_legacy.deb` | iOS 13–14 Rootful (arm64 only) |
+            | `*_iphoneos-arm_legacy.deb` | iOS 13–14 Rootful (A9 - A11) |
             | `*_TrollFools.dylib` | iOS 15+ TrollStore / TrollFools (all models) |
