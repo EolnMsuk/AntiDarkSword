@@ -18,7 +18,7 @@
 }
 
 - (void)didMoveToView:(SKView *)view {
-    self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
+    self.backgroundColor = [UIColor blackColor];
     
     _synthState = malloc(sizeof(ADSSynthState));
     memset(_synthState, 0, sizeof(ADSSynthState));
@@ -105,6 +105,7 @@
     [glow runAction:[SKAction repeatActionForever:[SKAction sequence:@[pulseIn, pulseOut]]]];
     if (@available(iOS 13.0, *)) {
         if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
             self.filter = [CIFilter filterWithName:@"CIColorInvert"];
             self.shouldEnableEffects = YES;
         }

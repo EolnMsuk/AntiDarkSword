@@ -35,7 +35,7 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)didMoveToView:(SKView *)view {
-    self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
+    self.backgroundColor = [UIColor blackColor];
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     _savedHighScore = [def integerForKey:@"ADS_SnakeHighScore"];
     
@@ -61,6 +61,7 @@ static const CGFloat kGridSize = 20.0;
     self.snake = [NSMutableArray array];
     if (@available(iOS 13.0, *)) {
         if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
+            self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
             self.filter = [CIFilter filterWithName:@"CIColorInvert"];
             self.shouldEnableEffects = YES;
         }
