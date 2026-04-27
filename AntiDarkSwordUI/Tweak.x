@@ -843,7 +843,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     // on background threads (e.g. AltList's LSApplicationProxy enumeration racing jemalloc
     // init). Gecko apps have no WKWebView attack surface to protect.
     //
-    // Filesystem check runs first — timing-independent. On Dopamine Roothide, SystemHook
+    // Filesystem checks run first — timing-independent. On Dopamine Roothide, SystemHook
     // injects this tweak via dlopen before dyld maps the app's embedded frameworks, so
     // _dyld_image_count() at %ctor time won't yet include libmozglue; a dyld scan alone
     // would silently pass and allow injection into Gecko processes.
@@ -852,12 +852,16 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
         if (bundlePath.length > 0) {
             NSString *mozPath = [bundlePath stringByAppendingPathComponent:@"Frameworks/libmozglue.dylib"];
             if (access(mozPath.fileSystemRepresentation, F_OK) == 0) return;
+            // GeckoView.framework covers future builds where libmozglue is embedded inside
+            // the framework bundle rather than at the top-level Frameworks/ directory.
+            NSString *geckoPath = [bundlePath stringByAppendingPathComponent:@"Frameworks/GeckoView.framework"];
+            if (access(geckoPath.fileSystemRepresentation, F_OK) == 0) return;
         }
-        // Runtime fallback: catches mozglue loaded from outside the app bundle.
+        // Runtime fallback: catches Gecko libs loaded from outside the app bundle.
         uint32_t imageCount = _dyld_image_count();
         for (uint32_t i = 0; i < imageCount; i++) {
             const char *name = _dyld_get_image_name(i);
-            if (name && strstr(name, "mozglue")) return;
+            if (name && (strstr(name, "mozglue") || strstr(name, "GeckoView"))) return;
         }
     }
 
