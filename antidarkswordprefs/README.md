@@ -146,13 +146,13 @@ Ten `PSSwitchCell` rows, all disabled unless auto-protect level is 3. Enabling a
 | Pref key | Label |
 |---|---|
 | `globalUASpoofingEnabled` | Spoof User Agent |
-| `globalDisableJIT` | Disable JIT (iOS 16+) |
-| `globalDisableJIT15` | Disable JIT (Legacy) |
-| `globalDisableJS` | Disable JavaScript ⚠︎ |
-| `globalDisableRTC` | Disable WebGL & WebRTC |
-| `globalDisableMedia` | Disable Media Auto-Play |
-| `globalDisableIMessageDL` | Disable Msg Auto-Download |
-| `globalDisableFileAccess` | Disable Local File Access |
+| `globalDisableJIT` | Block JIT (iOS 16+) |
+| `globalDisableJIT15` | Block JIT (Legacy) |
+| `globalDisableJS` | Block JavaScript ⚠︎ |
+| `globalDisableRTC` | Block WebGL & WebRTC |
+| `globalDisableMedia` | Block Media Auto-Play |
+| `globalDisableIMessageDL` | Block Msg Auto-Download |
+| `globalDisableFileAccess` | Block Local File Access |
 | `globalBlockRemoteContent` | Block Remote Content |
 | `globalBlockRiskyAttachments` | Block Attachment Previews |
 
@@ -191,7 +191,12 @@ Gates which toggles are interactive for a given target:
 - **`blockRiskyAttachments`** — messaging/mail apps; extension bundle IDs containing `NotificationService`, `ShareExtension`, or `.share.`
 - **`spoofUA`** — all targets
 
-If a global override is active for a feature, the toggle is shown locked in the ON position (non-interactive). Enabling `disableJS` forces the appropriate JIT toggle on and hides it in the same `reloadSpecifiers` call. Disabling `disableJS` clears both JIT flags.
+If a global override is active for a feature, the toggle is shown locked in the ON position (non-interactive).
+
+**Cross-mitigation dependencies:**
+
+- **JS → JIT (Dep A):** Enabling `disableJS` saves the current JIT flag value into an ephemeral `disableJIT_savedBeforeJS` / `disableJIT15_savedBeforeJS` key (iOS-version-branched) before forcing JIT ON. The save only writes if the key is absent, preventing double-save on repeated JS toggles. Disabling `disableJS` restores the prior JIT value from the saved key and removes it, then calls `reloadSpecifiers`. JIT is never blindly reset to OFF.
+- **Media locked when JIT is OFF (Dep B):** `disableMedia` is rendered non-interactive (`enabled = NO`) when the active JIT toggle is OFF (`activeJITOn = isIOS16 ? isJITOn : isJIT15On`). A JIT-disabled process cannot execute the JS runtime that triggers autoplay, making the toggle meaningless in that state.
 
 ### Default feature values (`getFeatureValue:`)
 
@@ -200,11 +205,11 @@ When `TargetRules_{bundleID}` has no entry for a key, the controller computes a 
 - JIT disable defaults ON for all targets in the protected set, version-branched by `ads_is_ios16()`.
 - `spoofUA` defaults ON for Safari/SafariViewService always; ON for non-`com.apple.*` apps at level ≥ 2.
 - `disableMedia`, `disableRTC`, `disableFileAccess`, `disableIMessageDL`, `blockRemoteContent` default ON for messaging/mail apps.
-- `disableRTC` and `disableMedia` additionally default ON for browsers at level 3.
+- `disableRTC` additionally defaults ON for browsers at level 3. `disableMedia` is not applied to browsers at any level — it gates JS-triggered autoplay, which has no memory-safety or RCE impact and is not a meaningful mitigation outside messaging/mail contexts.
 
 ### Feature writes (`setFeatureValue:specifier:`)
 
-Writes are stored in a mutable copy of `TargetRules_{bundleID}`, a `NSDictionary` sub-key inside the prefs plist. After updating the dict, both `NSUserDefaults -setObject:forKey:` and `ads_cfwrite()` write the full dict under the key, and a `saved` Darwin notification is posted immediately. JS toggle changes additionally update the linked JIT key in the same dict write and call `reloadSpecifiers`.
+Writes are stored in a mutable copy of `TargetRules_{bundleID}`, a `NSDictionary` sub-key inside the prefs plist. After updating the dict, both `NSUserDefaults -setObject:forKey:` and `ads_cfwrite()` write the full dict under the key, and a `saved` Darwin notification is posted immediately. JS toggle changes apply the save/restore JIT logic described in the cross-mitigation dependency above before the dict write, then call `reloadSpecifiers`; all other feature toggles return immediately after the write without specifier reload.
 
 ### App Plugins section
 
@@ -214,7 +219,7 @@ Appended dynamically after the feature toggles when `ads_plugins_for_bundle_id()
 
 **Strategy 2 — PlugIns/ directory scan:** If PlugInKit returns empty (daemon not yet indexed, fresh restore, system-partition extension DB), falls back to reading `NSExtensionPointIdentifier` and `CFBundleIdentifier` directly from each `.appex` bundle's `Info.plist` under the parent's `PlugIns/` directory. Reliable regardless of PlugInKit daemon state.
 
-Each plugin appears as a `PSLinkCell` with a human-readable category suffix (e.g., `"Signal NSE (Notification Service)"`). Tapping pushes a nested `AntiDarkSwordAppController` with `isPlugin = YES` and `ruleType = 1`. When `isPlugin = YES` and the rule is disabled, the features footer reads: `"Inheriting parent app rules. Enable the rule to configure plugin-specific overrides."`.
+Each plugin appears as a `PSLinkCell` with a human-readable category suffix (e.g., `"Signal NSE (Notification Service)"`). Plugin specifier cells inherit `@(isRuleEnabled)` on their `enabled` property, so they are grayed-out and non-tappable when the parent app rule is OFF; the sub-state is preserved in `TargetRules_{pluginBundleID}` and becomes active again when the parent rule is re-enabled. Tapping pushes a nested `AntiDarkSwordAppController` with `isPlugin = YES` and `ruleType = 1`. When `isPlugin = YES` and the rule is disabled, the features footer reads: `"Inheriting parent app rules. Enable the rule to configure plugin-specific overrides."`.
 
 ---
 
@@ -222,13 +227,18 @@ Each plugin appears as a `PSLinkCell` with a human-readable category suffix (e.g
 
 Writes initial `TargetRules_` dicts for all targets that do not yet have one (or all targets when `force = YES`). Runs once on first launch (guarded by `hasInitializedDefaultRules`) and again on every level change. Targets are all apps from tier 1 through tier 3, plus the four daemon IDs in both short-name and bundle-ID form.
 
-**Plugin defaults follow a risk-weighted model:**
+**Plugin defaults follow a risk-weighted, level-stratified model.**
+
+Two intermediate booleans drive `blockRemoteContent` and `blockRiskyAttachments` for all three handled extension categories:
+
+- **`pluginBlockRC`** = `parentIsMessagingOrMail && (level >= 3 || !parentIsMailOnly)` — non-mail messaging parents get `YES` at all levels; `mailOnlyApps` parents get `YES` only at L3, `NO` at L1/L2 (mirrors the parent-app policy that avoids breaking email rendering at lower levels). `mailOnlyApps` = Mail, MailCompositionService, Gmail, Outlook, Yahoo Mail, Proton Mail.
+- **`pluginBlockRA`** = `level >= 3 && parentIsMessagingOrMail` — `YES` at L3 for all messaging/mail parents; `NO` otherwise.
 
 | Plugin category | `blockRemoteContent` | `blockRiskyAttachments` | `disableMedia` |
 |---|---|---|---|
-| NSE or notification content extension (any parent) | YES | YES if messaging/mail parent | YES if messaging/mail parent |
-| Share extension (messaging/mail parent) | YES | YES | — |
-| iMessage app extension | YES | — | — |
+| NSE or notification content extension | `pluginBlockRC` | `pluginBlockRA` | YES if messaging/mail parent |
+| Share extension (messaging/mail parent) | `pluginBlockRC` | `pluginBlockRA` | — |
+| iMessage app extension | `pluginBlockRC` | `pluginBlockRA` | — |
 
 Plugins with any non-trivial override (`blockRemoteContent`, `blockRiskyAttachments`, or `disableMedia = YES`) also receive `restrictedApps-{pluginBundleID} = YES` written via `ads_cfwrite()`, so the "Enable Rule" toggle starts ON and the tweaks enforce the override immediately without requiring user action.
 
