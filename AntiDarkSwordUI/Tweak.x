@@ -836,14 +836,24 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
                          @"Tunnel", @"Preferences", @"cfprefsd", @"searchd", @"druid"];
     if ([ignored containsObject:processName]) return;
 
-    // Gecko-based browsers (e.g. Reynard, com.minh-ton.Reynard) bundle libmozglue.dylib —
-    // Mozilla's jemalloc glue that registers a custom malloc zone and partially replaces the
-    // system allocator. Injecting WebKit hooks into these processes causes heap corruption:
-    // allocations made through WebKit's zone are seen as foreign by jemalloc, corrupting chunk
-    // headers. This manifests as a malloc abort (realloc → malloc_vreport) in unrelated
-    // background code (e.g. AltList's LSApplicationProxy enumeration). Gecko apps have no
-    // WKWebView attack surface to protect, so exit before any WebKit machinery runs.
+    // Gecko-based browsers (e.g. Reynard) bundle libmozglue.dylib — Mozilla's jemalloc glue
+    // that registers a custom malloc zone and partially replaces the system allocator. Any
+    // injection into these processes risks heap corruption: WebKit/CF allocations land in
+    // jemalloc's zone while jemalloc state is uninitialized, causing zone_free/realloc aborts
+    // on background threads (e.g. AltList's LSApplicationProxy enumeration racing jemalloc
+    // init). Gecko apps have no WKWebView attack surface to protect.
+    //
+    // Filesystem check runs first — timing-independent. On Dopamine Roothide, SystemHook
+    // injects this tweak via dlopen before dyld maps the app's embedded frameworks, so
+    // _dyld_image_count() at %ctor time won't yet include libmozglue; a dyld scan alone
+    // would silently pass and allow injection into Gecko processes.
     {
+        NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+        if (bundlePath.length > 0) {
+            NSString *mozPath = [bundlePath stringByAppendingPathComponent:@"Frameworks/libmozglue.dylib"];
+            if (access(mozPath.fileSystemRepresentation, F_OK) == 0) return;
+        }
+        // Runtime fallback: catches mozglue loaded from outside the app bundle.
         uint32_t imageCount = _dyld_image_count();
         for (uint32_t i = 0; i < imageCount; i++) {
             const char *name = _dyld_get_image_name(i);
