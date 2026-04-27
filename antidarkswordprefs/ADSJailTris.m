@@ -567,7 +567,7 @@ static int jt_blocks[7][4][4][2] = {
     for (NSString *key in _board) {
         NSArray *comps = [key componentsSeparatedByString:@","]; int x = [comps[0] intValue], y = [comps[1] intValue];
         SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kJTGrid, y*kJTGrid, kJTGrid-1, kJTGrid-1)];
-        node.fillColor = _board[key]; node.lineWidth = 0; [_gameLayer addChild:node];
+        node.fillColor = _board[key]; node.strokeColor = [UIColor blackColor]; node.lineWidth = 1.0; [_gameLayer addChild:node];
     }
     
     if (_isPlaying && !_isDead && !_isPaused) {
@@ -598,13 +598,13 @@ static int jt_blocks[7][4][4][2] = {
         for (int i=0; i<4; i++) {
             int nx = _bX + jt_blocks[_bType][_bRot][i][0]; int ny = _bY + jt_blocks[_bType][_bRot][i][1];
             SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kJTGrid, ny*kJTGrid, kJTGrid-1, kJTGrid-1)];
-            node.fillColor = c; node.lineWidth = 0; [_gameLayer addChild:node];
+            node.fillColor = c; node.strokeColor = [UIColor blackColor]; node.lineWidth = 1.0; [_gameLayer addChild:node];
         }
         UIColor *nc = [self colorForType:_nextType]; CGFloat pGrid = 14.0; 
         for (int i=0; i<4; i++) {
             int nx = jt_blocks[_nextType][0][i][0]; int ny = jt_blocks[_nextType][0][i][1];
             SKShapeNode *nNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*pGrid, ny*pGrid, pGrid-1, pGrid-1)];
-            nNode.fillColor = nc; nNode.lineWidth = 0; [_previewNode addChild:nNode];
+            nNode.fillColor = nc; nNode.strokeColor = [UIColor blackColor]; nNode.lineWidth = 1.0; [_previewNode addChild:nNode];
         }
     }
 }
