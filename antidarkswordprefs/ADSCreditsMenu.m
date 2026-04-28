@@ -52,9 +52,9 @@
     title.position = CGPointMake(self.size.width/2, self.size.height - 78); 
     [self addChild:title];
     
-    SKShapeNode *closeBtnBorder = [SKShapeNode shapeNodeWithCircleOfRadius:16];
+    SKShapeNode *closeBtnBorder = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(32, 32) cornerRadius:4.0]; 
     closeBtnBorder.position = CGPointMake(self.size.width - 30, self.size.height - 30);
-    closeBtnBorder.strokeColor = [UIColor whiteColor];
+    closeBtnBorder.strokeColor = [UIColor whiteColor]; // Change to [UIColor blackColor] if your background changes
     closeBtnBorder.fillColor = [UIColor clearColor];
     closeBtnBorder.lineWidth = 2.0;
     [self addChild:closeBtnBorder];
