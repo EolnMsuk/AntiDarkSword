@@ -52,10 +52,19 @@
     title.position = CGPointMake(self.size.width/2, self.size.height - 78); 
     [self addChild:title];
     
+    SKShapeNode *closeBtnBorder = [SKShapeNode shapeNodeWithCircleOfRadius:16];
+    closeBtnBorder.position = CGPointMake(self.size.width - 30, self.size.height - 30);
+    closeBtnBorder.strokeColor = [UIColor whiteColor];
+    closeBtnBorder.fillColor = [UIColor clearColor];
+    closeBtnBorder.lineWidth = 2.0;
+    [self addChild:closeBtnBorder];
+
     _closeBtn = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     _closeBtn.text = @"❌";
     _closeBtn.fontSize = 20;
-    _closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 40);
+    _closeBtn.horizontalAlignmentMode = SKLabelHorizontalAlignmentModeCenter;
+    _closeBtn.verticalAlignmentMode = SKLabelVerticalAlignmentModeCenter;
+    _closeBtn.position = CGPointMake(self.size.width - 30, self.size.height - 30);
     [self addChild:_closeBtn];
 
     _btnPyEater = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(200, 80) cornerRadius:12];
@@ -236,6 +245,7 @@
     }
     self.gameView.alpha = 0.0;
     table.separatorColor = [UIColor clearColor];
+    table.separatorStyle = UITableViewCellSeparatorStyleNone;
 
     [footerContainer addSubview:self.gameView];
     table.tableFooterView = footerContainer;
@@ -257,7 +267,7 @@
     UITableView *table = nil;
     @try { table = (UITableView *)[self valueForKey:@"_table"]; }
     @catch (NSException *) {}
-    if (table) { table.scrollEnabled = YES; table.separatorColor = nil; }
+    if (table) { table.scrollEnabled = YES; table.separatorColor = nil; table.separatorStyle = UITableViewCellSeparatorStyleSingleLine; }
     [UIView animateWithDuration:0.5 animations:^{
         self.gameView.alpha = 0.0;
     } completion:^(BOOL finished) {

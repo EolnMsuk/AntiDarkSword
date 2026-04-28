@@ -450,6 +450,31 @@ static int jt_blocks[7][4][4][2] = {
 }
 
 - (UIColor *)colorForType:(int)type {
+    BOOL isLight = NO;
+    if (@available(iOS 13.0, *)) {
+        isLight = UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight;
+    }
+    if (isLight) {
+        // Pre-invert each color so CIColorInvert produces the same visual result as dark mode.
+        // dark-mode target → (1-r, 1-g, 1-b) pre-invert value:
+        //   cyan  (0,1,1) → red   (1,0,0)
+        //   blue  (0.3,0.5,1) → (0.7,0.5,0)
+        //   orange(1,0.5,0) → (0,0.5,1)
+        //   yellow(1,1,0) → (0,0,1)
+        //   green (0,1,0) → magenta(1,0,1)
+        //   purple(0.8,0.4,1) → (0.2,0.6,0)
+        //   red   (1,0,0) → cyan  (0,1,1)
+        NSArray *colors = @[
+            [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0],
+            [UIColor colorWithRed:0.7 green:0.5 blue:0.0 alpha:1.0],
+            [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:1.0],
+            [UIColor colorWithRed:0.0 green:0.0 blue:1.0 alpha:1.0],
+            [UIColor colorWithRed:1.0 green:0.0 blue:1.0 alpha:1.0],
+            [UIColor colorWithRed:0.2 green:0.6 blue:0.0 alpha:1.0],
+            [UIColor colorWithRed:0.0 green:1.0 blue:1.0 alpha:1.0],
+        ];
+        return colors[type];
+    }
     NSArray *colors = @[ [UIColor cyanColor], [UIColor colorWithRed:0.3 green:0.5 blue:1.0 alpha:1.0], [UIColor orangeColor], [UIColor yellowColor], [UIColor greenColor], [UIColor colorWithRed:0.8 green:0.4 blue:1.0 alpha:1.0], [UIColor redColor] ];
     return colors[type];
 }
