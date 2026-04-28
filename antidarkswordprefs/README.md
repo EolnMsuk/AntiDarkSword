@@ -62,7 +62,7 @@ Loads specifiers from `Root.plist` and programmatically injects the current pres
 
 ### Banner and footer
 
-A full-width `UIImageView` header (`banner.png`) is set as `self.table.tableHeaderView` in `viewDidLoad`. The footer group reads `CFBundleShortVersionString` from the bundle's `Info.plist` and detects jailbreak type at runtime — `access("/Library/MobileSubstrate/DynamicLibraries")` → rootful; `dlsym(RTLD_DEFAULT, "jbroot")` → Roothide; fallback → rootless — to render a version/environment string in the form `AntiDarkSword v4.8.2 (iOS 17.4 Rootless)`.
+A full-width `UIImageView` header is set as `self.table.tableHeaderView` in `viewDidLoad`. `setupHeaderView` resolves the image once at load time: on iOS 13+ in Light Mode it uses `banner2.png` if the resource is present in the bundle, falling back to `banner.png` in Dark Mode or on older OS versions. The footer group reads `CFBundleShortVersionString` from the bundle's `Info.plist` and detects jailbreak type at runtime — `access("/Library/MobileSubstrate/DynamicLibraries")` → rootful; `dlsym(RTLD_DEFAULT, "jbroot")` → Roothide; fallback → rootless — to render a version/environment string in the form `AntiDarkSword v4.8.2 (iOS 17.4 Rootless)`.
 
 ### Global enable switch
 
@@ -104,7 +104,7 @@ The footer under the "Preset Rules" group updates dynamically on each specifier 
 
 ### Preset rules list
 
-After the level segment, `specifiers` injects a "Current Preset Rules" group followed by one `PSLinkCell` per target returned by `autoProtectedItemsForLevel:`. Only installed targets appear — `isTargetInstalled:` queries `LSApplicationWorkspace -applicationIsInstalled:` and `LSApplicationProxy.bundleURL` for app bundle IDs, and skips the check for known core Apple services and short-form process names. Cells are colored green or red (15% alpha) based on `disabledPresetRules`. Tapping a row pushes `AntiDarkSwordAppController` with `ruleType = 0`.
+After the level segment, `specifiers` injects a "Current Preset Rules" group followed by one `PSLinkCell` per target returned by `autoProtectedItemsForLevel:`. Only installed targets appear — `isTargetInstalled:` queries `LSApplicationWorkspace -applicationIsInstalled:` and `LSApplicationProxy.bundleURL` for app bundle IDs, and skips the check for known core Apple services and short-form process names. Cells are colored green or red via `ads_color_green()` / `ads_color_red()` — dynamic-provider colors: higher-saturation at 25% alpha in Light Mode, `systemGreen`/`systemRed` at 15% alpha in Dark Mode — based on `disabledPresetRules`. Tapping a row pushes `AntiDarkSwordAppController` with `ruleType = 0`.
 
 **Tier structure:**
 
@@ -163,7 +163,7 @@ Ten `PSSwitchCell` rows, all disabled unless auto-protect level is 3. Enabling a
 Subclasses AltList's `ATLApplicationListMultiSelectionController`. Overrides `tableView:cellForRowAtIndexPath:` to:
 
 - Hide the built-in AltList checkbox control and replace it with a `UITableViewCellAccessoryDisclosureIndicator`.
-- Color non-preset cells green (`systemGreenColor` at 15% alpha) when `restrictedApps-{bundleID}` is `YES`, red otherwise.
+- Color non-preset cells green or red via the same `ads_color_green()` / `ads_color_red()` dynamic colors used on the root list (rule ON = green, OFF = red).
 - Gray out and disable interaction for any cell whose bundle ID is already in the current preset tier — preset apps are already protected and cannot be added as manual rules.
 
 Tapping an eligible cell pushes `AntiDarkSwordAppController` with `ruleType = 1`. The navigation bar Save button tracks the `ADSNeedsRespring` / `ADSPendingDaemonChanges` state via a `saved` Darwin notification observer registered in `viewDidLoad`.
@@ -227,6 +227,8 @@ Each plugin appears as a `PSLinkCell` with a human-readable category suffix (e.g
 
 Writes initial `TargetRules_` dicts for all targets that do not yet have one (or all targets when `force = YES`). Runs once on first launch (guarded by `hasInitializedDefaultRules`) and again on every level change. Targets are all apps from tier 1 through tier 3, plus the four daemon IDs in both short-name and bundle-ID form.
 
+**Parent-app defaults** are as follows. Every target receives iOS-version-branched `disableJIT`/`disableJIT15`/`disableJS` flags. Messaging/mail apps additionally receive `disableMedia`, `disableRTC`, `disableFileAccess`, and (for Messages-UI targets) `disableIMessageDL` set ON. `blockRemoteContent` applies a `mailOnlyApps` distinction: Mail, MailCompositionService, Gmail, Outlook, Yahoo Mail, and Proton Mail receive `NO` at L1/L2 to avoid breaking normal email rendering, `YES` at L3; all other messaging apps receive `YES` at every level. `blockRiskyAttachments` is `YES` at L3 for all messaging/mail targets, `NO` otherwise. Browser targets receive `disableRTC = YES` at L3 only. `spoofUA` is `YES` for Safari/SafariViewService unconditionally, and for third-party non-`com.apple.*` apps at L2+.
+
 **Plugin defaults follow a risk-weighted, level-stratified model.**
 
 Two intermediate booleans drive `blockRemoteContent` and `blockRiskyAttachments` for all three handled extension categories:
@@ -280,9 +282,9 @@ All three scenes share a single `ADSSynthState` struct for real-time synthesis v
 
 **`ADSGameMenuScene`** — selection screen. Two `SKShapeNode` buttons (PyEater cyan, JailTris gold), a close button, and a pulsing dedication label with glow overlay. Button taps produce square-wave SFX tones and trigger `SKTransition pushWithDirection` to the selected game scene.
 
-**`ADSJailTrisScene`** — Tetris on a 10×20 grid at 22 pt per cell. Board state stored as a `NSMutableDictionary` keyed by `"x,y"` strings. A `UIPanGestureRecognizer` handles lateral moves (velocity ≥800 pt/s or translation ≥60 pt → 3-cell move, dispatched in 25 ms intervals) and hard-drop (downward pan with y/x ratio ≥1.5). A `UITapGestureRecognizer` rotates the active piece using up to five horizontal offset wall-kick attempts plus a two-row up-kick fallback. BGM is a 24-note melody + bass + arpeggiated overlay synthesized in the render block at 44100 Hz. Line-clear effects: color-coded flash bars with scale pulse, score pop-up label, board-layer shake animation; Tetris (4-line) fires a 12-particle burst, full-screen strobe, animated score overlay, and triple `UINotificationFeedbackGenerator` haptic sequence. High score is persisted to `NSUserDefaults` suite `com.eolnmsuk.antidarkswordprefs` under `ADS_JailTrisHighScore`.
+**`ADSJailTrisScene`** — Tetris on a 10×20 grid at 22 pt per cell. Board state stored as a `NSMutableDictionary` keyed by `"x,y"` strings. A `UIPanGestureRecognizer` handles lateral moves (velocity ≥800 pt/s or translation ≥60 pt → 3-cell move, dispatched in 25 ms intervals) and hard-drop (downward pan with y/x ratio ≥1.5). A `UITapGestureRecognizer` rotates the active piece using up to five horizontal offset wall-kick attempts plus a two-row up-kick fallback. BGM is a 24-note melody + bass + arpeggiated overlay synthesized in the render block at 44100 Hz. Line-clear effects: color-coded flash bars with scale pulse, score pop-up label, board-layer shake animation; Tetris (4-line) fires a 12-particle burst, full-screen strobe, animated score overlay, and triple `UINotificationFeedbackGenerator` haptic sequence. High score is persisted to `NSUserDefaults` suite `com.eolnmsuk.antidarkswordprefs` under `ADS_JailTrisHighScore`. In Light Mode, a single-pass `CIColorInvert` filter is applied to the scene's `SKView` to adapt the dark-optimized palette without touching game logic.
 
-**`ADSPyEaterScene`** — Snake at 20 pt grid size, 16-tick/s update rate, `UISwipeGestureRecognizer` per direction. An `SKEffectNode` with `CIBloom` (radius 0.8, intensity 1.5) wraps all game layer nodes for a neon glow effect. Food node pulses via a looping scale-to animation (1.25×/0.8×, 0.25 s). Eating food spawns an expand-fade `SKShapeNode` pulse ring. Death triggers a red screen-fill flash, a shockwave ring expanding from the snake head, and a four-keyframe shake sequence on the game layer. BGM is a 16-note pattern at 0.12-beat intervals. High score persisted under `ADS_SnakeHighScore`.
+**`ADSPyEaterScene`** — Snake at 20 pt grid size, 16-tick/s update rate, `UISwipeGestureRecognizer` per direction. An `SKEffectNode` with `CIBloom` (radius 0.8, intensity 1.5) wraps all game layer nodes for a neon glow effect. Food node pulses via a looping scale-to animation (1.25×/0.8×, 0.25 s). Eating food spawns an expand-fade `SKShapeNode` pulse ring. Death triggers a red screen-fill flash, a shockwave ring expanding from the snake head, and a four-keyframe shake sequence on the game layer. BGM is a 16-note pattern at 0.12-beat intervals. High score persisted under `ADS_SnakeHighScore`. In Light Mode, a `CIColorInvert` filter is applied to the scene's `SKView`, complementing the existing `CIBloom` glow layer.
 
 ---
 
