@@ -28,7 +28,7 @@
     SKShapeNode *_startBg;
     SKShapeNode *_highScoreBg;
     SKLabelNode *_titleLbl;
-    BOOL _isDead, _isPlaying, _isPaused, _panHandled, _justSlammed;
+    BOOL _isDead, _isPlaying, _isPaused, _panHandled, _justSlammed, _needsTickReset;
     CGPoint _touchStartLoc;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
@@ -36,6 +36,7 @@
     BOOL _musicEnabled;
     BOOL _hasSurpassedHighScore;
     NSInteger _savedHighScore;
+    UIColor *_blockStroke;
 }
 
 static const CGFloat kJTGrid = 22.0;
@@ -70,14 +71,16 @@ static int jt_blocks[7][4][4][2] = {
     CGFloat boardWidth = kJTCols * kJTGrid; CGFloat boardHeight = kJTRows * kJTGrid;
     _gameLayer.position = CGPointMake((self.size.width - boardWidth)/2.0, (self.size.height - boardHeight)/2.0 + 5);
     [self addChild:_gameLayer];
-    [self setupUI]; [self setupGestures:view]; [self render];
+    _blockStroke = [UIColor blackColor];
     if (@available(iOS 13.0, *)) {
         if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
             self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
             self.filter = [CIFilter filterWithName:@"CIColorInvert"];
             self.shouldEnableEffects = YES;
+            _blockStroke = [UIColor whiteColor];
         }
     }
+    [self setupUI]; [self setupGestures:view]; [self render];
 }
 
 - (void)setupAudio {
@@ -439,6 +442,7 @@ static int jt_blocks[7][4][4][2] = {
 
 - (void)update:(NSTimeInterval)currentTime {
     if (!_isPlaying || _isDead || _isPaused) return;
+    if (_needsTickReset) { _lastTick = currentTime; _needsTickReset = NO; }
     if (currentTime - _lastTick < _tickRate) return;
     _lastTick = currentTime;
     if ([self isValidX:_bX y:_bY-1 rot:_bRot type:_bType]) { _bY--; } else { [self lockBlock]; [self clearLines]; if (!_isDead && !_isPaused) [self spawnBlock]; }
@@ -505,7 +509,12 @@ static int jt_blocks[7][4][4][2] = {
                 }
             }
         }
-        self->_isPaused = NO; [self render]; if (!self->_isDead && self->_isPlaying) [self spawnBlock];
+        self->_isPaused = NO;
+        if (!self->_isDead && self->_isPlaying) {
+            [self spawnBlock];
+            self->_needsTickReset = YES;
+        }
+        [self render];
     }]]]];
 
     if (linesCleared == 4) {
@@ -567,7 +576,7 @@ static int jt_blocks[7][4][4][2] = {
     for (NSString *key in _board) {
         NSArray *comps = [key componentsSeparatedByString:@","]; int x = [comps[0] intValue], y = [comps[1] intValue];
         SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(x*kJTGrid, y*kJTGrid, kJTGrid-1, kJTGrid-1)];
-        node.fillColor = _board[key]; node.strokeColor = [UIColor blackColor]; node.lineWidth = 1.0; [_gameLayer addChild:node];
+        node.fillColor = _board[key]; node.strokeColor = _blockStroke; node.lineWidth = 1.0; [_gameLayer addChild:node];
     }
     
     if (_isPlaying && !_isDead && !_isPaused) {
@@ -598,13 +607,13 @@ static int jt_blocks[7][4][4][2] = {
         for (int i=0; i<4; i++) {
             int nx = _bX + jt_blocks[_bType][_bRot][i][0]; int ny = _bY + jt_blocks[_bType][_bRot][i][1];
             SKShapeNode *node = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*kJTGrid, ny*kJTGrid, kJTGrid-1, kJTGrid-1)];
-            node.fillColor = c; node.strokeColor = [UIColor blackColor]; node.lineWidth = 1.0; [_gameLayer addChild:node];
+            node.fillColor = c; node.strokeColor = _blockStroke; node.lineWidth = 1.0; [_gameLayer addChild:node];
         }
         UIColor *nc = [self colorForType:_nextType]; CGFloat pGrid = 14.0; 
         for (int i=0; i<4; i++) {
             int nx = jt_blocks[_nextType][0][i][0]; int ny = jt_blocks[_nextType][0][i][1];
             SKShapeNode *nNode = [SKShapeNode shapeNodeWithRect:CGRectMake(nx*pGrid, ny*pGrid, pGrid-1, pGrid-1)];
-            nNode.fillColor = nc; nNode.strokeColor = [UIColor blackColor]; nNode.lineWidth = 1.0; [_previewNode addChild:nNode];
+            nNode.fillColor = nc; nNode.strokeColor = _blockStroke; nNode.lineWidth = 1.0; [_previewNode addChild:nNode];
         }
     }
 }

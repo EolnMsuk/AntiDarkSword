@@ -18,6 +18,7 @@
     BOOL _hasSurpassedHighScore;
     NSInteger _savedHighScore;
     SKNode *_foodLayer;
+    UIColor *_foodStroke;
 }
 static const CGFloat kGridSize = 20.0;
 
@@ -59,11 +60,13 @@ static const CGFloat kGridSize = 20.0;
     
     self.gameState = ADSGameStateMenu;
     self.snake = [NSMutableArray array];
+    _foodStroke = [UIColor blackColor];
     if (@available(iOS 13.0, *)) {
         if (UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleLight) {
             self.backgroundColor = [UIColor colorWithWhite:0.05 alpha:1.0];
             self.filter = [CIFilter filterWithName:@"CIColorInvert"];
             self.shouldEnableEffects = YES;
+            _foodStroke = [UIColor whiteColor];
         }
     }
 }
@@ -427,7 +430,7 @@ static const CGFloat kGridSize = 20.0;
     [_foodLayer removeAllChildren];
     SKShapeNode *fNode = [SKShapeNode shapeNodeWithRectOfSize:CGSizeMake(kGridSize-2, kGridSize-2)];
     fNode.fillColor = [UIColor colorWithRed:1.0 green:0.25 blue:0.25 alpha:1.0];
-    fNode.strokeColor = [UIColor blackColor];
+    fNode.strokeColor = _foodStroke;
     fNode.lineWidth = 1.0;
     fNode.position = CGPointMake(self.food.x * kGridSize + self.gameLayer.position.x, self.food.y * kGridSize + self.gameLayer.position.y);
     [fNode runAction:[SKAction repeatActionForever:[SKAction sequence:@[[SKAction scaleTo:1.25 duration:0.25], [SKAction scaleTo:0.8 duration:0.25]]]]];
