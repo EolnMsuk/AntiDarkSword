@@ -65,7 +65,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**AntiDarkSword** protects your device from hidden web browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS). It blocks malicious code before it can even load, keeping your personal data safe.",
+          "markdown": "**AntiDarkSword** protects your device from hidden web browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS).",
           "useRawFormat": false
         },
         {
