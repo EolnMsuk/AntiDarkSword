@@ -65,7 +65,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**AntiDarkSword** defends jailbroken devices against WebKit RCE exploits and iMessage zero-click attack chains — including **Coruna**, **DarkSword**, and **BLASTPASS** — at the injection layer before any payload reaches the app.",
+          "markdown": "**AntiDarkSword** protects your device from hidden web browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS). It blocks malicious code before it can even load, keeping your personal data safe.",
           "useRawFormat": false
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **WebKit hardening** — hooks WKWebView, WKWebViewConfiguration, WKPreferences, and WKWebpagePreferences to cut renderer-level attack surface\n\n• **iMessage zero-click blocking** — suppresses IMFileTransfer downloads and risky attachment preview generation (HEIC, HEIF, WebP, PDF)\n\n• **Remote content rules** — WKContentRuleList compiled per-process; default-on for messaging and mail apps\n\n• **User Agent spoofing** — overrides `navigator.userAgent` / `userAgentData` via WKUserScript; presets from iOS 15 → macOS, Android, Windows\n\n• **App extension coverage** — Share, NSE, notification content, and iMessage extensions inherit or override their parent app's rules\n\n• **Corellium VM decoy** — fabricates a plausible stat for `/usr/libexec/corelliumd`, spoofs `kern.osversion`, and neutralises env/path probes\n\n• **Daemon protection** — hooks `imagent`, `identityservicesd`, `apsd`, and `IMDPersistenceAgent` at Level 3\n\n• **TrollFools variant** — substrate-free build; injected per-app, no jailbreak required",
+          "markdown": "• **Browser Protection** — Makes web browsing safer by reducing areas attackers can target.\n\n• **iMessage Security** — Blocks silent attacks by stopping dangerous file downloads and risky attachment previews (like PDFs and images).\n\n• **Content Blocking** — Automatically blocks unsafe content in messaging and mail apps.\n\n• **Device Cloaking** — Hides your real device info from websites, making you look like you're on a Mac, Android, or Windows PC to throw off trackers.\n\n• **App Extension Security** — Ensures that app add-ons (like share menus or notifications) share the same strict security rules as the main app.\n\n• **Decoy System** — Tricks attackers into thinking your device is a virtual machine, stopping many advanced attacks in their tracks.\n\n• **Background Service Protection** — Secures core system services (like message syncing) when using higher security levels.\n\n• **No Jailbreak Needed** — Includes a variant that can be injected directly into apps without needing a full jailbreak.",
           "useRawFormat": false
         },
         {
@@ -95,20 +95,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **Level 1** — browsers, mail, messaging, WebKit-heavy apps\n\n• **Level 2** — Level 1 + social and media apps\n\n• **Level 3** — Level 2 + system daemons (iMessage services)\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
-          "useRawFormat": false
-        },
-        {
-          "class": "DepictionSeparatorView"
-        },
-        {
-          "class": "DepictionSubheaderView",
-          "title": "Compatibility",
-          "useBoldText": true
-        },
-        {
-          "class": "DepictionMarkdownView",
-          "markdown": "**iOS 13 – 17**\n\n• `iphoneos-arm64` rootless — Dopamine 2, RootHide, palera1n rootless\n\n• `iphoneos-arm` rootful — palera1n rootful\n\n• `iphoneos-arm` legacy — Checkra1n, unc0ver, Electra (iOS 13–14)\n\n• TrollFools dylib — no jailbreak required (iOS 15+)",
+          "markdown": "• **Level 1** — Web browsers, mail, messaging, and web-heavy apps.\n\n• **Level 2** — Everything in Level 1, plus social media and entertainment apps.\n\n• **Level 3** — Everything in Level 2, plus background system services.\n\n*Note: You can easily set custom rules to override these levels for specific apps if you need to.*",
           "useRawFormat": false
         },
         {
