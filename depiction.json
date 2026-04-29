@@ -1,135 +1,149 @@
 {
-    "minVersion": "0.1",
-    "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
-    "tintColor": "#C0392B",
-    "tabs": [
+  "minVersion": "0.1",
+  "class": "DepictionTabView",
+  "tabs": [
+    {
+      "tabname": "Details",
+      "class": "DepictionStackView",
+      "views": [
         {
-            "tabname": "Details",
-            "views": [
-                {
-                    "class": "DepictionSubheaderView",
-                    "title": "Security framework for jailbroken iOS",
-                    "useBoldText": true,
-                    "useBottomMargin": false
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionMarkdownTextView",
-                    "markdown": "**AntiDarkSword** defends jailbroken and TrollFools-capable devices against WebKit RCE exploits and iMessage zero-click attack chains — including **Coruna**, **DarkSword**, and **BLASTPASS** — at the injection layer before any payload reaches the app.",
-                    "useSpacing": true,
-                    "useMargins": true
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionSubheaderView",
-                    "title": "Protection Layers",
-                    "useBoldText": true,
-                    "useBottomMargin": false
-                },
-                {
-                    "class": "DepictionMarkdownTextView",
-                    "markdown": "- **WebKit hardening** — hooks WKWebView, WKWebViewConfiguration, WKPreferences, and WKWebpagePreferences to cut renderer-level attack surface\n- **iMessage zero-click blocking** — suppresses IMFileTransfer downloads and risky attachment preview generation (HEIC, HEIF, WebP, PDF)\n- **Remote content rules** — WKContentRuleList compiled per-process; default-on for messaging and mail apps\n- **User Agent spoofing** — overrides `navigator.userAgent` / `userAgentData` via WKUserScript; presets from iOS 15 → macOS, Android, Windows\n- **App extension coverage** — Share, NSE, notification content, and iMessage extensions inherit or override their parent app's rules\n- **Corellium VM decoy** — fabricates a plausible `stat` for `/usr/libexec/corelliumd`, spoofs `kern.osversion`, and neutralises env/path probes\n- **Daemon protection** — hooks `imagent`, `identityservicesd`, `apsd`, and `IMDPersistenceAgent` at Level 3\n- **TrollFools variant** — substrate-free build; injected per-app, no jailbreak required",
-                    "useSpacing": true,
-                    "useMargins": true
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionSubheaderView",
-                    "title": "Auto-Protect Levels",
-                    "useBoldText": true,
-                    "useBottomMargin": false
-                },
-                {
-                    "class": "DepictionMarkdownTextView",
-                    "markdown": "| Level | Scope |\n|---|---|\n| **1** | Browsers, mail, messaging, WebKit-heavy apps |\n| **2** | Level 1 + social and media apps |\n| **3** | Level 2 + system daemons (iMessage services) |\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
-                    "useSpacing": true,
-                    "useMargins": true
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionSubheaderView",
-                    "title": "Screenshots",
-                    "useBoldText": true,
-                    "useBottomMargin": false
-                },
-                {
-                    "class": "DepictionScreenshotsView",
-                    "screenshots": [
-                        {
-                            "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/ScreenShots.png",
-                            "accessibilityText": "AntiDarkSword Settings"
-                        }
-                    ],
-                    "itemCornerRadius": 12,
-                    "itemSize": "{200, 433}"
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionSubheaderView",
-                    "title": "Package Info",
-                    "useBoldText": true,
-                    "useBottomMargin": false
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Version",
-                    "text": "4.8.9"
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Author",
-                    "text": "EolnMsuk"
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Compatibility",
-                    "text": "iOS 13 – 18 · arm64 / arm64e"
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Section",
-                    "text": "Tweaks"
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Bundle ID",
-                    "text": "com.eolnmsuk.antidarksword"
-                },
-                {
-                    "class": "DepictionTableTextView",
-                    "title": "Prefs Domain",
-                    "text": "com.eolnmsuk.antidarkswordprefs"
-                },
-                {
-                    "class": "DepictionSeparatorView"
-                },
-                {
-                    "class": "DepictionTableButtonView",
-                    "title": "Source on GitHub",
-                    "action": "https://github.com/EolnMsuk/AntiDarkSword",
-                    "openExternal": true
-                },
-                {
-                    "class": "DepictionTableButtonView",
-                    "title": "Donate via Venmo",
-                    "action": "https://venmo.com/user/eolnmsuk",
-                    "openExternal": true
-                },
-                {
-                    "class": "DepictionSpacerView",
-                    "spacing": 20
-                }
-            ]
+          "class": "DepictionImageView",
+          "URL": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
+          "width": 0,
+          "height": 175,
+          "cornerRadius": 0
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "**AntiDarkSword** defends jailbroken and TrollFools-capable devices against WebKit RCE exploits and iMessage zero-click attack chains — including **Coruna**, **DarkSword**, and **BLASTPASS** — at the injection layer before any payload reaches the app.",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 8
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Protection Layers",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "• **WebKit hardening** — hooks WKWebView, WKWebViewConfiguration, WKPreferences, and WKWebpagePreferences to cut renderer-level attack surface\n• **iMessage zero-click blocking** — suppresses IMFileTransfer downloads and risky attachment preview generation (HEIC, HEIF, WebP, PDF)\n• **Remote content rules** — WKContentRuleList compiled per-process; default-on for messaging and mail apps\n• **User Agent spoofing** — overrides `navigator.userAgent` / `userAgentData` via WKUserScript; presets from iOS 15 → macOS, Android, Windows\n• **App extension coverage** — Share, NSE, notification content, and iMessage extensions inherit or override their parent app's rules\n• **Corellium VM decoy** — fabricates a plausible stat for `/usr/libexec/corelliumd`, spoofs `kern.osversion`, and neutralises env/path probes\n• **Daemon protection** — hooks `imagent`, `identityservicesd`, `apsd`, and `IMDPersistenceAgent` at Level 3\n• **TrollFools variant** — substrate-free build; injected per-app, no jailbreak required",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Auto-Protect Levels",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "| Level | Scope |\n|---|---|\n| **1** | Browsers, mail, messaging, WebKit-heavy apps |\n| **2** | Level 1 + social and media apps |\n| **3** | Level 2 + system daemons (iMessage services) |\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Compatibility",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "**iOS 13 – 18**\n\n| Package | Jailbreak |\n|---|---|\n| `iphoneos-arm64` rootless | Dopamine 2, RootHide, palera1n rootless |\n| `iphoneos-arm` rootful | palera1n rootful |\n| `iphoneos-arm` legacy | Checkra1n, unc0ver, Electra (iOS 13–14) |\n| TrollFools dylib | No jailbreak required (iOS 15+) |",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "View Source on GitHub",
+          "action": "https://github.com/EolnMsuk/AntiDarkSword",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "Donate via Venmo",
+          "action": "https://venmo.com/user/eolnmsuk",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
         }
-    ]
+      ]
+    },
+    {
+      "tabname": "Information",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Version",
+          "text": "4.8.9"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Author",
+          "text": "EolnMsuk"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Maintainer",
+          "text": "EolnMsuk"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Section",
+          "text": "Tweaks"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Package",
+          "text": "com.eolnmsuk.antidarksword"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "iOS Compatibility",
+          "text": "13.0 – 18.x"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Architecture",
+          "text": "arm64, arm64e"
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "Report an Issue",
+          "action": "https://github.com/EolnMsuk/AntiDarkSword/issues",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        }
+      ]
+    }
+  ]
 }
