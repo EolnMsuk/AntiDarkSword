@@ -7,6 +7,10 @@
       "class": "DepictionStackView",
       "views": [
         {
+          "class": "DepictionSpacerView",
+          "spacing": 0
+        },
+        {
           "class": "DepictionImageView",
           "URL": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/banner.png",
           "width": 0,
