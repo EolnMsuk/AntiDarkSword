@@ -66,7 +66,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**iOS 13 – 18**\n\n| Package | Jailbreak |\n|---|---|\n| `iphoneos-arm64` rootless | Dopamine 2, RootHide, palera1n rootless |\n| `iphoneos-arm` rootful | palera1n rootful |\n| `iphoneos-arm` legacy | Checkra1n, unc0ver, Electra (iOS 13–14) |\n| TrollFools dylib | No jailbreak required (iOS 15+) |",
+          "markdown": "**iOS 13 – 17**\n\n| Package | Jailbreak |\n|---|---|\n| `iphoneos-arm64` rootless | Dopamine 2, RootHide, palera1n rootless |\n| `iphoneos-arm` rootful | palera1n rootful |\n| `iphoneos-arm` legacy | Checkra1n, unc0ver, Electra (iOS 13–14) |\n| TrollFools dylib | No jailbreak required (iOS 15+) |",
           "useRawFormat": false
         },
         {
@@ -127,7 +127,7 @@
         {
           "class": "DepictionTableTextView",
           "title": "iOS Compatibility",
-          "text": "13.0 – 18.x"
+          "text": "13.0 – 17.0"
         },
         {
           "class": "DepictionTableTextView",
