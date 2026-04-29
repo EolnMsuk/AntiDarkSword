@@ -23,7 +23,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**AntiDarkSword** defends jailbroken and TrollFools-capable devices against WebKit RCE exploits and iMessage zero-click attack chains — including **Coruna**, **DarkSword**, and **BLASTPASS** — at the injection layer before any payload reaches the app.",
+          "markdown": "**AntiDarkSword** defends jailbroken devices against WebKit RCE exploits and iMessage zero-click attack chains — including **Coruna**, **DarkSword**, and **BLASTPASS** — at the injection layer before any payload reaches the app.",
           "useRawFormat": false
         },
         {
