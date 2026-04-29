@@ -1,5 +1,7 @@
 {
   "minVersion": "0.1",
+  "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/haptixprefs/Resources/sicon.png",
+  "packageIcon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/haptixprefs/Resources/sicon.png",
   "tintColor": "#2CB1BE",
   "class": "DepictionTabView",
   "tabs": [
@@ -11,7 +13,7 @@
         {
           "class": "DepictionHeaderView",
           "title": "AntiDarkSword ⛨",
-          "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png"
+          "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/sicon.png"
         },
         {
           "class": "DepictionMarkdownView",
@@ -54,7 +56,7 @@
         {
           "class": "DepictionImageControlView",
           "height": 160,
-          "image": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/header.png"
+          "image": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/sicon.png"
         },
         {
           "class": "DepictionButtonView",
@@ -71,7 +73,7 @@
         {
           "class": "DepictionHeaderView",
           "title": "Compatibility & Protection",
-          "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/AntiDarkSword.png"
+          "icon": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/sicon.png"
         },
         {
           "class": "DepictionMarkdownView",
