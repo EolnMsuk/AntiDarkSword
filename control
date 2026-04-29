@@ -7,5 +7,4 @@ Description: Security framework for mitigating Coruna / DarkSword - zero-click m
 Maintainer: EolnMsuk
 Author: EolnMsuk
 Section: Tweaks
-Icon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/haptixprefs/Resources/sicon.png
-Depiction: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/depiction.json
+Icon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/sicon.png
