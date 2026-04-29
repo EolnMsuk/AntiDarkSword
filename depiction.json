@@ -13,11 +13,51 @@
           "spacing": 0
         },
         {
-          "class": "DepictionImageView",
-          "URL": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshots.png",
-          "width": 1279,
-          "height": 693,
-          "cornerRadius": 0
+          "class": "DepictionScreenshotsView",
+          "itemCornerRadius": 14,
+          "itemSize": "{160, 346}",
+          "screenshots": [
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot1.png",
+              "accessibilityText": "Preset Levels"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot2.png",
+              "accessibilityText": "Level 3 Options"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot3.png",
+              "accessibilityText": "Preset Rules"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot4.png",
+              "accessibilityText": "Mitigations"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot5.png",
+              "accessibilityText": "Custom Rules"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot6.png",
+              "accessibilityText": "Info"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot7.png",
+              "accessibilityText": "Shake iPhone (easter egg)"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot8.png",
+              "accessibilityText": "JailTris"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot9.png",
+              "accessibilityText": "Extra Points"
+            }
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot10.png",
+              "accessibilityText": "PyEater"
+            }
+          ]
         },
         {
           "class": "DepictionSpacerView",
@@ -42,7 +82,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **WebKit hardening** — hooks WKWebView, WKWebViewConfiguration, WKPreferences, and WKWebpagePreferences to cut renderer-level attack surface\n• **iMessage zero-click blocking** — suppresses IMFileTransfer downloads and risky attachment preview generation (HEIC, HEIF, WebP, PDF)\n• **Remote content rules** — WKContentRuleList compiled per-process; default-on for messaging and mail apps\n• **User Agent spoofing** — overrides `navigator.userAgent` / `userAgentData` via WKUserScript; presets from iOS 15 → macOS, Android, Windows\n• **App extension coverage** — Share, NSE, notification content, and iMessage extensions inherit or override their parent app's rules\n• **Corellium VM decoy** — fabricates a plausible stat for `/usr/libexec/corelliumd`, spoofs `kern.osversion`, and neutralises env/path probes\n• **Daemon protection** — hooks `imagent`, `identityservicesd`, `apsd`, and `IMDPersistenceAgent` at Level 3\n• **TrollFools variant** — substrate-free build; injected per-app, no jailbreak required",
+          "markdown": "• **WebKit hardening** — hooks WKWebView, WKWebViewConfiguration, WKPreferences, and WKWebpagePreferences to cut renderer-level attack surface\n\n• **iMessage zero-click blocking** — suppresses IMFileTransfer downloads and risky attachment preview generation (HEIC, HEIF, WebP, PDF)\n\n• **Remote content rules** — WKContentRuleList compiled per-process; default-on for messaging and mail apps\n\n• **User Agent spoofing** — overrides `navigator.userAgent` / `userAgentData` via WKUserScript; presets from iOS 15 → macOS, Android, Windows\n\n• **App extension coverage** — Share, NSE, notification content, and iMessage extensions inherit or override their parent app's rules\n\n• **Corellium VM decoy** — fabricates a plausible stat for `/usr/libexec/corelliumd`, spoofs `kern.osversion`, and neutralises env/path probes\n\n• **Daemon protection** — hooks `imagent`, `identityservicesd`, `apsd`, and `IMDPersistenceAgent` at Level 3\n\n• **TrollFools variant** — substrate-free build; injected per-app, no jailbreak required",
           "useRawFormat": false
         },
         {
@@ -55,7 +95,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **Level 1** — browsers, mail, messaging, WebKit-heavy apps\n• **Level 2** — Level 1 + social and media apps\n• **Level 3** — Level 2 + system daemons (iMessage services)\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
+          "markdown": "• **Level 1** — browsers, mail, messaging, WebKit-heavy apps\n\n• **Level 2** — Level 1 + social and media apps\n\n• **Level 3** — Level 2 + system daemons (iMessage services)\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
           "useRawFormat": false
         },
         {
@@ -68,7 +108,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**iOS 13 – 17**\n\n• `iphoneos-arm64` rootless — Dopamine 2, RootHide, palera1n rootless\n• `iphoneos-arm` rootful — palera1n rootful\n• `iphoneos-arm` legacy — Checkra1n, unc0ver, Electra (iOS 13–14)\n• TrollFools dylib — no jailbreak required (iOS 15+)",
+          "markdown": "**iOS 13 – 17**\n\n• `iphoneos-arm64` rootless — Dopamine 2, RootHide, palera1n rootless\n\n• `iphoneos-arm` rootful — palera1n rootful\n\n• `iphoneos-arm` legacy — Checkra1n, unc0ver, Electra (iOS 13–14)\n\n• TrollFools dylib — no jailbreak required (iOS 15+)",
           "useRawFormat": false
         },
         {
