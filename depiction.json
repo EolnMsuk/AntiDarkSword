@@ -53,7 +53,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "| Level | Scope |\n|---|---|\n| **1** | Browsers, mail, messaging, WebKit-heavy apps |\n| **2** | Level 1 + social and media apps |\n| **3** | Level 2 + system daemons (iMessage services) |\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
+          "markdown": "• **Level 1** — browsers, mail, messaging, WebKit-heavy apps\n• **Level 2** — Level 1 + social and media apps\n• **Level 3** — Level 2 + system daemons (iMessage services)\n\nCustom per-app and per-extension rules override the active level for any bundle ID.",
           "useRawFormat": false
         },
         {
