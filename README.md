@@ -9,7 +9,7 @@ An iOS jailbreak tweak and TrollStore dylib that hardens vulnerable iOS devices 
 
 ---
 
-[<img width="1280" height="1030" alt="ReadMeNew" src="https://i.imgur.com/EGdnbIk.png" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
+[<img width="1280" height="1030" alt="ReadMeNew" src="https://i.imgur.com/D0g0BRt.png" />](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
 > **Exploit kits:** DarkSword, Coruna, Predator, PWNYOURHOME, Chaos, Operation Triangulation, Hermit  
 > **Zero-clicks:** BLASTPASS (PassKit iMessage attachment)  
 > **CVEs:** CVE-2025-43529, CVE-2024-44308, CVE-2022-42856

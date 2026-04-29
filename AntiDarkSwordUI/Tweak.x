@@ -526,6 +526,8 @@ static void loadPrefs() {
         if ([msgAndMail containsObject:matchedID]) {
             disableMedia = disableRTC = disableFileAccess = YES;
             blockRemoteContent = YES;
+            // FORCEDENTRY / BLASTPASS mitigation: suppress ImageIO parsing of risky formats at L3+.
+            blockRiskyAttachments = (autoProtectLevel >= 3);
             if ([iMessageUIApps containsObject:matchedID]) disableIMessageDL = YES;
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
