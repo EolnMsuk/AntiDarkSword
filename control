@@ -7,4 +7,5 @@ Description: Security framework to defend against WebKit RCE and iMessage zero-c
 Maintainer: EolnMsuk
 Author: EolnMsuk
 Section: Tweaks
-Icon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/sicon.png
+Icon: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/antidarkswordprefs/Resources/icon@3x.png
+SileoDepiction: https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/main/depiction.json
