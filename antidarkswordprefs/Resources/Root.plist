@@ -9,8 +9,6 @@
             <string>PSGroupCell</string>
             <key>label</key>
             <string>Global Setting</string>
-            <key>footerText</key>
-            <string>This globally enables or disables all currently selected protections.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -36,8 +34,6 @@
             <string>UserAgentGroup</string>
             <key>label</key>
             <string>User Agent Configuration</string>
-            <key>footerText</key>
-            <string>Configure which profile to spoof while browsing (8.1 is safe).</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -158,8 +154,6 @@
             <string>AppPermissionsGroup</string>
             <key>label</key>
             <string>Custom Rules</string>
-            <key>footerText</key>
-            <string>Manually protect apps that are not in the current Level preset.</string>
         </dict>
         <dict>
             <key>cell</key>
@@ -197,16 +191,6 @@
             <true/>
         </dict>
 
-        <dict>
-            <key>cell</key>
-            <string>PSGroupCell</string>
-            <key>id</key>
-            <string>AdvancedRestrictionsGroup</string>
-            <key>label</key>
-            <string>Advanced Rules</string>
-            <key>footerText</key>
-            <string>Add bundle IDs or process names. Swipe left on rules to remove.</string>
-        </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
