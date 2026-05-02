@@ -949,16 +949,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath]; 
-    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
-    
-    // Center and color the Reset button
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath]; 
     if (spec->action == @selector(resetToDefaults)) { 
         if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemRedColor]; 
         else cell.textLabel.textColor = [UIColor redColor]; 
-        cell.textLabel.textAlignment = NSTextAlignmentCenter;
     }
-    
-    // Color the Donate button green
     if (spec->action == @selector(openVenmo)) {
         if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemGreenColor]; 
         else cell.textLabel.textColor = [UIColor greenColor];

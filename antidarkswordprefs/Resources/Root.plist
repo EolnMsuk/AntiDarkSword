@@ -248,6 +248,8 @@
             <string>resetToDefaults</string>
             <key>isDestructive</key>
             <true/>
+            <key>alignment</key>
+            <integer>2</integer>
         </dict>
         
         <dict>
