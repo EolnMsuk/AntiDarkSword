@@ -948,12 +948,30 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     return items;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath]; PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
-    if (spec->action == @selector(resetToDefaults)) { if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemRedColor]; else cell.textLabel.textColor = [UIColor redColor]; }
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath]; 
+    PSSpecifier *spec = [self specifierAtIndexPath:indexPath];
+    
+    // Center and color the Reset button
+    if (spec->action == @selector(resetToDefaults)) { 
+        if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemRedColor]; 
+        else cell.textLabel.textColor = [UIColor redColor]; 
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+    }
+    
+    // Color the Donate button green
+    if (spec->action == @selector(openVenmo)) {
+        if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemGreenColor]; 
+        else cell.textLabel.textColor = [UIColor greenColor];
+    }
+    
     if ([[spec propertyForKey:@"key"] isEqualToString:@"enabled"]) {
         if ([cell respondsToSelector:@selector(control)]) {
             UISwitch *toggle = (UISwitch *)[cell control];
-            if ([toggle isKindOfClass:[UISwitch class]]) { if (@available(iOS 13.0, *)) toggle.backgroundColor = [UIColor systemRedColor]; else toggle.backgroundColor = [UIColor redColor]; toggle.layer.cornerRadius = 15.5; }
+            if ([toggle isKindOfClass:[UISwitch class]]) { 
+                if (@available(iOS 13.0, *)) toggle.backgroundColor = [UIColor systemRedColor]; 
+                else toggle.backgroundColor = [UIColor redColor]; 
+                toggle.layer.cornerRadius = 15.5; 
+            }
         }
     }
     id ruleTypeObj = [spec propertyForKey:@"ruleType"];
