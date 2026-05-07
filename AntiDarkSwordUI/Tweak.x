@@ -531,6 +531,16 @@ static void loadPrefs() {
             if ([iMessageUIApps containsObject:matchedID]) disableIMessageDL = YES;
             if (![matchedID hasPrefix:@"com.apple."]) spoofUARule = (autoProtectLevel >= 2);
         } else if ([browsers containsObject:matchedID]) {
+            // Chromium-based browsers (Brave, Chrome) initialize a Chromium framework
+            // (BraveCore/CRNetworking) that CHECKs JIT configuration during startup.
+            // Forcing JIT disable via WKProcessPool hooks causes a brk 0 / EXC_BREAKPOINT
+            // in setupBraveCore() before any web content is loaded.
+            // Safari supports Lockdown Mode natively; disableJIT is only cleared for Chromium apps.
+            if ([matchedID isEqualToString:@"com.brave.ios.browser"] ||
+                [matchedID isEqualToString:@"com.google.chrome.ios"]) {
+                disableJIT = NO;
+                disableJIT15 = NO;
+            }
             if ([matchedID isEqualToString:@"com.apple.mobilesafari"] ||
                 [matchedID isEqualToString:@"com.apple.SafariViewService"]) {
                 spoofUARule = YES;

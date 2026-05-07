@@ -288,10 +288,14 @@ static void loadPrefs() {
     }
     if (![rules isKindOfClass:[NSDictionary class]]) rules = nil;
 
+    // Chromium-based browsers (Brave, Chrome) crash with EXC_BREAKPOINT during setupBraveCore()
+    // if JIT is force-disabled — their Chromium framework CHECKs the JIT configuration.
+    BOOL isChromiumBrowser = [bundleID isEqualToString:@"com.brave.ios.browser"] ||
+                             [bundleID isEqualToString:@"com.google.chrome.ios"];
     // Defaults on first use: UA spoof ON (non-breaking), JIT ON (low breakage),
     // JS/Media/WebRTC/FileAccess OFF (user opts in explicitly — these break most apps).
-    applyDisableJIT        = isIOS16  ? ads_read_bool(rules, prefs, @"disableJIT",        @"globalDisableJIT",        YES) : NO;
-    applyDisableJIT15      = !isIOS16 ? ads_read_bool(rules, prefs, @"disableJIT15",      @"globalDisableJIT15",      YES) : NO;
+    applyDisableJIT        = isChromiumBrowser ? NO : (isIOS16  ? ads_read_bool(rules, prefs, @"disableJIT",        @"globalDisableJIT",        YES) : NO);
+    applyDisableJIT15      = isChromiumBrowser ? NO : (!isIOS16 ? ads_read_bool(rules, prefs, @"disableJIT15",      @"globalDisableJIT15",      YES) : NO);
     applyDisableJS         =            ads_read_bool(rules, prefs, @"disableJS",         @"globalDisableJS",         NO);
     applyDisableMedia      =            ads_read_bool(rules, prefs, @"disableMedia",      @"globalDisableMedia",      NO);
     applyDisableRTC        =            ads_read_bool(rules, prefs, @"disableRTC",        @"globalDisableRTC",        NO);
