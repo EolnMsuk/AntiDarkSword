@@ -351,6 +351,24 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
     loadPrefs();
 }
 
+static void ads_compile_content_blocker_once(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *blockRules =
+            @"[{\"trigger\":{\"url-filter\":\"^https?://\","
+             "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
+             "\"font\",\"media\",\"svg-document\",\"raw\"]},"
+             "\"action\":{\"type\":\"block\"}}]";
+        [WKContentRuleListStore.defaultStore
+            compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
+            encodedContentRuleList:blockRules
+            completionHandler:^(WKContentRuleList *list, NSError *err) {
+                if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
+                else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
+            }];
+    });
+}
+
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
     
@@ -402,9 +420,12 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
-    WKContentRuleList *localBlocker = adsContentBlocker;
-    if (applyBlockRemoteContent && localBlocker)
-        [configuration.userContentController addContentRuleList:localBlocker];
+    if (applyBlockRemoteContent) {
+        ads_compile_content_blocker_once();
+        WKContentRuleList *localBlocker = adsContentBlocker;
+        if (localBlocker)
+            [configuration.userContentController addContentRuleList:localBlocker];
+    }
 
     if (shouldSpoofUA) injectUAScript(configuration.userContentController);
 }
@@ -414,9 +435,11 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
-    WKContentRuleList *localBlocker = adsContentBlocker;
-    if (applyBlockRemoteContent && localBlocker && userContentController)
-        [userContentController addContentRuleList:localBlocker];
+    if (applyBlockRemoteContent && userContentController) {
+        ads_compile_content_blocker_once();
+        WKContentRuleList *localBlocker = adsContentBlocker;
+        if (localBlocker) [userContentController addContentRuleList:localBlocker];
+    }
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
@@ -1137,27 +1160,6 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
 %ctor {
     isRootlessJB = (access("/var/jb", F_OK) == 0);
     loadPrefs();
-
-    // Pre-compile the remote content blocker used by "Block Remote Content".
-    // Blocks external http/https resource loads in WKWebViews — the main attack
-    // surface for zero-click exploits delivered via HTML email in Mail.app.
-    // Compilation is async and WebKit caches the result; subsequent launches
-    // reuse the cached build. The completion handler stores the result in
-    // adsContentBlocker; applyWebKitMitigations applies it when the flag is ON.
-    NSString *blockRules =
-        @"[{\"trigger\":{\"url-filter\":\"^https?://\","
-         "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
-         "\"font\",\"media\",\"svg-document\",\"raw\"]},"
-         "\"action\":{\"type\":\"block\"}}]";
-    // completionHandler fires on an arbitrary queue; adsContentBlocker is read
-    // from WebKit hooks on the main thread, so the assignment must be main-queue.
-    [WKContentRuleListStore.defaultStore
-        compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
-        encodedContentRuleList:blockRules
-        completionHandler:^(WKContentRuleList *list, NSError *err) {
-            if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
-            else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
-        }];
 
     ADSLog(@"[INIT] AntiDarkSword (TrollFools) loaded into: %@ (%@)",
            [[NSProcessInfo processInfo] processName],

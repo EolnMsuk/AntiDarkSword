@@ -304,6 +304,24 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
     }
 }
 
+static void ads_compile_content_blocker_once(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        NSString *blockRules =
+            @"[{\"trigger\":{\"url-filter\":\"^https?://\","
+             "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
+             "\"font\",\"media\",\"svg-document\",\"raw\"]},"
+             "\"action\":{\"type\":\"block\"}}]";
+        [WKContentRuleListStore.defaultStore
+            compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
+            encodedContentRuleList:blockRules
+            completionHandler:^(WKContentRuleList *list, NSError *err) {
+                if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
+                else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
+            }];
+    });
+}
+
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
     if (!configuration) return;
 
@@ -356,9 +374,12 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
-    WKContentRuleList *localBlocker = adsContentBlocker;
-    if (applyBlockRemoteContent && localBlocker)
-        [configuration.userContentController addContentRuleList:localBlocker];
+    if (applyBlockRemoteContent) {
+        ads_compile_content_blocker_once();
+        WKContentRuleList *localBlocker = adsContentBlocker;
+        if (localBlocker)
+            [configuration.userContentController addContentRuleList:localBlocker];
+    }
 
     if (shouldSpoofUA) injectUAScript(configuration.userContentController);
 }
@@ -628,9 +649,11 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
     if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
-    WKContentRuleList *localBlocker = adsContentBlocker;
-    if (applyBlockRemoteContent && localBlocker && userContentController)
-        [userContentController addContentRuleList:localBlocker];
+    if (applyBlockRemoteContent && userContentController) {
+        ads_compile_content_blocker_once();
+        WKContentRuleList *localBlocker = adsContentBlocker;
+        if (localBlocker) [userContentController addContentRuleList:localBlocker];
+    }
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
@@ -964,21 +987,6 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 
     loadPrefs();
     ADSLog(@"[INIT] AntiDarkSwordUI loaded into: %@", processName);
-
-    // Pre-compile the remote content blocker. Blocks external http/https resource loads
-    // in WKWebViews — primary zero-click attack surface for HTML email rendering.
-    NSString *blockRules =
-        @"[{\"trigger\":{\"url-filter\":\"^https?://\","
-         "\"resource-type\":[\"image\",\"style-sheet\",\"script\","
-         "\"font\",\"media\",\"svg-document\",\"raw\"]},"
-         "\"action\":{\"type\":\"block\"}}]";
-    [WKContentRuleListStore.defaultStore
-        compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
-        encodedContentRuleList:blockRules
-        completionHandler:^(WKContentRuleList *list, NSError *err) {
-            if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
-            else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
-        }];
 
     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL,
         (CFNotificationCallback)reloadPrefsNotification,
