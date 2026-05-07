@@ -738,9 +738,11 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
             if (isIOS16) {
                 rules[@"disableJIT"] = rules[@"disableJIT_savedBeforeJS"] ?: @NO;
                 [rules removeObjectForKey:@"disableJIT_savedBeforeJS"];
+                if (![rules[@"disableJIT"] boolValue]) rules[@"disableMedia"] = @NO;
             } else {
                 rules[@"disableJIT15"] = rules[@"disableJIT15_savedBeforeJS"] ?: @NO;
                 [rules removeObjectForKey:@"disableJIT15_savedBeforeJS"];
+                if (![rules[@"disableJIT15"] boolValue]) rules[@"disableMedia"] = @NO;
             }
         }
         [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
