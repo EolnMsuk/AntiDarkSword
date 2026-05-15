@@ -1134,5 +1134,5 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 - (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 - (void)openGitHub { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"] options:@{} completionHandler:nil]; }
-- (void)openVenmo { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://venmo.com/user/eolnmsuk"] options:@{} completionHandler:nil]; }
+- (void)openVenmo { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://venmo.com/user/RustOnRails"] options:@{} completionHandler:nil]; }
 @end
