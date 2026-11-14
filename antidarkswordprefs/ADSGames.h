@@ -5,25 +5,7 @@
 
 #define ADS_PREFS_SUITE @"com.eolnmsuk.antidarkswordprefs"
 
-typedef struct {
-    float bgmPhase;
-    float bgmPhase2;
-    float bgmPhase3;
-    float sfxPhase;
-    float sfxFreq;
-    float sfxDur;
-    float sfxEnvInit;
-    float sfxFreq2;
-    float sfxPhase2;
-    float sfxDur2;
-    float bgmTime;
-    float bgmTime2;
-    int bgmIdx;
-    int bgmIdx2;
-    int playBGM;
-    float sfxSweepRate;
-    float sfxSweep2Rate;
-} ADSSynthState;
+#import "ADSAudio.h"
 
 typedef NS_ENUM(NSInteger, ADSGameState) {
     ADSGameStateMenu,

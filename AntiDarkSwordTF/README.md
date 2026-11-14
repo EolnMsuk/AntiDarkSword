@@ -42,7 +42,7 @@ The dylib is sandboxed to the injected app and has no system-level access. These
 
 - **TrollStore 2** installed on your device ([opa334/TrollStore](https://github.com/opa334/TrollStore))
 - **TrollFools** installed via TrollStore ([Lessica/TrollFools](https://github.com/Lessica/TrollFools))
-- iOS **14.5 – 17.0** (arm64 / arm64e) — exact device support depends on your TrollStore install method (see [Device Compatibility](#device-compatibility) below)
+- Release deployment target: **iOS 15.0+**, arm64 / arm64e. Actual TrollStore/TrollFools availability and injection require separate device validation; see [device compatibility and building](#device-compatibility-and-building).
 - The target app must be a **third-party App Store app** — Apple system apps cannot be injected by TrollFools
 
 ---
@@ -91,37 +91,26 @@ Use TrollFools when you cannot or do not want to jailbreak, or when you want sur
 
 ---
 
-## Device Compatibility
+## Device compatibility and building
 
-### TrollStore (no jailbreak)
+The release compilation baseline is iOS 15+ with arm64 and current arm64e ABI,
+SDK 16.5, internal Logos and no MobileSubstrate. This does not assert TrollStore/
+TrollFools availability or successful injection on every device/OS; use the
+upstream projects' installation documentation for that separate question.
 
-TrollStore's availability depends on which exploit method is available for your device and iOS version. Consult the [TrollStore README](https://github.com/opa334/TrollStore) for the current install method for your specific device.
+On a configured user Mac, `bash scripts/build_target.sh trollfools` from the
+project root collects `output/AntiDarkSword_<version>_TrollFools.dylib`. The root
+`control` file supplies the release version; target settings come from shared
+configuration. Direct `make -f Makefile.trollfools` uses the same baseline and
+isolated `.build/trollfools/` objects. See [building](../docs/building.md).
 
-| iOS Range | Architecture | TrollStore Status |
-|---|---|---|
-| 14.0 – 14.8.1 | arm64, arm64e | Supported |
-| 15.0 – 16.6.1 | arm64, arm64e | Supported |
-| 16.7.x | arm64 (A12+) | Limited — check TrollStore docs |
-| 17.0 | arm64e (select devices) | Limited — check TrollStore docs |
-| 17.1+ | all | Not supported (as of this writing) |
-
-> Check [TrollStore](https://github.com/opa334/TrollStore) directly — supported iOS versions expand as new exploits are found.
-
----
-
-## Building
-
-Requires [Theos](https://theos.dev/) with `$THEOS` set.
-
-```sh
-# From the repo root:
-make -f Makefile.trollfools
-
-# Output:
-# .theos/obj/AntiDarkSwordTF/AntiDarkSword.dylib
-```
-
-The dylib uses `LOGOS_DEFAULT_GENERATOR = internal` — no CydiaSubstrate or ElleKit is linked. The `TROLLFOOLS_BUILD=1` preprocessor flag gates any jailbreak-only code paths in shared headers.
+The existing authentication, gesture and overlay remain. No updater or donation
+features were added here. Policy reloads now publish complete retained snapshots,
+UA injection uses a serialized generation, and main-queue owned WebKit state
+reaches views created during asynchronous compilation. Canonical/legacy preference
+file lookup and sandboxed suite fallback remain. Existing documents can need
+navigation/recreation after UA changes. Injection, auth/settings, coexistence and
+standalone dependency checks remain pending [user validation](../docs/validation.md).
 
 ---
 
@@ -129,4 +118,4 @@ The dylib uses `LOGOS_DEFAULT_GENERATOR = internal` — no CydiaSubstrate or Ell
 
 Created by: [EolnMsuk](https://github.com/EolnMsuk) / [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/)
 
-Support my work: [Venmo](https://venmo.com/user/eolnmsuk)
+Support my work: [Venmo](https://venmo.com/EolnMsuk/)

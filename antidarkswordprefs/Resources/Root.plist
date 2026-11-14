@@ -222,9 +222,19 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>💸  Donate</string>
+            <string>Check for Updates</string>
             <key>action</key>
-            <string>openVenmo</string>
+            <string>checkForUpdates</string>
+            <key>id</key>
+            <string>CheckUpdates</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>💸 Donate</string>
+            <key>action</key>
+            <string>presentDonationMenu</string>
         </dict>
         <dict>
             <key>cell</key>

@@ -14,6 +14,8 @@
 #include <objc/runtime.h>
 
 #import "../ADSLogging.h"
+#import "../ADSPaths.h"
+#include <os/lock.h>
 
 // lockdownModeEnabled became public in iOS 16 (SDK 160000+); forward-declare only for older SDKs.
 #if __IPHONE_OS_VERSION_MAX_ALLOWED < 160000
@@ -36,12 +38,16 @@
 @end
 
 // Shares prefs domain with the jailbreak tweak so the PreferenceLoader bundle is interoperable.
-static BOOL isRootlessJB = NO;
 
 static NSString *ads_prefs_path(void) {
-    return isRootlessJB
-        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
-        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+    NSString *mobile = ADSMobilePreferencesPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:mobile]) return mobile;
+    NSString *legacy = ADSJailbreakPath(mobile);
+    if (![legacy isEqualToString:mobile] && [[NSFileManager defaultManager] fileExistsAtPath:legacy]) return legacy;
+    // Standalone injection may read an older rootless install without linking a jailbreak library.
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"])
+        return @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+    return mobile;
 }
 
 // Resolves the parent app bundle ID for an app extension process.
@@ -57,18 +63,46 @@ static NSString *ads_parent_bundle_id_for_appex(void) {
     return [[NSBundle bundleWithPath:parentApp] bundleIdentifier];
 }
 
-static _Atomic BOOL prefsLoaded              = NO;
-static _Atomic BOOL shouldSpoofUA            = NO;
-static _Atomic BOOL applyDisableJIT          = NO;
-static _Atomic BOOL applyDisableJIT15        = NO;
-static _Atomic BOOL applyDisableJS           = NO;
-static _Atomic BOOL applyDisableMedia        = NO;
-static _Atomic BOOL applyDisableRTC          = NO;
-static _Atomic BOOL applyDisableFileAccess   = NO;
-static _Atomic BOOL applyBlockRemoteContent  = NO;
-static _Atomic BOOL applyBlockRiskyAttachments = NO;
+// Built on a serial reload queue, immutable after publication. Hooks retain one
+// complete snapshot per invocation. The lock only protects the retained pointer;
+// CFPreferences, WebKit and original hooks are never called while it is held.
+@interface ADSTFProtectionState : NSObject
+@property (nonatomic, assign) BOOL shouldSpoofUA;
+@property (nonatomic, assign) BOOL applyDisableJIT;
+@property (nonatomic, assign) BOOL applyDisableJIT15;
+@property (nonatomic, assign) BOOL applyDisableJS;
+@property (nonatomic, assign) BOOL applyDisableMedia;
+@property (nonatomic, assign) BOOL applyDisableRTC;
+@property (nonatomic, assign) BOOL applyDisableFileAccess;
+@property (nonatomic, assign) BOOL applyBlockRemoteContent;
+@property (nonatomic, assign) BOOL applyBlockRiskyAttachments;
+@property (nonatomic, copy) NSString *customUAString;
+@property (nonatomic, assign) NSUInteger generation;
+@end
+@implementation ADSTFProtectionState
+@end
+static os_unfair_lock ads_state_lock = OS_UNFAIR_LOCK_INIT;
+static ADSTFProtectionState *ads_published_state;
+static void ads_refresh_content_controllers(void);
+static ADSTFProtectionState *ads_snapshot(void) {
+    os_unfair_lock_lock(&ads_state_lock);
+    ADSTFProtectionState *snapshot = ads_published_state;
+    os_unfair_lock_unlock(&ads_state_lock);
+    return snapshot;
+}
+static void ads_publish(ADSTFProtectionState *snapshot) {
+    os_unfair_lock_lock(&ads_state_lock);
+    ads_published_state = snapshot;
+    os_unfair_lock_unlock(&ads_state_lock);
+    dispatch_async(dispatch_get_main_queue(), ^{ ads_refresh_content_controllers(); });
+}
+static dispatch_queue_t ads_reload_queue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("com.eolnmsuk.ads.AntiDarkSwordTF.reload", DISPATCH_QUEUE_SERIAL); });
+    return queue;
+}
 
-static NSString *customUAString = nil;
 
 // Compiled once in %ctor; blocks external http/https resource loads — the primary zero-click
 // attack surface in HTML email rendering (Mail.app). Applied when applyBlockRemoteContent=YES.
@@ -77,6 +111,15 @@ static WKContentRuleList *adsContentBlocker = nil;
 
 // Per-UCC injection guard — same rationale as AntiDarkSwordUI (see kADSUCCInjectedKey comment there).
 static const char kADSUCCInjectedKey = 0;
+static const char kADSOwnedScriptKey = 0;
+static const char kADSOwnedBlockerKey = 0;
+static NSHashTable<WKUserContentController *> *ads_content_controllers;
+@interface WKUserContentController (ADSIndividualScriptRemoval)
+- (void)_removeUserScript:(WKUserScript *)script;
+@end
+static void ads_compile_content_blocker_once(void);
+static void ads_track_content_controller(WKUserContentController *ucc);
+
 
 static NSString *adsJSONStringLiteral(NSString *str);
 
@@ -133,38 +176,45 @@ static NSString *adsJSONStringLiteral(NSString *str) {
 }
 
 static void injectUAScript(WKUserContentController *ucc) {
-    if (!ucc || !shouldSpoofUA || !customUAString || customUAString.length == 0) return;
-    if (objc_getAssociatedObject(ucc, &kADSUCCInjectedKey)) return;
-    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", customUAString);
+    if (!NSThread.isMainThread) {
+        __weak WKUserContentController *weakUCC = ucc;
+        dispatch_async(dispatch_get_main_queue(), ^{ injectUAScript(weakUCC); });
+        return;
+    }
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (!ucc || !adsState.shouldSpoofUA || !adsState.customUAString || adsState.customUAString.length == 0) return;
+    NSNumber *injectedGeneration = objc_getAssociatedObject(ucc, &kADSUCCInjectedKey);
+    if (injectedGeneration && injectedGeneration.unsignedIntegerValue == adsState.generation) return;
+    objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, @(adsState.generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ADSLog(@"[MITIGATION] Injecting UA spoof script. UA: %@", adsState.customUAString);
 
-    NSString *jsonUA = adsJSONStringLiteral(customUAString);
+    NSString *jsonUA = adsJSONStringLiteral(adsState.customUAString);
 
     NSString *platform = @"\"iPhone\"";
-    if ([customUAString containsString:@"iPad"])          platform = @"\"iPad\"";
-    else if ([customUAString containsString:@"Macintosh"]) platform = @"\"MacIntel\"";
-    else if ([customUAString containsString:@"Windows"])   platform = @"\"Win32\"";
-    else if ([customUAString containsString:@"Android"])   platform = @"\"Linux aarch64\"";
+    if ([adsState.customUAString containsString:@"iPad"])          platform = @"\"iPad\"";
+    else if ([adsState.customUAString containsString:@"Macintosh"]) platform = @"\"MacIntel\"";
+    else if ([adsState.customUAString containsString:@"Windows"])   platform = @"\"Win32\"";
+    else if ([adsState.customUAString containsString:@"Android"])   platform = @"\"Linux aarch64\"";
 
     NSString *vendor = @"\"Apple Computer, Inc.\"";
-    if ([customUAString containsString:@"Chrome"] || [customUAString containsString:@"Android"])
+    if ([adsState.customUAString containsString:@"Chrome"] || [adsState.customUAString containsString:@"Android"])
         vendor = @"\"Google Inc.\"";
 
-    NSString *appVersion = customUAString;
-    if ([customUAString hasPrefix:@"Mozilla/"]) appVersion = [customUAString substringFromIndex:8];
+    NSString *appVersion = adsState.customUAString;
+    if ([adsState.customUAString hasPrefix:@"Mozilla/"]) appVersion = [adsState.customUAString substringFromIndex:8];
     NSString *jsonAppVersion = adsJSONStringLiteral(appVersion);
 
     // UA Client Hints (navigator.userAgentData) — iOS 16+ Safari 16+.
-    BOOL isMobileUA = [customUAString containsString:@"iPhone"] ||
-                      [customUAString containsString:@"iPad"]   ||
-                      [customUAString containsString:@"Android"];
+    BOOL isMobileUA = [adsState.customUAString containsString:@"iPhone"] ||
+                      [adsState.customUAString containsString:@"iPad"]   ||
+                      [adsState.customUAString containsString:@"Android"];
     NSString *uadMobile   = isMobileUA ? @"true" : @"false";
 
     NSString *uadPlatform = @"\"iOS\"";
-    if ([customUAString containsString:@"Macintosh"])    uadPlatform = @"\"macOS\"";
-    else if ([customUAString containsString:@"Windows"]) uadPlatform = @"\"Windows\"";
-    else if ([customUAString containsString:@"Android"]) uadPlatform = @"\"Android\"";
-    NSString *uadBrands = adsBrandsFromUA(customUAString);
+    if ([adsState.customUAString containsString:@"Macintosh"])    uadPlatform = @"\"macOS\"";
+    else if ([adsState.customUAString containsString:@"Windows"]) uadPlatform = @"\"Windows\"";
+    else if ([adsState.customUAString containsString:@"Android"]) uadPlatform = @"\"Android\"";
+    NSString *uadBrands = adsBrandsFromUA(adsState.customUAString);
 
     NSString *jsSource = [NSString stringWithFormat:
         @"(function(){"
@@ -183,7 +233,10 @@ static void injectUAScript(WKUserContentController *ucc) {
         initWithSource:jsSource
          injectionTime:WKUserScriptInjectionTimeAtDocumentStart
       forMainFrameOnly:NO];
+    WKUserScript *previous = objc_getAssociatedObject(ucc, &kADSOwnedScriptKey);
+    if (previous && [ucc respondsToSelector:@selector(_removeUserScript:)]) [ucc _removeUserScript:previous];
     [ucc addUserScript:script];
+    objc_setAssociatedObject(ucc, &kADSOwnedScriptKey, script, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 // Sandboxed TrollStore devices cannot write to /var/mobile/Library/Preferences/.
@@ -249,8 +302,20 @@ static BOOL ads_read_bool(NSDictionary *rules,
 }
 
 static void loadPrefs() {
-    BOOL expected = NO;
-    if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
+    BOOL shouldSpoofUA = NO;
+    BOOL applyDisableJIT = NO;
+    BOOL applyDisableJIT15 = NO;
+    BOOL applyDisableJS = NO;
+    BOOL applyDisableMedia = NO;
+    BOOL applyDisableRTC = NO;
+    BOOL applyDisableFileAccess = NO;
+    BOOL applyBlockRemoteContent = NO;
+    BOOL applyBlockRiskyAttachments = NO;
+    NSString *customUAString = nil;
+    static NSUInteger generation; // accessed only on ads_reload_queue()
+    ADSTFProtectionState *next = [ADSTFProtectionState new];
+    next.generation = ++generation;
+
 
     NSDictionary *prefs = ads_read_prefs();
 
@@ -265,6 +330,7 @@ static void loadPrefs() {
             applyDisableMedia = applyDisableRTC = applyDisableFileAccess =
             applyBlockRemoteContent = applyBlockRiskyAttachments = NO;
         ADSLog(@"[STATUS] Tweak disabled via prefs.");
+        ads_publish(next);
         return;
     }
 
@@ -340,6 +406,17 @@ static void loadPrefs() {
            (int)applyDisableJIT, (int)applyDisableMedia, (int)applyDisableRTC,
            (int)applyDisableFileAccess, (int)shouldSpoofUA,
            (int)applyBlockRemoteContent, (int)applyBlockRiskyAttachments);
+    next.shouldSpoofUA = shouldSpoofUA;
+    next.applyDisableJIT = applyDisableJIT;
+    next.applyDisableJIT15 = applyDisableJIT15;
+    next.applyDisableJS = applyDisableJS;
+    next.applyDisableMedia = applyDisableMedia;
+    next.applyDisableRTC = applyDisableRTC;
+    next.applyDisableFileAccess = applyDisableFileAccess;
+    next.applyBlockRemoteContent = applyBlockRemoteContent;
+    next.applyBlockRiskyAttachments = applyBlockRiskyAttachments;
+    next.customUAString = customUAString;
+    ads_publish(next);
 }
 
 static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
@@ -347,8 +424,7 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
                                     CFStringRef name __unused,
                                     const void *object __unused,
                                     CFDictionaryRef userInfo __unused) {
-    prefsLoaded = NO;
-    loadPrefs();
+    dispatch_async(ads_reload_queue(), ^{ loadPrefs(); });
 }
 
 static void ads_compile_content_blocker_once(void) {
@@ -363,16 +439,68 @@ static void ads_compile_content_blocker_once(void) {
             compileContentRuleListForIdentifier:@"com.eolnmsuk.ads.remoteblock"
             encodedContentRuleList:blockRules
             completionHandler:^(WKContentRuleList *list, NSError *err) {
-                if (list) dispatch_async(dispatch_get_main_queue(), ^{ adsContentBlocker = list; });
+                if (list) dispatch_async(dispatch_get_main_queue(), ^{
+                    os_unfair_lock_lock(&ads_state_lock);
+                    adsContentBlocker = list;
+                    os_unfair_lock_unlock(&ads_state_lock);
+                    ads_refresh_content_controllers(); // includes views created during compilation
+                });
                 else ADSLog(@"[WARN] Remote content blocker compile failed: %@", err);
             }];
     });
 }
 
+// UCC bookkeeping and all owned script/rule mutations run on main. The
+// compiled rule pointer uses the same short pointer lock as policy publication.
+static void ads_track_content_controller(WKUserContentController *ucc) {
+    if (!ucc) return;
+    if (!NSThread.isMainThread) {
+        __weak WKUserContentController *weakUCC = ucc;
+        dispatch_async(dispatch_get_main_queue(), ^{ ads_track_content_controller(weakUCC); });
+        return;
+    }
+    if (!ads_content_controllers) ads_content_controllers = [NSHashTable weakObjectsHashTable];
+    [ads_content_controllers addObject:ucc];
+    ADSTFProtectionState *state = ads_snapshot();
+    if (state.applyBlockRemoteContent) ads_compile_content_blocker_once();
+    os_unfair_lock_lock(&ads_state_lock);
+    WKContentRuleList *blocker = adsContentBlocker;
+    os_unfair_lock_unlock(&ads_state_lock);
+    WKContentRuleList *previous = objc_getAssociatedObject(ucc, &kADSOwnedBlockerKey);
+    if (previous && (!state.applyBlockRemoteContent || previous != blocker)) {
+        [ucc removeContentRuleList:previous];
+        objc_setAssociatedObject(ucc, &kADSOwnedBlockerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (state.applyBlockRemoteContent && blocker && previous != blocker) {
+        [ucc addContentRuleList:blocker];
+        objc_setAssociatedObject(ucc, &kADSOwnedBlockerKey, blocker, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (state.shouldSpoofUA) injectUAScript(ucc);
+    else {
+        WKUserScript *script = objc_getAssociatedObject(ucc, &kADSOwnedScriptKey);
+        if (script && [ucc respondsToSelector:@selector(_removeUserScript:)]) {
+            [ucc _removeUserScript:script];
+            objc_setAssociatedObject(ucc, &kADSOwnedScriptKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(ucc, &kADSUCCInjectedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+}
+
+static void ads_refresh_content_controllers(void) {
+    NSCAssert(NSThread.isMainThread, @"WebKit bookkeeping must run on main");
+    for (WKUserContentController *ucc in ads_content_controllers.allObjects) ads_track_content_controller(ucc);
+}
+
 static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
+    if (!NSThread.isMainThread) {
+        __weak WKWebViewConfiguration *weakConfiguration = configuration;
+        dispatch_async(dispatch_get_main_queue(), ^{ applyWebKitMitigations(weakConfiguration); });
+        return;
+    }
+    ADSTFProtectionState *adsState = ads_snapshot();
     if (!configuration) return;
     
-    if (applyDisableJS) {
+    if (adsState.applyDisableJS) {
         if ([configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             WKWebpagePreferences *pagePrefs = configuration.defaultWebpagePreferences;
             if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
@@ -384,12 +512,12 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
             configuration.preferences.javaScriptCanOpenWindowsAutomatically = NO;
     }
 
-    if (applyDisableJIT && [configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
+    if (adsState.applyDisableJIT && [configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
         if ([configuration.defaultWebpagePreferences respondsToSelector:@selector(setLockdownModeEnabled:)])
             [(id)configuration.defaultWebpagePreferences setLockdownModeEnabled:YES];
     }
 
-    if ((applyDisableJIT15 || applyDisableJIT) && [configuration respondsToSelector:@selector(processPool)]) {
+    if ((adsState.applyDisableJIT15 || adsState.applyDisableJIT) && [configuration respondsToSelector:@selector(processPool)]) {
         if ([configuration.processPool respondsToSelector:@selector(_configuration)]) {
             id poolConfig = [(id)configuration.processPool _configuration];
             if ([poolConfig respondsToSelector:@selector(setJITEnabled:)])
@@ -397,7 +525,7 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         }
     }
 
-    if (applyDisableMedia) {
+    if (adsState.applyDisableMedia) {
         if ([configuration respondsToSelector:@selector(setAllowsInlineMediaPlayback:)])
             configuration.allowsInlineMediaPlayback = NO;
         if ([configuration respondsToSelector:@selector(setMediaTypesRequiringUserActionForPlayback:)])
@@ -408,11 +536,11 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 
     if ([configuration.preferences respondsToSelector:@selector(setValue:forKey:)]) {
         @try {
-            if (applyDisableFileAccess) {
+            if (adsState.applyDisableFileAccess) {
                 [configuration.preferences setValue:@NO forKey:@"allowFileAccessFromFileURLs"];
                 [configuration.preferences setValue:@NO forKey:@"allowUniversalAccessFromFileURLs"];
             }
-            if (applyDisableRTC) {
+            if (adsState.applyDisableRTC) {
                 [configuration.preferences setValue:@NO forKey:@"webGLEnabled"];
                 [configuration.preferences setValue:@NO forKey:@"mediaStreamEnabled"];
                 [configuration.preferences setValue:@NO forKey:@"peerConnectionEnabled"];
@@ -420,30 +548,19 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         } @catch (NSException *e) {}
     }
 
-    if (applyBlockRemoteContent) {
-        ads_compile_content_blocker_once();
-        WKContentRuleList *localBlocker = adsContentBlocker;
-        if (localBlocker)
-            [configuration.userContentController addContentRuleList:localBlocker];
-    }
-
-    if (shouldSpoofUA) injectUAScript(configuration.userContentController);
+    ads_track_content_controller(configuration.userContentController);
 }
 
 %hook WKWebViewConfiguration
 
 - (void)setUserContentController:(WKUserContentController *)userContentController {
     %orig;
-    if (shouldSpoofUA && userContentController) injectUAScript(userContentController);
-    if (applyBlockRemoteContent && userContentController) {
-        ads_compile_content_blocker_once();
-        WKContentRuleList *localBlocker = adsContentBlocker;
-        if (localBlocker) [userContentController addContentRuleList:localBlocker];
-    }
+    ads_track_content_controller(userContentController);
 }
 
 - (void)setApplicationNameForUserAgent:(NSString *)applicationNameForUserAgent {
-    if (shouldSpoofUA) return %orig(@"");
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.shouldSpoofUA) return %orig(@"");
     %orig;
 }
 
@@ -452,24 +569,27 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 %hook WKWebView
 
 - (instancetype)initWithFrame:(CGRect)frame configuration:(WKWebViewConfiguration *)configuration {
+    ADSTFProtectionState *adsState = ads_snapshot();
     applyWebKitMitigations(configuration);
     WKWebView *webView = %orig(frame, configuration);
-    if (webView && shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)])
-        webView.customUserAgent = customUAString;
+    if (webView && adsState.shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)])
+        webView.customUserAgent = adsState.customUAString;
     return webView;
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
+    ADSTFProtectionState *adsState = ads_snapshot();
     WKWebView *webView = %orig(coder);
     if (!webView) return nil;
     applyWebKitMitigations(webView.configuration);
-    if (shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)])
-        webView.customUserAgent = customUAString;
+    if (adsState.shouldSpoofUA && [webView respondsToSelector:@selector(setCustomUserAgent:)])
+        webView.customUserAgent = adsState.customUAString;
     return webView;
 }
 
 - (WKNavigation *)loadRequest:(NSURLRequest *)request {
-    if (applyDisableJS) {
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
             if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
@@ -478,14 +598,14 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }
-    if (shouldSpoofUA) {
-        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) self.customUserAgent = customUAString;
+    if (adsState.shouldSpoofUA) {
+        if ([self respondsToSelector:@selector(setCustomUserAgent:)]) self.customUserAgent = adsState.customUAString;
         
         if ([request respondsToSelector:@selector(valueForHTTPHeaderField:)]) {
             NSString *existingUA = [request valueForHTTPHeaderField:@"User-Agent"];
-            if (existingUA && ![existingUA isEqualToString:customUAString]) {
+            if (existingUA && ![existingUA isEqualToString:adsState.customUAString]) {
                 NSMutableURLRequest *mutableReq = [request mutableCopy];
-                [mutableReq setValue:customUAString forHTTPHeaderField:@"User-Agent"];
+                [mutableReq setValue:adsState.customUAString forHTTPHeaderField:@"User-Agent"];
                 return %orig(mutableReq);
             }
         }
@@ -494,7 +614,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 - (WKNavigation *)loadHTMLString:(NSString *)string baseURL:(NSURL *)baseURL {
-    if (applyDisableJS) {
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         if ([self.configuration respondsToSelector:@selector(defaultWebpagePreferences)]) {
             WKWebpagePreferences *pagePrefs = self.configuration.defaultWebpagePreferences;
             if ([pagePrefs respondsToSelector:@selector(setAllowsContentJavaScript:)])
@@ -503,13 +624,14 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
         if ([self.configuration.preferences respondsToSelector:@selector(setJavaScriptEnabled:)])
             self.configuration.preferences.javaScriptEnabled = NO;
     }
-    if (shouldSpoofUA && [self respondsToSelector:@selector(setCustomUserAgent:)])
-        self.customUserAgent = customUAString;
+    if (adsState.shouldSpoofUA && [self respondsToSelector:@selector(setCustomUserAgent:)])
+        self.customUserAgent = adsState.customUAString;
     return %orig;
 }
 
 - (void)evaluateJavaScript:(NSString *)javaScriptString completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         if (completionHandler) {
             NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1
                                            userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
@@ -521,7 +643,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 - (void)evaluateJavaScript:(NSString *)javaScriptString inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         if (completionHandler) {
             NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1
                                            userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
@@ -533,7 +656,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 - (void)callAsyncJavaScript:(NSString *)functionBody arguments:(NSDictionary<NSString *, id> *)arguments inFrame:(WKFrameInfo *)frame inContentWorld:(WKContentWorld *)contentWorld completionHandler:(void (^)(id, NSError *))completionHandler {
-    if (applyDisableJS) {
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         if (completionHandler) {
             NSError *err = [NSError errorWithDomain:@"AntiDarkSword" code:1
                                            userInfo:@{NSLocalizedDescriptionKey: @"JS execution blocked"}];
@@ -545,7 +669,8 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 }
 
 - (void)setCustomUserAgent:(NSString *)customUserAgent {
-    if (shouldSpoofUA) %orig(customUAString);
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.shouldSpoofUA) %orig(adsState.customUAString);
     else %orig;
 }
 
@@ -553,19 +678,22 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 
 %hook WKWebpagePreferences
 - (void)setAllowsContentJavaScript:(BOOL)allowed {
-    if (applyDisableJS && allowed) return %orig(NO);
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS && allowed) return %orig(NO);
     %orig;
 }
 // Prevent apps (or exploits) from disabling lockdown mode after we've enabled it.
 - (void)setLockdownModeEnabled:(BOOL)enabled {
-    if (applyDisableJIT && !enabled) return;
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJIT && !enabled) return;
     %orig;
 }
 %end
 
 %hook WKPreferences
 - (void)setJavaScriptEnabled:(BOOL)enabled {
-    if (applyDisableJS && enabled) return %orig(NO);
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS && enabled) return %orig(NO);
     %orig;
 }
 %end
@@ -573,14 +701,16 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 // Prevent code from re-enabling JIT after we've disabled it via the pool configuration.
 %hook _WKProcessPoolConfiguration
 - (void)setJITEnabled:(BOOL)enabled {
-    if (enabled && (applyDisableJIT || applyDisableJIT15)) return;
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (enabled && (adsState.applyDisableJIT || adsState.applyDisableJIT15)) return;
     %orig;
 }
 %end
 
 %hook UIWebView
 - (NSString *)stringByEvaluatingJavaScriptFromString:(NSString *)script {
-    if (applyDisableJS) return @"";
+    ADSTFProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) return @"";
     return %orig;
 }
 %end
@@ -589,8 +719,9 @@ static void applyWebKitMitigations(WKWebViewConfiguration *configuration) {
 // image/document formats to prevent ImageIO/CoreGraphics parsing of exploit-bearing files.
 %hook CKAttachmentMessagePartChatItem
 - (NSURL *)fullSizeImageURL {
+    ADSTFProtectionState *adsState = ads_snapshot();
     NSURL *url = %orig;
-    if (!applyBlockRiskyAttachments || !url) return url;
+    if (!adsState.applyBlockRiskyAttachments || !url) return url;
     static NSSet *riskyExts;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -1158,8 +1289,7 @@ static void ads_install_settings_gesture_on_window(UIWindow *win) {
 // =========================================================
 
 %ctor {
-    isRootlessJB = (access("/var/jb", F_OK) == 0);
-    loadPrefs();
+    dispatch_sync(ads_reload_queue(), ^{ loadPrefs(); });
 
     ADSLog(@"[INIT] AntiDarkSword (TrollFools) loaded into: %@ (%@)",
            [[NSProcessInfo processInfo] processName],

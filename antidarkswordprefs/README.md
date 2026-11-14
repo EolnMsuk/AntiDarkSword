@@ -21,12 +21,14 @@ Frameworks required:
 - **`AltList`** (extra) — `ATLApplicationListMultiSelectionController` for the app-picker view
 - **`MobileCoreServices`** — UTI lookups used inside `ads_plugins_for_bundle_id()`
 
-The `AltList.framework` in `vendor/` is always a copy — never edit it directly:
-
-- **`AltList_New`** — arm64 + arm64e, linked against iPhoneOS16.5.sdk — used for modern iOS 15+ builds
-- **`AltList_Old`** — arm64-only, thinned via `lipo` — used for the iOS 13–14 legacy build
-
-The appropriate framework must be copied to `vendor/AltList.framework` before each `make` invocation. CI and `build_all.sh` do this automatically.
+Every entry point loads `config/target.mk` before Theos. Target selection comes
+from `config/targets.json`; `prepare_reference.py` checks slices/minimum OS/install
+ID and copies the selected link-only framework to `.build/<target>/references/AltList.framework`.
+Vendor originals are never replaced and no AltList framework is shipped in our
+package. Legacy uses the supplied old rootful reference; modern rootful/rootless
+use the supplied iOS 15+ `@rpath` reference with the target's runtime framework
+path; native Roothide uses the separately verified native reference. See
+[build provenance](../docs/building.md).
 
 ---
 
@@ -52,7 +54,7 @@ Runs once in `viewDidLoad` of the root controller. Re-writes all known pref keys
 
 ### Darwin notification
 
-Every save posts `com.eolnmsuk.antidarkswordprefs/saved` via `CFNotificationCenterPostNotification` on the Darwin notify center. All three tweak subprojects (`AntiDarkSwordUI`, `AntiDarkSwordDaemon`, `AntiDarkSwordTF`) register a `reloadPrefsNotification` handler that resets `prefsLoaded = NO` and calls `loadPrefs()` on receipt. A separate `com.eolnmsuk.antidarkswordprefs/counter` notification is used exclusively by the daemon stats view to refresh the probe count label without triggering a full prefs reload in the tweaks.
+Saves post `com.eolnmsuk.antidarkswordprefs/saved`. Tweak callbacks enqueue serialized reloads and publish complete policy snapshots (one atomic bitmask in the daemon). Settings controllers observe saved/counter events with main-queue libnotify tokens, weak controller captures and teardown cancellation. Counter events refresh statistics without forcing policy reloads.
 
 ---
 
@@ -62,7 +64,7 @@ Loads specifiers from `Root.plist` and programmatically injects the current pres
 
 ### Banner and footer
 
-A full-width `UIImageView` header is set as `self.table.tableHeaderView` in `viewDidLoad`. `setupHeaderView` resolves the image once at load time: on iOS 13+ in Light Mode it uses `banner2.png` if the resource is present in the bundle, falling back to `banner.png` in Dark Mode or on older OS versions. The footer group reads `CFBundleShortVersionString` from the bundle's `Info.plist` and detects jailbreak type at runtime — `access("/Library/MobileSubstrate/DynamicLibraries")` → rootful; `dlsym(RTLD_DEFAULT, "jbroot")` → Roothide; fallback → rootless — to render a version/environment string in the form `AntiDarkSword v4.8.2 (iOS 17.4 Rootless)`.
+The existing banner selection remains in `setupHeaderView`. The footer reads the bundle owning `AntiDarkSwordPrefsRootListController`, displays an unavailable version when metadata is invalid, and labels the compile-selected environment. Bundle version mirrors are generated from root `control`; there is no stale runtime release literal or untyped `jbroot` detection.
 
 ### Global enable switch
 
@@ -93,7 +95,7 @@ A `PSSegmentCell` with integer values `1 / 2 / 3`. Changing the level calls `set
 
 1. Re-runs `populateDefaultRulesForLevel:force:YES` to write fresh `TargetRules_` dicts for all affected targets.
 2. Sets `ADSPendingDaemonChanges = YES` if either the old or new level involves level 3.
-3. **Level 3 → auto-enables Corellium Honeypot**: sets `corelliumDecoyEnabled = YES`, clears all four daemon IDs from `disabledPresetRules`, and synchronously `launchctl load`s the plist if protection is enabled.
+3. **Level 3 → auto-enables Corellium Honeypot**: sets `corelliumDecoyEnabled = YES`, clears all four daemon IDs from `disabledPresetRules`, and asynchronously enqueues `launchctl load` for the plist if protection is enabled.
 4. **Dropping below level 3** → auto-disables the honeypot and `launchctl unload`s the plist.
 
 The footer under the "Preset Rules" group updates dynamically on each specifier reload to describe the active level's scope:
@@ -129,7 +131,7 @@ Accessible only at auto-protect level 3 (the "Advanced Options" cell is disabled
 
 ### Corellium Honeypot
 
-Toggles `corelliumDecoyEnabled`. On enable: clears all four daemons from `disabledPresetRules`, sets `ADSPendingDaemonChanges = YES`, then synchronously `launchctl unload` + `launchctl load`s the CorelliumDecoy plist via `posix_spawn`. The plist path is resolved through `ads_root_path()`, which consults the `jbroot()` symbol (Roothide), falls back to `/var/jb/` prefix detection, and finally returns the rootful path unchanged.
+Toggles `corelliumDecoyEnabled` while preserving the existing daemon rule changes. Existing unload/load actions enqueue through `ADSProcessRunner` on a serial worker, with bounded waits, spawn/status/error handling, weak presentation and restored controls. `ADSPaths.h` resolves package executables for the selected environment; native Roothide file arguments use the documented bootstrap coordinate conversion. These actions are separate from updater/donation code.
 
 ### Attack statistics
 
@@ -278,7 +280,7 @@ The game `SKView` (480 pt tall, 16 pt inset, `layer.cornerRadius = 12`) is embed
 
 ### SpriteKit audio engine
 
-All three scenes share a single `ADSSynthState` struct for real-time synthesis via `AVAudioSourceNode`. The render block runs on the audio thread; all SpriteKit mutations happen on the main thread. `ADSSynthState` tracks independent oscillator phases and durations for two simultaneous SFX voices plus a three-voice BGM layer (melody, bass square, arpeggiated pulse). Frequency sweeps (`sfxSweepRate`, `sfxSweep2Rate`) and linear amplitude envelopes (`sfxEnvInit`) give each SFX a distinct character. The engine is torn down in `willMoveFromView:` and freed to prevent audio thread dangling-pointer access after the scene is removed.
+Each scene has a render-retained `ADSAudioBuffer` owner. Synth fields are audio-thread-only; UI effects cross a bounded atomic command mailbox, and music uses an atomic flag. The render callback allocates nothing and never takes the UI producer lock. Stop/detach releases scene references while an active block keeps its state alive. Allocation/node/start failure paths skip audio without skipping the game UI. A full mailbox drops an effect. The existing melodies, game rules and scores remain; repeated teardown/audio behavior needs device testing.
 
 **`ADSGameMenuScene`** — selection screen. Two `SKShapeNode` buttons (PyEater cyan, JailTris gold), a close button, and a pulsing dedication label with glow overlay. Button taps produce square-wave SFX tones and trigger `SKTransition pushWithDirection` to the selected game scene.
 
@@ -287,6 +289,46 @@ All three scenes share a single `ADSSynthState` struct for real-time synthesis v
 **`ADSPyEaterScene`** — Snake at 20 pt grid size, 16-tick/s update rate, `UISwipeGestureRecognizer` per direction. An `SKEffectNode` with `CIBloom` (radius 0.8, intensity 1.5) wraps all game layer nodes for a neon glow effect. Food node pulses via a looping scale-to animation (1.25×/0.8×, 0.25 s). Eating food spawns an expand-fade `SKShapeNode` pulse ring. Death triggers a red screen-fill flash, a shockwave ring expanding from the snake head, and a four-keyframe shake sequence on the game layer. BGM is a 16-note pattern at 0.12-beat intervals. High score persisted under `ADS_SnakeHighScore`. In Light Mode, a `CIColorInvert` filter is applied to the scene's `SKView`, complementing the existing `CIBloom` glow layer.
 
 ---
+
+## Info actions: updates and donation
+
+`Check for Updates` sits next to GitHub. The installed version is read from this
+preferences bundle, never Settings.app. `ADSUpdateChecker` requests only the
+official repository's latest release endpoint, validates HTTP/size/types/stable
+flags/tag and the exact release URL, and compares decimal version components
+without integer overflow. `vX.Y.Z-bN` equals `X.Y.Z` for update purposes.
+
+Automatic checks originate only from a visible root pane entry. A serialized
+coordinator coalesces requests; a short file lock plus durable current-user/
+any-host bookkeeping in `com.eolnmsuk.antidarksword.updates` enforces a rolling
+86,400-second automatic gate, including failures. Manual requests bypass
+eligibility but join an in-flight request and refresh the attempt time. The
+persisted continuous clock includes sleep and is paired with a local-only boot
+marker, preserving elapsed-time throttling across Settings relaunches in the same
+boot. After a reboot, the gate uses the persisted wall time conservatively.
+Invalid/
+future timestamps quarantine automatic checks. Persistence failure sends no
+request. Only newer stable releases produce automatic UI; manual checks report
+errors or the comparison result. Hidden/dismissed presenters are discarded.
+There are no background callbacks/timers, automatic downloads or installs.
+
+`💸 Donate` replaces `openVenmo` and its selector-dependent green styling. Venmo
+uses the exact `https://venmo.com/EolnMsuk/` URL through guarded LaunchServices
+configuration with URL overrides disabled. It reports unsupported/failing routes
+instead of substituting an app scheme or assuming universalLinksOnly:NO forces
+a browser. Actual routing with both browser defaults and Venmo installation
+states remains a device check. The source SPI declarations are evidenced in
+[WebKit LaunchServicesSPI](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/cocoa/LaunchServicesSPI.h)
+and [its workspace declaration](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/webpushd/LaunchServicesSPI.h).
+
+Crypto opens `Crypto Wallets`, with all eight exact entries from plan.md, network
+labels, full wrapping addresses, Dynamic Type/accessibility, per-wallet Copied
+feedback and a fixed bottom Cancel. Confirmation tokens prevent stale cell or
+dismissal callbacks. The model is immutable; only the selected address is copied.
+No wallet apps or payment transactions are opened. These features are not in TF.
+
+See [validation](../docs/validation.md) for request-count, lifecycle, browser,
+small-screen/iPad and copy-string checks. Build/device results remain pending.
 
 ## Files
 
@@ -297,7 +339,11 @@ All three scenes share a single `ADSSynthState` struct for real-time synthesis v
 | `Resources/Info.plist` | Bundle metadata — `CFBundleIdentifier: com.eolnmsuk.antidarkswordprefs`, `NSPrincipalClass` |
 | `RootListController.m` | All preference controllers (`AntiDarkSwordPrefsRootListController`, `AntiDarkSwordDaemonListController`, `AntiDarkSwordAltListController`, `AntiDarkSwordAppController`) plus all static helpers: `ads_cfwrite()`, `ads_migrate_prefs_if_needed()`, `ads_plugins_for_bundle_id()`, `ads_root_path()`, `ads_present_save_prompt()` |
 | `ADSCreditsMenu.m` | `AntiDarkSwordCreditsController` (credits list + game host), `ADSGameMenuScene` (selection screen) |
-| `ADSGames.h` | Shared interfaces: `ADSSynthState` struct, `ADSGameState` enum, scene class declarations |
+| `ADSGames.h` | Shared game-state enum and scene/controller declarations; imports the audio helper |
+| `ADSAudio.h` / `ADSAudio.m` | Synth owner and bounded lock-free render-side sound mailbox |
+| `ADSUpdateChecker.h` / `ADSUpdateChecker.m` | Stable release validation, persisted/coalesced daily checks, weak UIKit presentation |
+| `ADSDonationController.h` / `ADSDonationController.m` | Venmo/Crypto menu and eight-wallet copy modal |
+| `ADSProcessRunner.h` / `ADSProcessRunner.m` | Existing explicit process actions on a serial bounded worker |
 | `ADSJailTris.m` | `ADSJailTrisScene` — full Tetris implementation |
 | `ADSPyEater.m` | `ADSPyEaterScene` — full snake implementation |
 | `Makefile` | Theos bundle rules: `Preferences` (private), `AltList` (extra), `MobileCoreServices` frameworks; install path `/Library/PreferenceBundles` |

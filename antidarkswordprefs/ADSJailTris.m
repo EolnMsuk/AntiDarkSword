@@ -32,7 +32,7 @@
     CGPoint _touchStartLoc;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
-    ADSSynthState *_synthState;
+    ADSAudioBuffer *_synthBuffer;
     BOOL _musicEnabled;
     BOOL _hasSurpassedHighScore;
     NSInteger _savedHighScore;
@@ -53,10 +53,17 @@ static int jt_blocks[7][4][4][2] = {
     { {{-1,1}, {0,1}, {0,0}, {1,0}}, {{1,1}, {1,0}, {0,0}, {0,-1}}, {{-1,1}, {0,1}, {0,0}, {1,0}}, {{1,1}, {1,0}, {0,0}, {0,-1}} }
 };
 
-- (void)willMoveFromView:(SKView *)view {
-    if (_audioEngine) { [_audioEngine stop]; _audioEngine = nil; }
+- (void)ads_stopAudio {
+    [_audioEngine stop];
+    if (_sourceNode && _audioEngine) [_audioEngine detachNode:_sourceNode];
     _sourceNode = nil;
-    if (_synthState) { free(_synthState); _synthState = NULL; }
+    _audioEngine = nil;
+    _synthBuffer = nil; // in-flight render blocks retain their own owner
+}
+- (void)dealloc { [self ads_stopAudio]; }
+
+- (void)willMoveFromView:(SKView *)view {
+    [self ads_stopAudio];
     NSArray *gestures = [view.gestureRecognizers copy];
     for (UIGestureRecognizer *g in gestures) { [view removeGestureRecognizer:g]; }
 }
@@ -84,12 +91,17 @@ static int jt_blocks[7][4][4][2] = {
 }
 
 - (void)setupAudio {
-    _synthState = malloc(sizeof(ADSSynthState)); memset(_synthState, 0, sizeof(ADSSynthState));
-    _musicEnabled = NO; _synthState->playBGM = 0;
+    [self ads_stopAudio];
+    ADSAudioBuffer *buffer = [ADSAudioBuffer new];
+    if (!buffer) return;
+    _synthBuffer = buffer;
+    _musicEnabled = NO; atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     _audioEngine = [[AVAudioEngine alloc] init];
     AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
-    ADSSynthState *state = _synthState;
+    if (!_audioEngine || !format) { [self ads_stopAudio]; return; }
     _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
+        ADSSynthState *state = &buffer->state; // owner captured strongly by this block
+        ADSApplyAudioCommands(buffer);
         float *outBuf = (float *)outputData->mBuffers[0].mData;
         float mel[]  = { 659.25f,493.88f,523.25f,587.33f,523.25f,493.88f,440.0f,440.0f,
                          523.25f,659.25f,587.33f,523.25f,493.88f,493.88f,523.25f,587.33f,
@@ -144,34 +156,21 @@ static int jt_blocks[7][4][4][2] = {
         }
         return noErr;
     }];
-    [_audioEngine attachNode:_sourceNode]; [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format]; [_audioEngine startAndReturnError:nil];
+    if (!_sourceNode) { [self ads_stopAudio]; return; }
+    [_audioEngine attachNode:_sourceNode]; [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format]; if (![_audioEngine startAndReturnError:nil]) [self ads_stopAudio];
 }
 
 - (void)playSFX:(float)freq dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = freq; _synthState->sfxDur = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxDur2 = 0;
-    _synthState->sfxSweepRate = 0; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, freq, 0, dur, 0, 0);
 }
 - (void)playSFX2:(float)f1 freq2:(float)f2 dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = f1; _synthState->sfxFreq2 = f2;
-    _synthState->sfxDur = dur; _synthState->sfxDur2 = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxPhase2 = 0;
-    _synthState->sfxSweepRate = 0; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, f1, f2, dur, 0, 0);
 }
 - (void)playSFXSweep:(float)freq sweep:(float)sweep dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = freq; _synthState->sfxDur = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxDur2 = 0;
-    _synthState->sfxSweepRate = sweep; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, freq, 0, dur, sweep, 0);
 }
 - (void)playSFX2Sweep:(float)f1 freq2:(float)f2 sweep1:(float)s1 sweep2:(float)s2 dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = f1; _synthState->sfxFreq2 = f2;
-    _synthState->sfxDur = dur; _synthState->sfxDur2 = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxPhase2 = 0;
-    _synthState->sfxSweepRate = s1; _synthState->sfxSweep2Rate = s2;
+    ADSEnqueueSound(_synthBuffer, f1, f2, dur, s1, s2);
 }
 
 - (void)setupUI {
@@ -241,10 +240,10 @@ static int jt_blocks[7][4][4][2] = {
     UIColor *onColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0]; UIColor *offColor = [UIColor colorWithRed:1.0 green:0.8 blue:0.0 alpha:1.0];
     if (_musicEnabled) {
         self.musicBtn.fontColor = onColor; self.musicBtnBg.strokeColor = onColor;
-        if (_synthState && _isPlaying && !_isPaused && !_isDead) _synthState->playBGM = 1;
+        if (_synthBuffer && _isPlaying && !_isPaused && !_isDead) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
     } else {
         self.musicBtn.fontColor = offColor; self.musicBtnBg.strokeColor = offColor;
-        if (_synthState) _synthState->playBGM = 0;
+        if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     }
 }
 
@@ -319,13 +318,13 @@ static int jt_blocks[7][4][4][2] = {
                 _restartOverlay.hidden = NO; _highScoreBg.hidden = NO; _highScoreBg.zPosition = 55;
                 _startBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 + 35);
                 _highScoreBg.position = CGPointMake(self.size.width / 2, self.size.height / 2 - 25);
-                if (_synthState) _synthState->playBGM = 0;
+                if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
             } else {
                 [self playSFX2:880.0 freq2:1108.73 dur:0.1];
                 _startBg.hidden = YES; 
                 _startBg.path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(-70, -25, 140, 50) cornerRadius:10].CGPath;
                 _restartOverlay.hidden = YES; _highScoreBg.hidden = YES; _highScoreBg.zPosition = 0;
-                if (_synthState && _musicEnabled) _synthState->playBGM = 1;
+                if (_synthBuffer && _musicEnabled) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
             }
         }
     }
@@ -420,7 +419,7 @@ static int jt_blocks[7][4][4][2] = {
     [_deathContainer removeFromParent]; _deathContainer = nil;
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     _savedHighScore = [def integerForKey:@"ADS_JailTrisHighScore"]; _hasSurpassedHighScore = NO;
-    if (_synthState && _musicEnabled) _synthState->playBGM = 1;
+    if (_synthBuffer && _musicEnabled) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
     [_board removeAllObjects]; _score = 0; _totalLinesCleared = 0; _tickRate = 0.5; _scoreLbl.text = @"CURRENT SCORE: 0";
     _nextType = arc4random_uniform(7); [self spawnBlock];
 }
@@ -709,7 +708,7 @@ static int jt_blocks[7][4][4][2] = {
 
 - (void)die {
     _isDead = YES; _isPlaying = NO; _highScoreBg.hidden = NO; _highScoreBg.position = CGPointMake(self.size.width / 2, 106);
-    if (_synthState) _synthState->playBGM = 0;
+    if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_JailTrisHighScore"]; BOOL isNewHigh = NO;

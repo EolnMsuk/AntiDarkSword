@@ -129,7 +129,7 @@ All three must be true. If any is false, every file-path hook passes through to 
 
 ### Thread safety
 
-Hook functions can be called from any thread. All flags read at hook call time (`applyDisableIMessageDL`, `globalDecoyEnabled`, `currentProcessRestricted`) are declared `_Atomic`. Intermediate variables computed inside `loadPrefs()` itself use plain `BOOL` since they are not shared across threads.
+A serial reload queue computes local policy values and publishes one atomic integer bitmask. Hook paths load only the necessary policy bit; no Objective-C snapshot, preference lock or new networking is introduced into POSIX hooks. The existing TLS/original-call chains and executable filter are preserved. Counter conversions validate CF number type/range and saturate at NSIntegerMax; cross-process totals/resets remain approximate. NULL stat/lstat output buffers follow the original syscall.
 
 The `_ads_sysctl_active` thread-local flag is `static __thread BOOL` and exists as a forward-safety sentinel at the top of `hook_sysctlbyname`; it is no longer actively set.
 
@@ -164,3 +164,5 @@ The `_ads_sysctl_active` thread-local flag is `static __thread BOOL` and exists 
 | `getenv` (C function via `MSHookFunction`) | Returns `NULL` for `CORELLIUM_ENV`; all other env var lookups pass through |
 | `sysctl` (C function via `MSHookFunction`) | Hardware query; spoofs `hw.model`/`hw.machine` → `"iPhone15,2"`, `hw.cpusubtype` → `CPU_SUBTYPE_ARM64E`, `kern.boottime` → stable PID-seeded uptime |
 | `sysctlbyname` (C function via `MSHookFunction`) | Named sysctl variant; same hardware spoof targets as `sysctl`; also returns `"21C62"` for `kern.osversion` |
+
+Rootless and native Roothide path-spoof behavior is selected by the build environment, not `/var/jb` existence. Canonical mobile preferences retain a legacy file fallback. Native Roothide uses typed API/dependency references; see [building](../docs/building.md). Install/migration, push delivery, counters, low-level ABI and device coexistence checks remain pending in [validation](../docs/validation.md).

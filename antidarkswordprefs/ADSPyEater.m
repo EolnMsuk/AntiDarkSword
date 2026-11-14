@@ -11,7 +11,7 @@
     CGPoint _touchStartLoc;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
-    ADSSynthState *_synthState;
+    ADSAudioBuffer *_synthBuffer;
     BOOL _musicEnabled;
     SKShapeNode *_menuBg;
     SKShapeNode *_pauseBg;
@@ -27,10 +27,17 @@ static const CGFloat kGridSize = 20.0;
 - (int)minY { return 4; } 
 - (int)maxY { return (self.size.height / kGridSize) - 3; } 
 
-- (void)willMoveFromView:(SKView *)view {
-    if (_audioEngine) { [_audioEngine stop]; _audioEngine = nil; }
+- (void)ads_stopAudio {
+    [_audioEngine stop];
+    if (_sourceNode && _audioEngine) [_audioEngine detachNode:_sourceNode];
     _sourceNode = nil;
-    if (_synthState) { free(_synthState); _synthState = NULL; }
+    _audioEngine = nil;
+    _synthBuffer = nil; // in-flight render blocks retain their own owner
+}
+- (void)dealloc { [self ads_stopAudio]; }
+
+- (void)willMoveFromView:(SKView *)view {
+    [self ads_stopAudio];
     NSArray *gestures = [view.gestureRecognizers copy];
     for (UIGestureRecognizer *g in gestures) { [view removeGestureRecognizer:g]; }
 }
@@ -73,16 +80,20 @@ static const CGFloat kGridSize = 20.0;
 }
 
 - (void)setupAudio {
-    _synthState = malloc(sizeof(ADSSynthState));
-    memset(_synthState, 0, sizeof(ADSSynthState));
+    [self ads_stopAudio];
+    ADSAudioBuffer *buffer = [ADSAudioBuffer new];
+    if (!buffer) return;
+    _synthBuffer = buffer;
     _musicEnabled = NO;
-    _synthState->playBGM = 0;
+    atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     
     _audioEngine = [[AVAudioEngine alloc] init];
     AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
-    ADSSynthState *state = _synthState;
+    if (!_audioEngine || !format) { [self ads_stopAudio]; return; }
     
     _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
+        ADSSynthState *state = &buffer->state; // owner captured strongly by this block
+        ADSApplyAudioCommands(buffer);
         float *outBuf = (float *)outputData->mBuffers[0].mData;
         float mel[]  = { 659.25f,783.99f,880.00f,783.99f,659.25f,523.25f,587.33f,659.25f,
                          587.33f,523.25f,440.00f,493.88f,523.25f,587.33f,659.25f,0 };
@@ -136,36 +147,23 @@ static const CGFloat kGridSize = 20.0;
         return noErr;
     }];
     
+    if (!_sourceNode) { [self ads_stopAudio]; return; }
     [_audioEngine attachNode:_sourceNode];
     [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format];
-    [_audioEngine startAndReturnError:nil];
+    if (![_audioEngine startAndReturnError:nil]) [self ads_stopAudio];
 }
 
 - (void)playSFX:(float)freq dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = freq; _synthState->sfxDur = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxDur2 = 0;
-    _synthState->sfxSweepRate = 0; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, freq, 0, dur, 0, 0);
 }
 - (void)playSFX2:(float)f1 freq2:(float)f2 dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = f1; _synthState->sfxFreq2 = f2;
-    _synthState->sfxDur = dur; _synthState->sfxDur2 = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxPhase2 = 0;
-    _synthState->sfxSweepRate = 0; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, f1, f2, dur, 0, 0);
 }
 - (void)playSFXSweep:(float)freq sweep:(float)sweep dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = freq; _synthState->sfxDur = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxDur2 = 0;
-    _synthState->sfxSweepRate = sweep; _synthState->sfxSweep2Rate = 0;
+    ADSEnqueueSound(_synthBuffer, freq, 0, dur, sweep, 0);
 }
 - (void)playSFX2Sweep:(float)f1 freq2:(float)f2 sweep1:(float)s1 sweep2:(float)s2 dur:(float)dur {
-    if (!_synthState) return;
-    _synthState->sfxFreq = f1; _synthState->sfxFreq2 = f2;
-    _synthState->sfxDur = dur; _synthState->sfxDur2 = dur; _synthState->sfxEnvInit = dur;
-    _synthState->sfxPhase = 0; _synthState->sfxPhase2 = 0;
-    _synthState->sfxSweepRate = s1; _synthState->sfxSweep2Rate = s2;
+    ADSEnqueueSound(_synthBuffer, f1, f2, dur, s1, s2);
 }
 
 - (void)setupUI {
@@ -267,10 +265,10 @@ static const CGFloat kGridSize = 20.0;
     UIColor *offColor = [UIColor colorWithRed:0.2 green:0.8 blue:1.0 alpha:1.0];
     if (_musicEnabled) {
         self.musicBtn.fontColor = onColor; self.musicBtnBg.strokeColor = onColor;
-        if (_synthState && self.gameState == ADSGameStatePlaying) _synthState->playBGM = 1;
+        if (_synthBuffer && self.gameState == ADSGameStatePlaying) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
     } else {
         self.musicBtn.fontColor = offColor; self.musicBtnBg.strokeColor = offColor;
-        if (_synthState) _synthState->playBGM = 0;
+        if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     }
 }
 
@@ -354,7 +352,7 @@ static const CGFloat kGridSize = 20.0;
         if (self.gameState == ADSGameStatePlaying) {
             self.gameState = ADSGameStatePaused; self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO; self.restartOverlay.hidden = NO;
-            if (_synthState) _synthState->playBGM = 0;
+            if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
         }
         [self playSFX2:1046.50 freq2:1318.51 dur:0.4]; [self showLeaderboard]; return;
     }
@@ -367,12 +365,12 @@ static const CGFloat kGridSize = 20.0;
         if ([_pauseBg containsPoint:loc]) {
             playTap(); [self playSFX2:330.0 freq2:220.0 dur:0.1]; self.gameState = ADSGameStatePaused; self.startBtn.text = @"▶ RESUME";
             self.startBtn.hidden = NO; self.restartOverlay.hidden = NO;
-            if (_synthState) _synthState->playBGM = 0;
+            if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
         }
     } else if (self.gameState == ADSGameStatePaused) {
         if ([self.startBtn containsPoint:loc] || (!self.restartOverlay.hidden && [self.restartOverlay containsPoint:loc])) {
             playTap(); [self playSFX2:880.0 freq2:1108.73 dur:0.1]; self.gameState = ADSGameStatePlaying; self.startBtn.hidden = YES; self.restartOverlay.hidden = YES;
-            if (_synthState && _musicEnabled) _synthState->playBGM = 1;
+            if (_synthBuffer && _musicEnabled) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
         }
     }
 }
@@ -409,7 +407,7 @@ static const CGFloat kGridSize = 20.0;
     self.score = 0; self.scoreLbl.text = @"SCORE: 0";
     self.direction = CGVectorMake(1, 0);
     self.snake = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake([self minX]+2, [self minY]+2)]];
-    if (_synthState && _musicEnabled) _synthState->playBGM = 1;
+    if (_synthBuffer && _musicEnabled) atomic_store_explicit(&_synthBuffer->playBGM, true, memory_order_relaxed);
     [self spawnFood]; self.lastTick = 0;
 }
 
@@ -495,7 +493,7 @@ static const CGFloat kGridSize = 20.0;
 
 - (void)die {
     self.gameState = ADSGameStateDead;
-    if (_synthState) _synthState->playBGM = 0;
+    if (_synthBuffer) atomic_store_explicit(&_synthBuffer->playBGM, false, memory_order_relaxed);
     NSUserDefaults *def = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE];
     NSInteger best = [def integerForKey:@"ADS_SnakeHighScore"];
     BOOL isNewHigh = NO;

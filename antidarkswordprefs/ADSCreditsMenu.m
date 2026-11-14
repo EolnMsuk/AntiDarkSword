@@ -8,42 +8,26 @@
     SKLabelNode *_dedicationBtn;
     AVAudioEngine *_audioEngine;
     AVAudioSourceNode *_sourceNode;
-    ADSSynthState *_synthState;
+    ADSAudioBuffer *_synthBuffer;
 }
 
-- (void)willMoveFromView:(SKView *)view {
-    if (_audioEngine) { [_audioEngine stop]; _audioEngine = nil; }
+- (void)ads_stopAudio {
+    [_audioEngine stop];
+    if (_sourceNode && _audioEngine) [_audioEngine detachNode:_sourceNode];
     _sourceNode = nil;
-    if (_synthState) { free(_synthState); _synthState = NULL; }
+    _audioEngine = nil;
+    _synthBuffer = nil; // in-flight render blocks retain their own owner
+}
+- (void)dealloc { [self ads_stopAudio]; }
+
+- (void)willMoveFromView:(SKView *)view {
+    [self ads_stopAudio];
 }
 
 - (void)didMoveToView:(SKView *)view {
     self.backgroundColor = [UIColor blackColor];
     
-    _synthState = malloc(sizeof(ADSSynthState));
-    memset(_synthState, 0, sizeof(ADSSynthState));
-    _audioEngine = [[AVAudioEngine alloc] init];
-    AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
-    ADSSynthState *state = _synthState;
-    
-    _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
-        float *outBuf = (float *)outputData->mBuffers[0].mData;
-        for (AVAudioFrameCount i = 0; i < frameCount; i++) {
-            float sfxSamp = 0;
-            if (state->sfxDur > 0) {
-                state->sfxPhase += (state->sfxFreq * 2.0 * M_PI) / 44100.0;
-                if (state->sfxPhase > 2.0 * M_PI) state->sfxPhase -= 2.0 * M_PI;
-                sfxSamp = (state->sfxPhase < M_PI ? 0.2 : -0.2); 
-                state->sfxDur -= 1.0/44100.0;
-            }
-            outBuf[i] = sfxSamp;
-        }
-        return noErr;
-    }];
-    
-    [_audioEngine attachNode:_sourceNode];
-    [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format];
-    [_audioEngine startAndReturnError:nil];
+    [self setupAudio];
     
     SKLabelNode *title = [SKLabelNode labelNodeWithFontNamed:@"Courier-Bold"];
     title.text = @"SELECT GAME";
@@ -121,8 +105,40 @@
     }
 }
 
+- (void)setupAudio {
+    [self ads_stopAudio];
+    ADSAudioBuffer *buffer = [ADSAudioBuffer new];
+    if (!buffer) return;
+    _synthBuffer = buffer;
+    _audioEngine = [[AVAudioEngine alloc] init];
+    AVAudioFormat *format = [[AVAudioFormat alloc] initStandardFormatWithSampleRate:44100 channels:1];
+    if (!_audioEngine || !format) { [self ads_stopAudio]; return; }
+    
+    _sourceNode = [[AVAudioSourceNode alloc] initWithFormat:format renderBlock:^OSStatus(BOOL *isSilence, const AudioTimeStamp *ts, AVAudioFrameCount frameCount, AudioBufferList *outputData) {
+        ADSSynthState *state = &buffer->state; // owner captured strongly by this block
+        ADSApplyAudioCommands(buffer);
+        float *outBuf = (float *)outputData->mBuffers[0].mData;
+        for (AVAudioFrameCount i = 0; i < frameCount; i++) {
+            float sfxSamp = 0;
+            if (state->sfxDur > 0) {
+                state->sfxPhase += (state->sfxFreq * 2.0 * M_PI) / 44100.0;
+                if (state->sfxPhase > 2.0 * M_PI) state->sfxPhase -= 2.0 * M_PI;
+                sfxSamp = (state->sfxPhase < M_PI ? 0.2 : -0.2); 
+                state->sfxDur -= 1.0/44100.0;
+            }
+            outBuf[i] = sfxSamp;
+        }
+        return noErr;
+    }];
+    
+    if (!_sourceNode) { [self ads_stopAudio]; return; }
+    [_audioEngine attachNode:_sourceNode];
+    [_audioEngine connect:_sourceNode to:_audioEngine.mainMixerNode format:format];
+    if (![_audioEngine startAndReturnError:nil]) [self ads_stopAudio];
+}
+
 - (void)playSFX:(float)freq dur:(float)dur {
-    if (_synthState) { _synthState->sfxFreq = freq; _synthState->sfxDur = dur; }
+    ADSEnqueueSound(_synthBuffer, freq, 0, dur, 0, 0);
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {

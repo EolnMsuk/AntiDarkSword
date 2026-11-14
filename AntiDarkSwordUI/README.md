@@ -106,7 +106,7 @@ This is a second layer of defense. The daemon tweak hooks the same `IMFileTransf
 
 ### Remote Content Blocking
 
-A `WKContentRuleList` rule (identifier `com.eolnmsuk.ads.remoteblock`) blocks all external `http`/`https` resource loads — images, scripts, fonts, and media — from inside WebViews. It is compiled once in `%ctor` asynchronously (WebKit caches the compiled result across launches) and applied per `WKWebView` when `applyBlockRemoteContent` is active.
+A `WKContentRuleList` rule (identifier `com.eolnmsuk.ads.remoteblock`) blocks all external `http`/`https` resource loads — images, scripts, fonts, and media — from inside WebViews. It is compiled asynchronously on first need and reconciled on the main queue with already registered content controllers as well as new views. Only AntiDarkSword-owned rules are removed/replaced. The rule is active when the current policy enables remote-content blocking.
 
 Default behaviour: enabled automatically for messaging and mail apps and QuickLook services; disabled for browsers and general apps so normal browsing is unaffected. Users can override per-app via the Settings UI or set `globalBlockRemoteContent` to enforce it everywhere.
 
@@ -139,7 +139,7 @@ Global overrides apply the mitigation to every process the tweak loads into, reg
 
 ### Thread safety
 
-Hook methods can fire on any thread. All flags that hooks read at call time (`applyDisableJIT`, `applyDisableJS`, `shouldSpoofUA`, etc.) are declared `_Atomic`. Flags that are only ever read and written within `loadPrefs()` itself (global overrides, intermediate per-app values) use plain `BOOL`. The `prefsLoaded` gate uses an atomic compare-and-swap to prevent two threads from running `loadPrefs()` concurrently.
+A serial reload queue computes complete local policy values and publishes one immutable retained snapshot. Each hook/helper keeps a strong snapshot for its invocation, including the UA string and serialized generation. A short pointer lock protects publication/retention only; no lock spans CFPreferences, WebKit or original calls. Main-queue UCC bookkeeping tracks owned scripts/rules weakly, reconciles asynchronous blocker arrival with existing views, and uses selector-guarded individual script removal. App and other-tweak scripts/rules are preserved. Current documents may require navigation/recreation after UA changes. Runtime stress/coexistence checks remain pending.
 
 ---
 
@@ -165,3 +165,5 @@ Hook methods can fire on any thread. All flags that hooks read at call time (`ap
 | `IMFileTransfer -canAutoDownload` | iMessage attachment auto-download (UI layer) |
 | `CKAttachmentMessagePartChatItem -_needsPreviewGeneration` | Attachment preview generation |
 | `CKAttachmentMessagePartChatItem -fullSizeImageURL` | Returns `nil` for HEIC/HEIF/WebP/PDF attachments when `applyBlockRiskyAttachments` is active |
+
+Build targets, native dependency/path requirements and deployment limits are shared through `config/targets.json`; see [building](../docs/building.md) and the [source compatibility audit](../compatibility.md). No device or coexistence results are claimed by this source session.

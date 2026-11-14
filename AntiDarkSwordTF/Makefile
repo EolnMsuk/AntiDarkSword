@@ -1,5 +1,5 @@
-ARCHS ?= arm64
-TARGET ?= iphone:clang:latest:14.0
+override ADS_RELEASE_TARGET := trollfools
+include ../config/target.mk
 
 TARGET_CODESIGN_FLAGS = -S -Hsha1 -Hsha256
 

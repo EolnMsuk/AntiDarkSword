@@ -11,28 +11,48 @@
 #include <substrate.h>
 
 #import "../ADSLogging.h"
+#import "../ADSPaths.h"
 
 @interface IMFileTransfer : NSObject
 - (BOOL)isAutoDownloadable;
 - (BOOL)canAutoDownload;
 @end
 
-static BOOL isRootlessJB = NO;
+#if defined(THEOS_PACKAGE_SCHEME_ROOTLESS) || defined(THEOS_PACKAGE_SCHEME_ROOTHIDE)
+static const BOOL isRootlessJB = YES;
+#else
+static const BOOL isRootlessJB = NO;
+#endif
 
 static NSString *ads_prefs_path(void) {
-    return isRootlessJB
-        ? @"/var/jb/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist"
-        : @"/var/mobile/Library/Preferences/com.eolnmsuk.antidarkswordprefs.plist";
+    NSString *mobile = ADSMobilePreferencesPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:mobile]) return mobile;
+    NSString *legacy = ADSJailbreakPath(mobile);
+    if (![legacy isEqualToString:mobile] && [[NSFileManager defaultManager] fileExistsAtPath:legacy]) return legacy;
+    return mobile;
 }
 
-static _Atomic BOOL prefsLoaded             = NO;
-static _Atomic BOOL currentProcessRestricted = NO;
-static _Atomic BOOL globalTweakEnabled       = NO;
-static _Atomic BOOL globalDisableIMessageDL  = NO;
-static _Atomic BOOL globalDecoyEnabled       = NO;
-static _Atomic BOOL disableIMessageDL        = NO;
-static _Atomic BOOL applyDisableIMessageDL   = NO;
-static _Atomic BOOL countersEnabled          = NO;
+// Publish all daemon policy bits with one release store; low-level hooks use
+// only an atomic integer load, never Objective-C or a preference lock.
+enum {
+    ADSRestricted = 1u << 0,
+    ADSMasterEnabled = 1u << 1,
+    ADSGlobalMessageBlock = 1u << 2,
+    ADSDecoyEnabled = 1u << 3,
+    ADSMessageRule = 1u << 4,
+    ADSApplyMessageBlock = 1u << 5,
+    ADSCountersEnabled = 1u << 6,
+};
+static _Atomic uint32_t ads_daemon_flags = 0;
+static inline BOOL ads_daemon_flag(uint32_t bit) {
+    return (atomic_load_explicit(&ads_daemon_flags, memory_order_acquire) & bit) != 0;
+}
+static dispatch_queue_t ads_reload_queue(void) {
+    static dispatch_queue_t queue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ queue = dispatch_queue_create("com.eolnmsuk.ads.daemon.reload", DISPATCH_QUEUE_SERIAL); });
+    return queue;
+}
 static _Atomic time_t lastProbeTime          = 0;
 static dispatch_queue_t ads_counter_queue    = nil;
 
@@ -61,8 +81,13 @@ static void parseRestrictedApps(NSDictionary *prefs, NSMutableArray *restrictedA
 }
 
 static void loadPrefs() {
-    BOOL expected = NO;
-    if (!atomic_compare_exchange_strong(&prefsLoaded, &expected, YES)) return;
+    BOOL currentProcessRestricted = NO;
+    BOOL globalTweakEnabled = NO;
+    BOOL globalDisableIMessageDL = NO;
+    BOOL globalDecoyEnabled = NO;
+    BOOL disableIMessageDL = NO;
+    BOOL applyDisableIMessageDL = NO;
+    BOOL countersEnabled = NO;
 
     NSDictionary *prefs = nil;
     NSString *prefsFilePath = ads_prefs_path();
@@ -179,6 +204,16 @@ static void loadPrefs() {
 
     applyDisableIMessageDL = globalTweakEnabled &&
                              (globalDisableIMessageDL || (currentProcessRestricted && disableIMessageDL));
+
+    uint32_t published = 0;
+    if (currentProcessRestricted) published |= ADSRestricted;
+    if (globalTweakEnabled) published |= ADSMasterEnabled;
+    if (globalDisableIMessageDL) published |= ADSGlobalMessageBlock;
+    if (globalDecoyEnabled) published |= ADSDecoyEnabled;
+    if (disableIMessageDL) published |= ADSMessageRule;
+    if (applyDisableIMessageDL) published |= ADSApplyMessageBlock;
+    if (countersEnabled) published |= ADSCountersEnabled;
+    atomic_store_explicit(&ads_daemon_flags, published, memory_order_release);
 }
 
 static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unused,
@@ -186,13 +221,12 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
                                           CFStringRef name __unused,
                                           const void *object __unused,
                                           CFDictionaryRef userInfo __unused) {
-    prefsLoaded = NO;
-    loadPrefs();
+    dispatch_async(ads_reload_queue(), ^{ loadPrefs(); });
 }
 
 %hook IMFileTransfer
 - (BOOL)isAutoDownloadable {
-    if (applyDisableIMessageDL) {
+    if (ads_daemon_flag(ADSApplyMessageBlock)) {
         ADSLog(@"[MITIGATION] Blocked auto-download of iMessage file transfer.");
         return NO;
     }
@@ -200,7 +234,7 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
 }
 
 - (BOOL)canAutoDownload {
-    if (applyDisableIMessageDL) {
+    if (ads_daemon_flag(ADSApplyMessageBlock)) {
         ADSLog(@"[MITIGATION] Denied canAutoDownload for iMessage transfer.");
         return NO;
     }
@@ -209,7 +243,7 @@ static void reloadDaemonPrefsNotification(CFNotificationCenterRef center __unuse
 %end
 
 static void ads_increment_probe_counter(void) {
-    if (!countersEnabled) return;
+    if (!ads_daemon_flag(ADSCountersEnabled)) return;
     time_t now = time(NULL);
     time_t prev = atomic_load(&lastProbeTime);
     if (now - prev < 2) return;
@@ -231,10 +265,13 @@ static void ads_increment_probe_counter(void) {
             kCFPreferencesAnyHost);
         NSInteger count = 0;
         if (val) {
-            CFNumberGetValue((CFNumberRef)val, kCFNumberNSIntegerType, &count);
+            if (CFGetTypeID(val) != CFNumberGetTypeID() ||
+                !CFNumberGetValue((CFNumberRef)val, kCFNumberNSIntegerType, &count) || count < 0)
+                count = 0;
             CFRelease(val);
         }
-        NSInteger newVal = count + 1;
+        // Diagnostic aggregation remains approximate across daemon processes.
+        NSInteger newVal = count < NSIntegerMax ? count + 1 : NSIntegerMax;
         CFNumberRef newCount = CFNumberCreate(NULL, kCFNumberNSIntegerType, &newVal);
         CFPreferencesSetValue(
             CFSTR("corelliumProbeCount"),
@@ -293,7 +330,7 @@ static int ads_spoof_bytes(const void *src, size_t required,
 }
 
 int hook_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (_ads_sysctl_active || !globalDecoyEnabled || !name)
+    if (_ads_sysctl_active || !ads_daemon_flag(ADSDecoyEnabled) || !name)
         return orig_sysctlbyname(name, oldp, oldlenp, newp, newlen);
 
     if (strcmp(name, "hw.model") == 0 || strcmp(name, "hw.machine") == 0) {
@@ -315,7 +352,7 @@ int hook_sysctlbyname(const char *name, void *oldp, size_t *oldlenp, void *newp,
 }
 
 int hook_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
-    if (_ads_sysctl_active || !globalDecoyEnabled || !name || namelen < 2)
+    if (_ads_sysctl_active || !ads_daemon_flag(ADSDecoyEnabled) || !name || namelen < 2)
         return orig_sysctl(name, namelen, oldp, oldlenp, newp, newlen);
 
     if (name[0] == CTL_HW && (name[1] == HW_MODEL || name[1] == HW_MACHINE)) {
@@ -331,14 +368,14 @@ static char *(*orig_getenv)(const char *name);
 char *hook_getenv(const char *name) {
     // Corellium sets CORELLIUM_ENV in some configurations; returning NULL makes the
     // process behave as if it is running on real hardware.
-    if (globalDecoyEnabled && name && strcmp(name, "CORELLIUM_ENV") == 0)
+    if (ads_daemon_flag(ADSDecoyEnabled) && name && strcmp(name, "CORELLIUM_ENV") == 0)
         return NULL;
     return orig_getenv(name);
 }
 
 static int (*orig_access)(const char *path, int amode);
 int hook_access(const char *path, int amode) {
-    if (!globalDecoyEnabled || !path) return orig_access(path, amode);
+    if (!ads_daemon_flag(ADSDecoyEnabled) || !path) return orig_access(path, amode);
     if (strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) return 0;
@@ -380,7 +417,7 @@ static void ads_fill_corellium_stat(struct stat *buf) {
 
 static int (*orig_stat)(const char *path, struct stat *buf);
 int hook_stat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (ads_daemon_flag(ADSDecoyEnabled) && path && buf && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
             ads_fill_corellium_stat(buf);
@@ -392,7 +429,7 @@ int hook_stat(const char *path, struct stat *buf) {
 
 static int (*orig_lstat)(const char *path, struct stat *buf);
 int hook_lstat(const char *path, struct stat *buf) {
-    if (globalDecoyEnabled && path && strcmp(path, "/usr/libexec/corelliumd") == 0) {
+    if (ads_daemon_flag(ADSDecoyEnabled) && path && buf && strcmp(path, "/usr/libexec/corelliumd") == 0) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
             ads_fill_corellium_stat(buf);
@@ -404,7 +441,7 @@ int hook_lstat(const char *path, struct stat *buf) {
 
 %hook NSFileManager
 - (BOOL)fileExistsAtPath:(NSString *)path {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+    if (ads_daemon_flag(ADSDecoyEnabled) && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
         ads_increment_probe_counter();
         if (isRootlessJB) return YES;
     }
@@ -412,7 +449,7 @@ int hook_lstat(const char *path, struct stat *buf) {
 }
 
 - (BOOL)fileExistsAtPath:(NSString *)path isDirectory:(BOOL *)isDirectory {
-    if (globalDecoyEnabled && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
+    if (ads_daemon_flag(ADSDecoyEnabled) && [path isEqualToString:@"/usr/libexec/corelliumd"]) {
         ads_increment_probe_counter();
         if (isRootlessJB) {
             if (isDirectory) *isDirectory = NO;
@@ -424,18 +461,16 @@ int hook_lstat(const char *path, struct stat *buf) {
 %end
 
 %ctor {
-    // Must be set before %init so NSFileManager hook has the correct value the instant it becomes active.
-    isRootlessJB = (access("/var/jb", F_OK) == 0);
 
     %init;
 
     ADSLog(@"[INIT] AntiDarkSwordDaemon loaded into: %@",
            [[NSProcessInfo processInfo] processName]);
-    loadPrefs();
+    dispatch_sync(ads_reload_queue(), ^{ loadPrefs(); });
 
-    if (currentProcessRestricted) {
+    if (ads_daemon_flag(ADSRestricted)) {
         ADSLog(@"[STATUS] Daemon protection ACTIVE. iMessageDL blocked: %d",
-               applyDisableIMessageDL);
+               ads_daemon_flag(ADSApplyMessageBlock));
     }
 
     CFNotificationCenterAddObserver(
