@@ -1,10 +1,5 @@
 # Project structure
 
-The current release version is read from root `control`. Target definitions and
-version preparation are shared by direct Makefiles, the maintained build wrapper
-and CI. The source layout below excludes local baselines, downloaded references
-and generated build products.
-
 ```text
 AntiDarkSword/
 ├── control                         # Only release-version authority; package ID/dependencies
@@ -91,18 +86,3 @@ AntiDarkSword/
 ├── .gitignore                     # Local references/baselines and generated output excluded
 └── LICENSE
 ```
-
-Each target uses `.build/<target>/` for separate object directories by subproject,
-staging, prepared layout and copied link reference. Packages are collected to
-`output/com.eolnmsuk.antidarksword_<version>_<environment>.deb`, where environment
-is `legacy`, `rootful`, `rootless` or `roothide`. The standalone product is
-`output/AntiDarkSword_<version>_TrollFools.dylib`. These generated directories do
-not represent completed builds in this session.
-
-`.implementation-baseline/` holds the original 142-file source/vendor snapshot
-and SHA-256 manifest because no `.git` metadata exists locally.
-`.build-references/` contains downloaded official source archives/documentation
-and local review/check artifacts. `.theos-toolchain/` is the supplied SDK/libclang
-reference directory; it is not a native Theos/compiler installation. CI retrieves
-its pinned native toolchain/SDKs explicitly. See [building](docs/building.md),
-[validation](docs/validation.md) and [compatibility](compatibility.md).
