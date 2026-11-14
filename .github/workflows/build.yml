@@ -72,7 +72,7 @@ jobs:
           path: output/*
 
   build-legacy:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     outputs:
@@ -126,7 +126,7 @@ jobs:
 
   release:
     needs: [build-modern, build-legacy]
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       VERSION: ${{ needs.build-modern.outputs.version }}
