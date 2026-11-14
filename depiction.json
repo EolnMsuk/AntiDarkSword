@@ -111,12 +111,23 @@
         {
           "class": "DepictionTableButtonView",
           "title": "Donate via Venmo",
-          "action": "https://venmo.com/user/EolnMsuk",
+          "action": "https://venmo.com/EolnMsuk/",
           "openExternal": true
         },
         {
           "class": "DepictionSpacerView",
           "spacing": 16
+        }
+      ]
+    },
+    {
+      "tabname": "Changelog",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "## 4.9.6\n\n- Add PreferenceLoader-only manual stable-release checking beside GitHub. Read\n  the installed preferences bundle version, compare numeric version components\n  (including published `vX.Y.Z-bN` tags), reject draft/prerelease or malformed\n  responses, and validate direct official release links.\n- Add silent asynchronous checking only on visible AntiDarkSword settings entry,\n  with a durable rolling 24-hour attempt gate that includes failures, serialized\n  request coalescing, manual override and weak/visible UIKit presentation. The\n  gate counts device sleep; persisted continuous elapsed time protects\n  the same-boot gate across Settings relaunches and wall-clock jumps. No\n  periodic timer, background updater, automatic download or install is added.\n- Consolidate **💸 Donate** into Venmo and Crypto. Use the exact\n  `https://venmo.com/EolnMsuk/` destination through a guarded default-browser\n  route. **Crypto Wallets** shows all eight exact BTC, ETH, USDT, USDC,\n  RNDR / ERC-20, LTC, SOL and BNB entries with network labels, wrapping addresses,\n  row-specific copy confirmation and a fixed bottom Cancel. TrollFools receives\n  neither feature. Browser routing and UI layout still require device checks.\n- Standardize four Debian assets as\n  `com.eolnmsuk.antidarksword_<version>_{legacy,rootful,rootless,roothide}.deb` and\n  retain `AntiDarkSword_<version>_TrollFools.dylib`. Share target definitions,\n  isolate build/staging/reference directories, check package metadata, and derive\n  firmware dependencies and staged preferences minimum OS metadata from the\n  selected target. Require all five products before creating the stable release\n  draft. Include these notes and an\n  accurate compatibility guide in the draft; publication remains user-controlled.\n- Configure the native Roothide Theos scheme with pinned official toolchain\n  inputs, verified native AltList reference/dependencies, typed root-path APIs,\n  native signing entitlements, and environment-specific lifecycle/launch paths.\n  Vendor originals are preserved. No renamed rootless package or external\n  patcher is used; actual native compilation/installation is pending user results.\n- Make root `control` the only release-version authority. Synchronize/check\n  preferences bundle versions, depiction version and current changelog content.\n  Remove the stale runtime fallback and correct the TrollFools release baseline\n  and explicit legacy Makefile selection. Legacy linking omits chained fixups.\n- Serialize UI/TrollFools reloads and publish complete retained policy snapshots;\n  publish daemon flags in one atomic mask. Keep rule precedence, existing gates,\n  original hook chains and default master state. Reconcile asynchronously compiled\n  blockers with existing content controllers and change only owned scripts/rules.\n- Replace Settings' raw observer pointers with weak main-queue notification\n  tokens. Run existing explicit process controls on a serial worker with bounded\n  waits, error/status handling and restored controls. Keep mobile preference\n  paths distinct from package paths and remove untyped root-path symbol calls.\n- Validate counter CF types/ranges and saturate additions; cross-process totals\n  remain approximate. Preserve original stat/lstat handling for NULL buffers.\n- Retain game audio state through active render blocks and pass UI sounds through\n  a bounded atomic mailbox. Remove manually freed render-state buffers and direct\n  UI/render field races; add allocation/node/start/teardown guards. A full mailbox\n  drops an effect instead of blocking the render thread.\n- Add the Sileo Changelog tab immediately after Details, preserve other depiction\n  content, and update installation/build/project/compatibility documentation with\n  source-backed findings, pinned input provenance and exact user validation steps.\n\n**Validation status:** local metadata/reference/source checks are documented in\n`docs/local-validation.md`. No package/full build, signing, installation, CI run,\nrelease publication or device compatibility test was performed in this session.\nRunner builds, native paths/lifecycle, request-count/UI/browser behavior, audio,\nTrollFools injection and tweak coexistence remain pending user validation in\n`docs/validation.md`.",
+          "useRawFormat": false
         }
       ]
     },
@@ -131,7 +142,7 @@
         {
           "class": "DepictionTableTextView",
           "title": "Version",
-          "text": "4.9.3"
+          "text": "4.9.6"
         },
         {
           "class": "DepictionTableTextView",
