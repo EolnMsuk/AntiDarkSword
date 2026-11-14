@@ -139,7 +139,7 @@ Global overrides apply the mitigation to every process the tweak loads into, reg
 
 ### Thread safety
 
-A serial reload queue computes complete local policy values and publishes one immutable retained snapshot. Each hook/helper keeps a strong snapshot for its invocation, including the UA string and serialized generation. A short pointer lock protects publication/retention only; no lock spans CFPreferences, WebKit or original calls. Main-queue UCC bookkeeping tracks owned scripts/rules weakly, reconciles asynchronous blocker arrival with existing views, and uses selector-guarded individual script removal. App and other-tweak scripts/rules are preserved. Current documents may require navigation/recreation after UA changes. Runtime stress/coexistence checks remain pending.
+A serial reload queue computes complete local policy values and publishes one immutable retained snapshot. Each hook/helper keeps a strong snapshot for its invocation, including the UA string and serialized generation. A short pointer lock protects publication/retention only; no lock spans CFPreferences, WebKit or original calls. Main-queue UCC bookkeeping tracks owned scripts/rules weakly, reconciles asynchronous blocker arrival with existing views, and uses selector-guarded individual script removal. App and other-tweak scripts/rules are preserved. Current documents may require navigation/recreation after UA changes.
 
 ---
 
@@ -166,4 +166,4 @@ A serial reload queue computes complete local policy values and publishes one im
 | `CKAttachmentMessagePartChatItem -_needsPreviewGeneration` | Attachment preview generation |
 | `CKAttachmentMessagePartChatItem -fullSizeImageURL` | Returns `nil` for HEIC/HEIF/WebP/PDF attachments when `applyBlockRiskyAttachments` is active |
 
-Build targets, native dependency/path requirements and deployment limits are shared through `config/targets.json`; see [building](../docs/building.md) and the [source compatibility audit](../compatibility.md). No device or coexistence results are claimed by this source session.
+Build targets and deployment settings are defined in `config/targets.json`. See [Compatibility](../compatibility.md) for package selection and dependencies.

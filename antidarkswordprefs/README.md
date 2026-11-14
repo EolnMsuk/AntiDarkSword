@@ -27,8 +27,8 @@ ID and copies the selected link-only framework to `.build/<target>/references/Al
 Vendor originals are never replaced and no AltList framework is shipped in our
 package. Legacy uses the supplied old rootful reference; modern rootful/rootless
 use the supplied iOS 15+ `@rpath` reference with the target's runtime framework
-path; native Roothide uses the separately verified native reference. See
-[build provenance](../docs/building.md).
+path; native Roothide uses its native reference. See
+[Compatibility](../compatibility.md) for dependencies.
 
 ---
 
@@ -280,7 +280,7 @@ The game `SKView` (480 pt tall, 16 pt inset, `layer.cornerRadius = 12`) is embed
 
 ### SpriteKit audio engine
 
-Each scene has a render-retained `ADSAudioBuffer` owner. Synth fields are audio-thread-only; UI effects cross a bounded atomic command mailbox, and music uses an atomic flag. The render callback allocates nothing and never takes the UI producer lock. Stop/detach releases scene references while an active block keeps its state alive. Allocation/node/start failure paths skip audio without skipping the game UI. A full mailbox drops an effect. The existing melodies, game rules and scores remain; repeated teardown/audio behavior needs device testing.
+Each scene has a render-retained `ADSAudioBuffer` owner. Synth fields are audio-thread-only; UI effects cross a bounded atomic command mailbox, and music uses an atomic flag. The render callback allocates nothing and never takes the UI producer lock. Stop/detach releases scene references while an active block keeps its state alive. Allocation/node/start failure paths skip audio without skipping the game UI. A full mailbox drops an effect. The melodies, game rules and scores are unchanged.
 
 **`ADSGameMenuScene`** — selection screen. Two `SKShapeNode` buttons (PyEater cyan, JailTris gold), a close button, and a pulsing dedication label with glow overlay. Button taps produce square-wave SFX tones and trigger `SKTransition pushWithDirection` to the selected game scene.
 
@@ -306,29 +306,21 @@ eligibility but join an in-flight request and refresh the attempt time. The
 persisted continuous clock includes sleep and is paired with a local-only boot
 marker, preserving elapsed-time throttling across Settings relaunches in the same
 boot. After a reboot, the gate uses the persisted wall time conservatively.
-Invalid/
-future timestamps quarantine automatic checks. Persistence failure sends no
+Invalid or future timestamps quarantine automatic checks. Persistence failure sends no
 request. Only newer stable releases produce automatic UI; manual checks report
 errors or the comparison result. Hidden/dismissed presenters are discarded.
 There are no background callbacks/timers, automatic downloads or installs.
 
-`💸 Donate` replaces `openVenmo` and its selector-dependent green styling. Venmo
-uses the exact `https://venmo.com/EolnMsuk/` URL through guarded LaunchServices
-configuration with URL overrides disabled. It reports unsupported/failing routes
-instead of substituting an app scheme or assuming universalLinksOnly:NO forces
-a browser. Actual routing with both browser defaults and Venmo installation
-states remains a device check. The source SPI declarations are evidenced in
-[WebKit LaunchServicesSPI](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/cocoa/LaunchServicesSPI.h)
-and [its workspace declaration](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/webpushd/LaunchServicesSPI.h).
+`💸 Donate` offers Venmo and Crypto. Venmo opens
+`https://venmo.com/EolnMsuk/` in the default browser and reports an error if the
+URL cannot be opened.
 
-Crypto opens `Crypto Wallets`, with all eight exact entries from plan.md, network
-labels, full wrapping addresses, Dynamic Type/accessibility, per-wallet Copied
-feedback and a fixed bottom Cancel. Confirmation tokens prevent stale cell or
-dismissal callbacks. The model is immutable; only the selected address is copied.
-No wallet apps or payment transactions are opened. These features are not in TF.
-
-See [validation](../docs/validation.md) for request-count, lifecycle, browser,
-small-screen/iPad and copy-string checks. Build/device results remain pending.
+Crypto opens `Crypto Wallets` with BTC, ETH, USDT, USDC, RNDR / ERC-20, LTC, SOL
+and BNB addresses and network labels. Tap an address to copy it and see a
+confirmation. The list supports wrapping text, Dynamic Type and accessibility,
+with a fixed Cancel button at the bottom. Confirmation tokens prevent stale
+callbacks after dismissal. Update checking and donation options are exclusive
+to PreferenceLoader.
 
 ## Files
 

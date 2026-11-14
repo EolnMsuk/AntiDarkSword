@@ -42,7 +42,7 @@ The dylib is sandboxed to the injected app and has no system-level access. These
 
 - **TrollStore 2** installed on your device ([opa334/TrollStore](https://github.com/opa334/TrollStore))
 - **TrollFools** installed via TrollStore ([Lessica/TrollFools](https://github.com/Lessica/TrollFools))
-- Release deployment target: **iOS 15.0+**, arm64 / arm64e. Actual TrollStore/TrollFools availability and injection require separate device validation; see [device compatibility and building](#device-compatibility-and-building).
+- **iOS 15.0+**, arm64 / arm64e, with a compatible TrollStore and TrollFools setup. See [device compatibility and building](#device-compatibility-and-building).
 - The target app must be a **third-party App Store app** — Apple system apps cannot be injected by TrollFools
 
 ---
@@ -93,24 +93,21 @@ Use TrollFools when you cannot or do not want to jailbreak, or when you want sur
 
 ## Device compatibility and building
 
-The release compilation baseline is iOS 15+ with arm64 and current arm64e ABI,
-SDK 16.5, internal Logos and no MobileSubstrate. This does not assert TrollStore/
-TrollFools availability or successful injection on every device/OS; use the
-upstream projects' installation documentation for that separate question.
+The dylib targets iOS 15+ with arm64 and current arm64e ABI, SDK 16.5 and the
+internal Logos backend. It has no MobileSubstrate dependency. Your device and
+iOS version must also be supported by TrollStore and TrollFools.
 
-On a configured user Mac, `bash scripts/build_target.sh trollfools` from the
+On macOS, `bash scripts/build_target.sh trollfools` from the
 project root collects `output/AntiDarkSword_<version>_TrollFools.dylib`. The root
 `control` file supplies the release version; target settings come from shared
 configuration. Direct `make -f Makefile.trollfools` uses the same baseline and
-isolated `.build/trollfools/` objects. See [building](../docs/building.md).
+isolated `.build/trollfools/` objects.
 
-The existing authentication, gesture and overlay remain. No updater or donation
-features were added here. Policy reloads now publish complete retained snapshots,
-UA injection uses a serialized generation, and main-queue owned WebKit state
-reaches views created during asynchronous compilation. Canonical/legacy preference
-file lookup and sandboxed suite fallback remain. Existing documents can need
-navigation/recreation after UA changes. Injection, auth/settings, coexistence and
-standalone dependency checks remain pending [user validation](../docs/validation.md).
+Settings use the biometric-gated gesture and per-app overlay. Update checking
+and donation options are available in the jailbreak PreferenceLoader bundle.
+Policy reloads publish complete retained snapshots, and WebKit state updates
+reach views created during asynchronous content-rule compilation. Existing
+pages may need to reload after changing the user agent.
 
 ---
 

@@ -165,4 +165,4 @@ The `_ads_sysctl_active` thread-local flag is `static __thread BOOL` and exists 
 | `sysctl` (C function via `MSHookFunction`) | Hardware query; spoofs `hw.model`/`hw.machine` → `"iPhone15,2"`, `hw.cpusubtype` → `CPU_SUBTYPE_ARM64E`, `kern.boottime` → stable PID-seeded uptime |
 | `sysctlbyname` (C function via `MSHookFunction`) | Named sysctl variant; same hardware spoof targets as `sysctl`; also returns `"21C62"` for `kern.osversion` |
 
-Rootless and native Roothide path-spoof behavior is selected by the build environment, not `/var/jb` existence. Canonical mobile preferences retain a legacy file fallback. Native Roothide uses typed API/dependency references; see [building](../docs/building.md). Install/migration, push delivery, counters, low-level ABI and device coexistence checks remain pending in [validation](../docs/validation.md).
+Rootless and native Roothide path-spoof behavior is selected by the build environment. Canonical mobile preferences retain a legacy file fallback, and native Roothide uses its typed root-path API. See [Compatibility](../compatibility.md) for package selection and dependencies.
