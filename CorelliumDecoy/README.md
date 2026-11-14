@@ -98,7 +98,7 @@ removal/deconfiguration. Missing installation files produce a configure error;
 partial removal can proceed. `/var/jb` existence never changes a rootful
 package's prefix. Native signing selects `entitlements-roothide.plist` with the
 official base entitlements, preserving the original file for the other targets.
-See [pinned requirements and path evidence](../docs/building.md).
+See [Compatibility](../compatibility.md) for package selection and dependencies.
 
 ---
 
@@ -125,7 +125,7 @@ Because zero-click iMessage exploits typically execute inside `imagent` or `IMDP
 
 ---
 
-## Intended source behavior (device verification pending)
+## Decoy behavior
 
 A payload performing standard Corellium detection on a device running AntiDarkSword at Level 3 encounters:
 
@@ -138,7 +138,7 @@ A payload performing standard Corellium detection on a device running AntiDarkSw
 - `sysctl`/`sysctlbyname("kern.boottime")` → plausible 3–4 hour uptime
 - `sysctlbyname("kern.osversion")` → `"21C62"` (iOS 17.2, consistent with iPhone15,2)
 
-All checks pass. The payload concludes it is inside a Corellium research environment and aborts.
+These signals make the device resemble a Corellium research environment to payloads that use these checks.
 
 ---
 
@@ -150,7 +150,7 @@ All checks pass. The payload concludes it is inside a Corellium research environ
 
 ---
 
-## User-run builds and validation
+## Building
 
 Use the shared root aggregate helper for complete packages:
 
@@ -161,9 +161,7 @@ bash scripts/build_target.sh rootless
 bash scripts/build_target.sh roothide
 ```
 
-Direct subproject compilation also loads shared target/version preparation, but
-release packages must use the aggregate to include all components. No package
-or service command was run in this Windows session. Inspect signing, staged
-paths, launchd behavior, upgrade/removal and preference propagation on each actual
-environment using [validation](../docs/validation.md). The diagnostic counter is
-type/range checked and saturating, with approximate cross-process totals.
+Direct subproject compilation also loads shared target/version preparation;
+release packages use the aggregate to include all components. The diagnostic
+counter is type/range checked and saturating, with approximate cross-process
+totals.
