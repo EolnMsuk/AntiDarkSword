@@ -1,0 +1,182 @@
+{
+  "minVersion": "0.1",
+  "class": "DepictionTabView",
+  "headerImage": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/bannersileo.png",
+  "tintColor": "#FF3B30",
+  "tabs": [
+    {
+      "tabname": "Details",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 0
+        },
+        {
+          "class": "DepictionScreenshotsView",
+          "itemCornerRadius": 14,
+          "itemSize": "{160, 346}",
+          "screenshots": [
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot1.png",
+              "accessibilityText": "Preset Levels"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot2.png",
+              "accessibilityText": "Level 3 Options"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot3.png",
+              "accessibilityText": "Preset Rules"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot4.png",
+              "accessibilityText": "Mitigations"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot5.png",
+              "accessibilityText": "Custom Rules"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot6.png",
+              "accessibilityText": "Info"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot7.png",
+              "accessibilityText": "Shake iPhone (easter egg)"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot8.png",
+              "accessibilityText": "JailTris"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot9.png",
+              "accessibilityText": "Extra Points"
+            },
+            {
+              "url": "https://raw.githubusercontent.com/EolnMsuk/AntiDarkSword/refs/heads/main/antidarkswordprefs/Resources/screenshot10.png",
+              "accessibilityText": "PyEater"
+            }
+          ]
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "**AntiDarkSword** protects your device from hidden web browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS).",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 8
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Protection Layers",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "• **Browser Protection** — Makes web browsing safer by reducing areas attackers can target.\n\n• **iMessage Security** — Blocks silent attacks by stopping dangerous file downloads and risky attachment previews (like PDFs and images).\n\n• **Content Blocking** — Automatically blocks unsafe content in messaging and mail apps.\n\n• **Device Cloaking** — Spoofs environments that are not vulnerable causing most payloads to abort.\n\n• **Decoy System** — Tricks attackers into thinking your device is a test virtual machine, stopping many advanced attacks in their tracks.\n\n• **Background Service Protection** — Secures core system services (like message syncing) when using higher security levels.",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionSubheaderView",
+          "title": "Auto-Protect Levels",
+          "useBoldText": true
+        },
+        {
+          "class": "DepictionMarkdownView",
+          "markdown": "• **Level 1** — Web browsers, mail, messaging, and web-heavy apps.\n\n• **Level 2** — Everything in Level 1, plus social media and entertainment apps.\n\n• **Level 3** — Everything in Level 2, plus background system services.\n\n*Note: You can easily set custom rules to override these levels for specific apps if you need to.*",
+          "useRawFormat": false
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "View Source on GitHub",
+          "action": "https://github.com/EolnMsuk/AntiDarkSword",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "Donate via Venmo",
+          "action": "https://venmo.com/user/EolnMsuk",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        }
+      ]
+    },
+    {
+      "tabname": "Information",
+      "class": "DepictionStackView",
+      "views": [
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Version",
+          "text": "4.9.3"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Author",
+          "text": "EolnMsuk"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Maintainer",
+          "text": "EolnMsuk"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Section",
+          "text": "Tweaks"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Package",
+          "text": "com.eolnmsuk.antidarksword"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "iOS Compatibility",
+          "text": "13.0 – 17.0"
+        },
+        {
+          "class": "DepictionTableTextView",
+          "title": "Architecture",
+          "text": "arm64, arm64e"
+        },
+        {
+          "class": "DepictionSeparatorView"
+        },
+        {
+          "class": "DepictionTableButtonView",
+          "title": "Report an Issue",
+          "action": "https://github.com/EolnMsuk/AntiDarkSword/issues",
+          "openExternal": true
+        },
+        {
+          "class": "DepictionSpacerView",
+          "spacing": 16
+        }
+      ]
+    }
+  ]
+}
