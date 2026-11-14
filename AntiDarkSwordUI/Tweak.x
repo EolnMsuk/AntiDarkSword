@@ -917,7 +917,8 @@ static void reloadPrefsNotification(CFNotificationCenterRef center __unused,
 %end
 
 %hookf(JSValueRef, JSEvaluateScript, JSContextRef ctx, JSStringRef script, JSObjectRef thisObject, JSStringRef sourceURL, int startingLineNumber, JSValueRef *exception) {
-    if (applyDisableJS) {
+    ADSUIProtectionState *adsState = ads_snapshot();
+    if (adsState.applyDisableJS) {
         // Populate exception so callers receive a meaningful error rather than a NULL return
         // with a NULL exception pointer (undefined behaviour in the JSC C API).
         if (ctx && exception) {
