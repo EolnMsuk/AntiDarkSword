@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+ENVIRONMENT="rootful"
+case "$ENVIRONMENT" in
+    legacy|rootful|roothide) PREFIX="" ;;
+    rootless) PREFIX="/var/jb" ;;
+    *) echo "AntiDarkSword: package environment was not prepared" >&2; exit 1 ;;
+esac
+# Roothide's native bootstrap utilities use jbroot-based paths. Its dpkg
+# supplies relocation/symlinks; never hard-code a randomized device root.
+PLIST="$PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"
+BINARY="$PREFIX/usr/libexec/corelliumd"
+LAUNCHCTL="$PREFIX/usr/bin/launchctl"
+[ -x "$LAUNCHCTL" ] || LAUNCHCTL="$PREFIX/bin/launchctl"
+case "${1:-}" in
+    configure)
+        [ -f "$BINARY" ] && [ -f "$PLIST" ] || { echo "AntiDarkSword: incomplete daemon installation" >&2; exit 1; }
+        chmod 755 "$BINARY"
+        chown root:wheel "$BINARY" "$PLIST"
+        chmod 644 "$PLIST"
+        [ -x "$LAUNCHCTL" ] || { echo "AntiDarkSword: launchctl unavailable at $LAUNCHCTL" >&2; exit 1; }
+        "$LAUNCHCTL" unload "$PLIST" 2>/dev/null || true
+        "$LAUNCHCTL" load "$PLIST"
+        ;;
+esac
+exit 0
