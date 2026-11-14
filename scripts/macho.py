@@ -1,8 +1,41 @@
-"""Small read-only Mach-O inspector for build reference and release checks."""
+"""Read-only Mach-O inspection and slice selection for references/releases."""
 import json
 import pathlib
 import struct
 import sys
+
+def extract_slice(data, cpu, subtype):
+    """Return one unchanged thin slice, checking its container/header identity."""
+    if data[:4] in (b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'):
+        if len(data) < 8:
+            raise ValueError('Truncated fat header')
+        wide = data[3] == 0xbf
+        count = struct.unpack_from('>I', data, 4)[0]
+        record_size = 32 if wide else 20
+        table_end = 8 + count * record_size
+        if table_end > len(data):
+            raise ValueError('Truncated fat architecture table')
+        candidates = []
+        for i in range(count):
+            pos = 8 + i * record_size
+            if struct.unpack_from('>II', data, pos) != (cpu, subtype):
+                continue
+            offset, size = struct.unpack_from('>QQ' if wide else '>II', data, pos + 8)
+            if offset < table_end or size < 28 or offset + size > len(data):
+                raise ValueError('Invalid selected Mach-O slice range')
+            candidates.append(data[offset:offset + size])
+        if len(candidates) != 1:
+            raise ValueError('Expected exactly one matching Mach-O slice')
+        selected = candidates[0]
+    else:
+        selected = data
+    header_size = 32 if selected[:4] == b'\xcf\xfa\xed\xfe' else 28
+    if (selected[:4] not in (b'\xcf\xfa\xed\xfe', b'\xce\xfa\xed\xfe')
+            or len(selected) < header_size):
+        raise ValueError('Expected a complete little-endian Mach-O header')
+    if struct.unpack_from('<II', selected, 4) != (cpu, subtype):
+        raise ValueError('Selected Mach-O CPU/subtype does not match its fat record')
+    return selected
 
 def inspect(data):
     if data[:4] in (b'\xca\xfe\xba\xbe', b'\xca\xfe\xba\xbf'):

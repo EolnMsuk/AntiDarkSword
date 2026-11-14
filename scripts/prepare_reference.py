@@ -2,21 +2,28 @@
 """Validate and copy a link-only framework to its target-specific directory."""
 import plistlib
 import sys
-from macho import inspect
+from macho import extract_slice, inspect
 from target_config import ROOT, TARGETS
 from version import atomic_write, read_version
 
-def copy_atomic(source, destination):
+def copy_atomic(source, destination, binary):
     for path in source.rglob('*'):
         if path.is_file():
             target = destination / path.relative_to(source)
             target.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write(target, path.read_bytes(), mode=0o644)
+            data = binary if path == source / 'AltList' else path.read_bytes()
+            atomic_write(target, data, mode=0o644)
 
 def prepare(target):
     spec = TARGETS[target]
     source = ROOT / 'vendor' / spec['framework']
-    slices = inspect((source / 'AltList').read_bytes())
+    binary = (source / 'AltList').read_bytes()
+    if target == 'legacy':
+        # The old universal reference includes an arm64e ABI slice rejected by
+        # current linkers. Legacy links arm64 only; preserve that slice verbatim
+        # in the generated reference without changing the vendor original.
+        binary = extract_slice(binary, 0x100000c, 0)
+    slices = inspect(binary)
     minimum = tuple(map(int, spec['minimum'].split('.'))) + (0,)
     supported = [s for s in slices if s['cpu'] == 0x100000c and tuple(s['minimum']) <= minimum]
     needed = {0} if target == 'legacy' else {0, 2}
@@ -28,7 +35,7 @@ def prepare(target):
     if any(s['id'] != expected_id for s in supported):
         raise ValueError('Unexpected AltList install ID')
     destination = ROOT / '.build' / target / 'references/AltList.framework'
-    copy_atomic(source, destination)
+    copy_atomic(source, destination, binary)
     resources = ROOT / '.build' / target / 'preferences-resources'
     for path in (ROOT / 'antidarkswordprefs/Resources').iterdir():
         if not path.is_file():
