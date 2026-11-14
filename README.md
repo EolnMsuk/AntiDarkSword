@@ -18,32 +18,31 @@ An iOS jailbreak tweak and TrollStore dylib that hardens vulnerable iOS devices 
 
 ## 🛠️ Installation
 
-**Jailbreak Tweak**
-1. Download the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases) (see guide below).
-2. If roothide, convert rootless with patcher before installing.
-> **iOS 15+** use `arm.deb` for rootful, `arm64.deb` for rootless.  
-> **iOS 13–14** use `arm_legacy.deb`.  
+**Jailbreak tweak:** Download the matching environment asset from a published
+[release](https://github.com/EolnMsuk/AntiDarkSword/releases). Native Roothide uses
+the `_roothide.deb` build and matching native dependencies; no external patcher
+is required. Keep legacy and modern rootful packages distinct.
 
-**TrollFools Dylib**
-1. Install [TrollStore](https://github.com/opa334/TrollStore/releases) and [TrollFools](https://github.com/Lessica/TrollFools/releases).
-2. Download `AntiDarkSword.dylib` from the [latest release](https://github.com/EolnMsuk/AntiDarkSword/releases).
-3. Open TrollFools → select an app → inject the `.dylib`.
-4. **Three-finger double-tap** inside an app to open the settings overlay.
-
----
+**TrollFools:** With a supported TrollStore/TrollFools setup, download
+`AntiDarkSword_<version>_TrollFools.dylib`, inject it per app, and use the existing
+biometric-gated three-finger double-tap settings gesture. Its release deployment
+baseline remains iOS 15+. The overlay has no update checker or donation menu.
 
 ## 📱 Compatibility
 
-| File | Jailbreak | iOS | Chip |
-| :--- | :--- | :--- | :--- |
-| `*_iphoneos-arm64.deb` | Dopamine, meowbrek2, palera1n **rootless** | 15.0 – 17.0 | A12+ · A9–A11 |
-| `*_iphoneos-arm.deb` | unc0ver, Taurine, checkra1n, palera1n **rootful** | 15.0 – 17.0 | A9+ |
-| `*_iphoneos-arm_legacy.deb` | unc0ver, checkra1n, Taurine **rootful** | 13.0 – 14.8 | A9–A11 (arm64) |
-| `*_TrollFools.dylib` | TrollStore + TrollFools (no jailbreak needed) | 15.0 – 17.0 | A9+ |
+| Release suffix | Intended baseline | Slices / package architecture |
+|---|---|---|
+| `_legacy.deb` | iOS 13–14 rootful; SDK 14.5 | arm64 / iphoneos-arm |
+| `_rootful.deb` | iOS 15–17 rootful; SDK 16.5 | arm64, arm64e / iphoneos-arm |
+| `_rootless.deb` | iOS 15–17 rootless; SDK 16.5 | arm64, arm64e / iphoneos-arm64 |
+| `_roothide.deb` | Native Roothide; iOS 15+ deployment within supported environments | arm64, arm64e / iphoneos-arm64e |
+| `_TrollFools.dylib` | Per-app injection; iOS 15+ deployment | arm64, arm64e; no Debian package |
 
 ---
 
 ## 🛡️ Protections
+
+The tables describe source capabilities and existing rule choices. They are not device-test results or guarantees of exploit coverage.
 
 | **Jailbreak (tweak)** | iOS 13–14 | iOS 15 | iOS 16+ |
 | :--- | :--- | :--- | :--- |
@@ -158,4 +157,4 @@ Level 3
 
 Created by [EolnMsuk](https://github.com/EolnMsuk) → [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/)  
 Thanks to [ghh-jb](https://github.com/ghh-jb) → [CorelliumDecoy](https://github.com/ghh-jb/CorelliumDecoy)  
-Support me [BTC](https://www.blockchain.com/explorer/addresses/btc/31uHLpioo1TbxAmo9kM7rrKcLz3wvcoZaL) → [Venmo](https://account.venmo.com/u/EolnMsuk)
+Support me [BTC](https://www.blockchain.com/explorer/addresses/btc/31uHLpioo1TbxAmo9kM7rrKcLz3wvcoZaL) → [Venmo](https://venmo.com/EolnMsuk/)
