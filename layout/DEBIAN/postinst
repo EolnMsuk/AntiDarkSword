@@ -1,15 +1,26 @@
 #!/bin/sh
-PREFIX=""
-if [ -d /var/jb ]; then
-    PREFIX="/var/jb"
-fi
-
-# Ensure the decoy binary is executable
-chmod 755 $PREFIX/usr/libexec/corelliumd 2>/dev/null || true
-chown root:wheel $PREFIX/usr/libexec/corelliumd 2>/dev/null || true
-
-chown root:wheel $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-chmod 644 $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-$PREFIX/usr/bin/launchctl unload $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
-$PREFIX/usr/bin/launchctl load $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist 2>/dev/null || true
+set -eu
+ENVIRONMENT="@ADS_ENVIRONMENT@"
+case "$ENVIRONMENT" in
+    legacy|rootful|roothide) PREFIX="" ;;
+    rootless) PREFIX="/var/jb" ;;
+    *) echo "AntiDarkSword: package environment was not prepared" >&2; exit 1 ;;
+esac
+# Roothide's native bootstrap utilities use jbroot-based paths. Its dpkg
+# supplies relocation/symlinks; never hard-code a randomized device root.
+PLIST="$PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"
+BINARY="$PREFIX/usr/libexec/corelliumd"
+LAUNCHCTL="$PREFIX/usr/bin/launchctl"
+[ -x "$LAUNCHCTL" ] || LAUNCHCTL="$PREFIX/bin/launchctl"
+case "${1:-}" in
+    configure)
+        [ -f "$BINARY" ] && [ -f "$PLIST" ] || { echo "AntiDarkSword: incomplete daemon installation" >&2; exit 1; }
+        chmod 755 "$BINARY"
+        chown root:wheel "$BINARY" "$PLIST"
+        chmod 644 "$PLIST"
+        [ -x "$LAUNCHCTL" ] || { echo "AntiDarkSword: launchctl unavailable at $LAUNCHCTL" >&2; exit 1; }
+        "$LAUNCHCTL" unload "$PLIST" 2>/dev/null || true
+        "$LAUNCHCTL" load "$PLIST"
+        ;;
+esac
 exit 0

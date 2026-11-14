@@ -34,7 +34,7 @@ It handles `SIGTERM`, `SIGINT`, and `SIGHUP` cleanly. The `platform-application`
 
 Registered with `launchd` so `corelliumd` starts at boot and is restarted if it exits (`KeepAlive: true`). The plist path differs by install type — see [Rootful vs. Rootless](#rootful-vs-rootless) below.
 
-### 3. File-path spoofing (daemon tweak — rootless only)
+### 3. File-path spoofing (daemon tweak — rootless/native Roothide)
 
 On a rootless jailbreak the binary lives under `/var/jb/`, not at the rootful path `/usr/libexec/corelliumd`. A payload checking the bare rootful path would find nothing. The `AntiDarkSwordDaemon` tweak closes this gap by hooking the five most common existence checks in the processes it injects into:
 
@@ -50,7 +50,7 @@ These hooks only activate when `globalDecoyEnabled` is `YES` — they pass throu
 
 ### 4. Probe counter
 
-Every intercepted probe increments a persistent `corelliumProbeCount` counter in CFPreferences, visible as a live-updating cell in the Settings.app preferences panel. The counter is debounced (2-second window) to collapse the rapid multi-syscall burst a single probe generates into one count. Writes are dispatched asynchronously on a private serial queue to avoid deadlocking `apsd`'s synchronous cfprefsd calls. A separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) is posted after each increment so Settings.app refreshes the counter cell independently of a full prefs reload.
+Debounced intercepted probes enqueue an increment of a persistent `corelliumProbeCount` counter in CFPreferences, visible as a live-updating cell in the Settings.app preferences panel. The counter is debounced (2-second window) to collapse the rapid multi-syscall burst a single probe generates into one count. Writes are dispatched asynchronously on a private serial queue to avoid deadlocking `apsd`'s synchronous cfprefsd calls. A separate Darwin notification (`com.eolnmsuk.antidarkswordprefs/counter`) is posted after each increment so Settings.app refreshes the counter cell independently of a full prefs reload.
 
 ### 5. sysctl / sysctlbyname spoofing (daemon tweak)
 
@@ -77,45 +77,28 @@ Three additional environment vectors are also spoofed when `globalDecoyEnabled` 
 
 ---
 
-## Rootful vs. Rootless
+## Rootful, rootless and native Roothide paths
 
-The binary path, plist path, and whether file-path spoofing is needed all differ between rootful and rootless jailbreaks.
+| Environment | Binary / launch-plist coordinate rules |
+|---|---|
+| Legacy/modern rootful | `/usr/libexec/corelliumd`; `/Library/LaunchDaemons/...plist` |
+| Rootless | `/var/jb/usr/libexec/corelliumd`; matching `/var/jb/Library/LaunchDaemons/...plist` |
+| Native Roothide | Stage `/usr/libexec/corelliumd` and `/Library/LaunchDaemons/...plist` in the native package namespace; native bootstrap/dpkg resolve the randomized root |
 
-| | Rootful | Rootless |
-|---|---|---|
-| **Binary path** | `/usr/libexec/corelliumd` | `/var/jb/usr/libexec/corelliumd` |
-| **LaunchDaemon path** | `/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist` | `/var/jb/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist` |
-| **Plist `ProgramArguments`** | `/usr/libexec/corelliumd` | `/var/jb/usr/libexec/corelliumd` (rewritten by `sed` at build time) |
-| **File-path spoofing hooks needed?** | No — binary is already at the expected rootful path | Yes — hooks spoof `/usr/libexec/corelliumd` as present even though it lives under `/var/jb/` |
-| **`postinst` prefix** | `""` | `/var/jb` |
+The single source launch plist is rewritten only for the explicit rootless
+target. Native Roothide uses its native Theos scheme and bootstrap path contract,
+not a rootless package conversion or a hard-coded device root. Settings uses the
+typed native API for executable paths and converts file arguments for bootstrap
+utilities. Mobile-user preference paths are handled separately.
 
-### How the Makefile handles this
-
-The `CorelliumDecoy/Makefile` runs a `sed` substitution at staging time when `THEOS_PACKAGE_SCHEME=rootless`:
-
-```makefile
-ifeq ($(THEOS_PACKAGE_SCHEME),rootless)
-    sed 's|/usr/libexec/corelliumd|/var/jb/usr/libexec/corelliumd|g' \
-        c.eolnmsuk.corelliumdecoy.plist > $(STAGING)/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-else
-    cp c.eolnmsuk.corelliumdecoy.plist $(STAGING)/Library/LaunchDaemons/
-endif
-```
-
-The source plist always uses the rootful path — the build system rewrites it for rootless packages. This keeps a single source file for both variants.
-
-### How `postinst` handles this
-
-The `layout/DEBIAN/postinst` script detects the jailbreak type at install time and applies the correct prefix for all `launchctl` and `chmod`/`chown` calls:
-
-```sh
-PREFIX=""
-if [ -d /var/jb ]; then PREFIX="/var/jb"; fi
-
-chmod 755 $PREFIX/usr/libexec/corelliumd
-chown root:wheel $PREFIX/usr/libexec/corelliumd
-launchctl load $PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist
-```
+`stage_lifecycle.py` generates maintainer scripts into a target-specific layout
+before Theos copies them. They embed a fixed environment, quote paths, verify
+the correct launchctl/binary/plist, load on configure and unload on upgrade/
+removal/deconfiguration. Missing installation files produce a configure error;
+partial removal can proceed. `/var/jb` existence never changes a rootful
+package's prefix. Native signing selects `entitlements-roothide.plist` with the
+official base entitlements, preserving the original file for the other targets.
+See [pinned requirements and path evidence](../docs/building.md).
 
 ---
 
@@ -142,18 +125,18 @@ Because zero-click iMessage exploits typically execute inside `imagent` or `IMDP
 
 ---
 
-## What payloads actually see
+## Intended source behavior (device verification pending)
 
 A payload performing standard Corellium detection on a device running AntiDarkSword at Level 3 encounters:
 
-- `access("/usr/libexec/corelliumd", F_OK)` → `0` ✅
-- `stat("/usr/libexec/corelliumd", &buf)` → `0`, buffer filled with a plausible regular-file stat ✅
-- `[NSFileManager fileExistsAtPath:@"/usr/libexec/corelliumd"]` → `YES` ✅
-- `ps` / process enumeration → `corelliumd` is a real running process with a real PID ✅
-- `sysctl`/`sysctlbyname("hw.model")` → `"iPhone15,2"` ✅
-- `sysctl`/`sysctlbyname("hw.cpusubtype")` → `CPU_SUBTYPE_ARM64E` ✅
-- `sysctl`/`sysctlbyname("kern.boottime")` → plausible 3–4 hour uptime ✅
-- `sysctlbyname("kern.osversion")` → `"21C62"` (iOS 17.2, consistent with iPhone15,2) ✅
+- `access("/usr/libexec/corelliumd", F_OK)` → `0`
+- `stat("/usr/libexec/corelliumd", &buf)` → `0`, buffer filled with a plausible regular-file stat
+- `[NSFileManager fileExistsAtPath:@"/usr/libexec/corelliumd"]` → `YES`
+- `ps` / process enumeration → `corelliumd` is a real running process with a real PID
+- `sysctl`/`sysctlbyname("hw.model")` → `"iPhone15,2"`
+- `sysctl`/`sysctlbyname("hw.cpusubtype")` → `CPU_SUBTYPE_ARM64E`
+- `sysctl`/`sysctlbyname("kern.boottime")` → plausible 3–4 hour uptime
+- `sysctlbyname("kern.osversion")` → `"21C62"` (iOS 17.2, consistent with iPhone15,2)
 
 All checks pass. The payload concludes it is inside a Corellium research environment and aborts.
 
@@ -167,15 +150,20 @@ All checks pass. The payload concludes it is inside a Corellium research environ
 
 ---
 
-## Building standalone
+## User-run builds and validation
+
+Use the shared root aggregate helper for complete packages:
 
 ```sh
-# From the repo root — built as part of the full package:
-make package
-make package THEOS_PACKAGE_SCHEME=rootless
-
-# The binary ends up at:
-# .theos/obj/CorelliumDecoy/corelliumd
+bash scripts/build_target.sh legacy
+bash scripts/build_target.sh rootful
+bash scripts/build_target.sh rootless
+bash scripts/build_target.sh roothide
 ```
 
-CorelliumDecoy is listed as a subproject in the root `Makefile` and is always included in both rootful and rootless `.deb` packages.
+Direct subproject compilation also loads shared target/version preparation, but
+release packages must use the aggregate to include all components. No package
+or service command was run in this Windows session. Inspect signing, staged
+paths, launchd behavior, upgrade/removal and preference propagation on each actual
+environment using [validation](../docs/validation.md). The diagnostic counter is
+type/range checked and saturating, with approximate cross-process totals.
