@@ -971,9 +971,33 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemRedColor]; 
         else cell.textLabel.textColor = [UIColor redColor]; 
     }
-    if (spec->action == @selector(openVenmo)) {
-        if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemGreenColor]; 
-        else cell.textLabel.textColor = [UIColor greenColor];
+    UIColor *infoColor = nil;
+    if (spec->action == @selector(checkForUpdates) || spec->action == @selector(openGitHub)) {
+        infoColor = [UIColor systemBlueColor];
+    } else if (spec->action == @selector(presentDonationMenu)) {
+        infoColor = [UIColor systemGreenColor];
+    } else if (spec.detailControllerClass == [AntiDarkSwordCreditsController class]) {
+        infoColor = [UIColor whiteColor];
+    }
+    if (infoColor) {
+        UILabel *label = cell.textLabel;
+        label.textColor = infoColor;
+        NSString *title = spec.name;
+        NSRange gap = [title rangeOfString:@" +" options:NSRegularExpressionSearch];
+        if (gap.location != NSNotFound) {
+            // Start each title at the same tab stop after its emoji.
+            CGFloat titleOffset = [UIFont preferredFontForTextStyle:UIFontTextStyleBody].lineHeight + 8.0;
+            NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
+            paragraph.alignment = NSTextAlignmentLeft;
+            paragraph.lineBreakMode = label.lineBreakMode;
+            paragraph.tabStops = @[[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentLeft location:titleOffset options:@{}]];
+            NSString *alignedTitle = [title stringByReplacingCharactersInRange:gap withString:@"\t"];
+            label.attributedText = [[NSAttributedString alloc] initWithString:alignedTitle attributes:@{
+                NSFontAttributeName: label.font,
+                NSForegroundColorAttributeName: infoColor,
+                NSParagraphStyleAttributeName: paragraph
+            }];
+        }
     }
     
     if ([[spec propertyForKey:@"key"] isEqualToString:@"enabled"]) {
