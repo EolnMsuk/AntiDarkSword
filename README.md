@@ -1,5 +1,5 @@
 # AntiDarkSword [⛨](https://www.reddit.com/r/jailbreak_/comments/1snqkii/antidarksword_v4_webkit_imessage_exploit/)
-An iOS jailbreak tweak and TrollStore dylib that hardens vulnerable iOS devices against WebKit RCE (DarkSword / Coruna) and iMessage zero-click (BLASTPASS) exploits. Selectively blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, isolates system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
+An iOS jailbreak exploit mitigation tweak and TrollStore/TrollFools per-app mitigation dylib that hardens vulnerable iOS devices against WebKit RCE (DarkSword / Coruna) and iMessage zero-click (BLASTPASS) exploits. Selectively blocks JIT, spoofs user agents, blocks remote content, suppresses risky attachment previews, intercepts Notification Service Extensions, applies mitigations to selected system daemons, and deploys a Corellium honeypot to cause advanced payloads to self abort.
 
   - [Installation](#%EF%B8%8F-installation)
   - [Compatibility](#-compatibility)
@@ -30,7 +30,9 @@ baseline remains iOS 15+. The overlay has no update checker or donation menu.
 
 ## 📱 Compatibility
 
-| Release suffix | Intended baseline | Slices / package architecture |
+AntiDarkSword has been tested on device. Choose the package for your iOS version and jailbreak environment.
+
+| Release suffix | Platform | Slices / package architecture |
 |---|---|---|
 | `_legacy.deb` | iOS 13–14 rootful; SDK 14.5 | arm64 / iphoneos-arm |
 | `_rootful.deb` | iOS 15–17 rootful; SDK 16.5 | arm64, arm64e / iphoneos-arm |
@@ -42,7 +44,7 @@ baseline remains iOS 15+. The overlay has no update checker or donation menu.
 
 ## 🛡️ Protections
 
-The tables describe source capabilities and existing rule choices. They are not device-test results or guarantees of exploit coverage.
+Available mitigations vary by build and iOS version.
 
 | **Jailbreak (tweak)** | iOS 13–14 | iOS 15 | iOS 16+ |
 | :--- | :--- | :--- | :--- |
@@ -137,7 +139,7 @@ Level 3
 │
 └── ⚙️ System Daemons (imagent, apsd, identityservicesd, IMDPersistenceAgent)
     ├── System Hooking: ON (blocks zero-click payload parsing)
-    ├── Individual daemon switches: Settings > Restrict System Daemons
+    ├── Individual daemon switches: Settings > Level 3 Settings > System Daemons
     └── Corellium Honeypot: ON
 ```
 
