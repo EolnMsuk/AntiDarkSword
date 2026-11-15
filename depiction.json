@@ -95,7 +95,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **Level 1** — Web browsers, mail, messaging, and web-heavy apps.\n\n• **Level 2** — Everything in Level 1, plus social media and entertainment apps.\n\n• **Level 3** — Everything in Level 2, plus background system services.\n\n*Note: You can easily set custom rules to override these levels for specific apps if you need to.*",
+          "markdown": "• **Level 1** — Web browsers, mail, messaging, and web-heavy apps.\n\n• **Level 2** — Everything in Level 1, plus social media and entertainment apps.\n\n• **Level 3** — Everything in Level 2, plus the option to select system daemons or the Corellium Honeypot in Level 3 Settings.\n\n*Note: You can easily set custom rules to override these levels for specific apps if you need to.*",
           "useRawFormat": false
         },
         {
@@ -126,7 +126,7 @@
       "views": [
         {
           "class": "DepictionMarkdownView",
-          "markdown": "## 4.9.7\n\n- Rebased runtime, settings, games and lifecycle behavior on the supplied working 4.9.3 source. Restored its direct Save, Honeypot and Reset command flow; this source change does not verify launchctl success on a device.\n- Kept the manual 🔄 Updates button with installed-version comparison against the official stable release. Removed automatic checks and their scheduling/bookkeeping.\n- Kept Donate with EolnMsuk Venmo and all eight existing crypto wallets, network labels, tap-to-copy feedback and Cancel.\n- Kept INFO order: Updates, GitHub, Donate, Credits.\n- Retained the existing five-target build workflow and package path adapters. Native Roothide remains unverified; ordinary rootless and converted-rootless require separate device checks.",
+          "markdown": "## 4.9.8\n\n- Release packages now have names that identify their target. A native RootHide package joins the legacy rootful, modern rootful, rootless, and TrollFools downloads.\n\n- Switching from Level 1 or 2 to Level 3 now starts with the Corellium Honeypot and all four System Daemon switches off.\n\n- In Settings, tap **Updates** to check for the latest stable GitHub release. If a newer version is available, you can open its release page.",
           "useRawFormat": false
         }
       ]
@@ -142,7 +142,7 @@
         {
           "class": "DepictionTableTextView",
           "title": "Version",
-          "text": "4.9.7"
+          "text": "4.9.8"
         },
         {
           "class": "DepictionTableTextView",

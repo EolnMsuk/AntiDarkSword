@@ -95,7 +95,7 @@ A `PSSegmentCell` with integer values `1 / 2 / 3`. Changing the level calls `set
 
 1. Re-runs `populateDefaultRulesForLevel:force:YES` to write fresh `TargetRules_` dicts for all affected targets.
 2. Sets `ADSPendingDaemonChanges = YES` if either the old or new level involves level 3.
-3. **Level 3 → auto-enables Corellium Honeypot**: sets `corelliumDecoyEnabled = YES`, clears all four daemon IDs from `disabledPresetRules`, and synchronously `launchctl load`s the plist if protection is enabled.
+3. Entering Level 3 from Level 1 or 2 sets the Honeypot preference to OFF and adds all four daemon names and their bundle IDs to `disabledPresetRules`. Opening Level 3 Settings again keeps the choices made there.
 4. **Dropping below level 3** → auto-disables the honeypot and `launchctl unload`s the plist.
 
 The footer under the "Preset Rules" group updates dynamically on each specifier reload to describe the active level's scope:

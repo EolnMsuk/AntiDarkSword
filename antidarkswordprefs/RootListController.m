@@ -53,6 +53,11 @@ static inline void ads_cfwrite(NSString *key, id value) {
     CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 }
 
+static void ads_set_shared_preference(NSString *key, id value) {
+    [ads_defaults() setObject:value forKey:key];
+    ads_cfwrite(key, value);
+}
+
 // One-time migration: re-writes all known preference keys through CFPreferences so that
 // values previously saved under the NSUserDefaults host scope become visible to the tweaks.
 static void ads_migrate_prefs_if_needed(void) {
@@ -380,7 +385,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
         if (![disabled containsObject:targetID]) [disabled addObject:targetID];
         if (aliasMap[targetID] && ![disabled containsObject:aliasMap[targetID]]) [disabled addObject:aliasMap[targetID]];
     }
-    [defaults setObject:disabled forKey:@"disabledPresetRules"]; [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; ads_post_notification();
+    ads_set_shared_preference(@"disabledPresetRules", disabled); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; ads_post_notification();
 }
 
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self reloadSpecifiers]; }
@@ -389,7 +394,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
 
 - (void)setCorelliumEnabled:(id)value specifier:(PSSpecifier *)spec {
     NSUserDefaults *defaults = ads_defaults(); BOOL masterEnabled = [defaults boolForKey:@"enabled"]; BOOL decoyEnabled = [value boolValue];
-    [defaults setBool:decoyEnabled forKey:@"corelliumDecoyEnabled"];
+    ads_set_shared_preference(@"corelliumDecoyEnabled", @(decoyEnabled));
     
     if (decoyEnabled) {
         NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
@@ -398,7 +403,7 @@ static void AltPrefsChangedNotification(CFNotificationCenterRef center, void *ob
             if ([disabled containsObject:shortName]) { [disabled removeObject:shortName]; changed = YES; }
             if (aliasMap[shortName] && [disabled containsObject:aliasMap[shortName]]) { [disabled removeObject:aliasMap[shortName]]; changed = YES; }
         }
-        if (changed) { [defaults setObject:disabled forKey:@"disabledPresetRules"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; }
+        if (changed) { ads_set_shared_preference(@"disabledPresetRules", disabled); [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; }
     }
 
     [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
@@ -674,7 +679,7 @@ static void AppPrefsChangedNotification(CFNotificationCenterRef center, void *ob
     if (self.ruleType == 0) { 
         NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
         if (enabled) [disabled removeObject:self.targetID]; else if (![disabled containsObject:self.targetID]) [disabled addObject:self.targetID];
-        [defaults setObject:disabled forKey:@"disabledPresetRules"];
+        ads_set_shared_preference(@"disabledPresetRules", disabled);
     } else if (self.ruleType == 1) { 
         [defaults setBool:enabled forKey:[NSString stringWithFormat:@"restrictedApps-%@", self.targetID]];
         NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
@@ -1036,7 +1041,7 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum protection. Restricts system background daemons, configure in Level 3 Settings.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Choose the Corellium Honeypot and system daemon protections in Level 3 Settings.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
@@ -1136,16 +1141,23 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if ([key isEqualToString:@"selectedUAPreset"]) { _specifiers = nil; [self reloadSpecifiers]; }
 }
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = ads_defaults(); NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"]; NSInteger newLevel = [value integerValue]; [defaults setObject:value forKey:@"autoProtectLevel"];
+    NSUserDefaults *defaults = ads_defaults();
+    NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"];
+    NSInteger newLevel = [value integerValue];
+    if (oldLevel < 3 && newLevel == 3) {
+        NSDictionary *aliases = ads_daemon_alias_map();
+        NSMutableOrderedSet *disabled = [NSMutableOrderedSet orderedSetWithArray:[defaults arrayForKey:@"disabledPresetRules"] ?: @[]];
+        [disabled addObjectsFromArray:aliases.allKeys];
+        [disabled addObjectsFromArray:aliases.allValues];
+        ads_set_shared_preference(@"disabledPresetRules", disabled.array);
+        ads_set_shared_preference(@"corelliumDecoyEnabled", @NO);
+    }
+    ads_set_shared_preference(@"autoProtectLevel", value);
     if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:YES];
     if (oldLevel >= 3 || newLevel >= 3) [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-    if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
-        [defaults setBool:YES forKey:@"corelliumDecoyEnabled"]; NSDictionary *aliasMap = ads_daemon_alias_map(); NSArray *daemonShortNames = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"]; NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array]; BOOL daemonsChanged = NO;
-        for (NSString *shortName in daemonShortNames) { if ([disabled containsObject:shortName]) { [disabled removeObject:shortName]; daemonsChanged = YES; } NSString *bundleAlias = aliasMap[shortName]; if (bundleAlias && [disabled containsObject:bundleAlias]) { [disabled removeObject:bundleAlias]; daemonsChanged = YES; } }
-        if (daemonsChanged) [defaults setObject:disabled forKey:@"disabledPresetRules"];
-        if ([defaults boolForKey:@"enabled"]) { pid_t pid; NSString *launchctl = ADSLaunchctlPath(); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL}; if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)loadArgs, NULL) == 0) waitpid(pid, NULL, 0); }
-    } else if (newLevel < 3 && [defaults boolForKey:@"corelliumDecoyEnabled"]) {
-        [defaults setBool:NO forKey:@"corelliumDecoyEnabled"]; pid_t pid; NSString *launchctl = ADSLaunchctlPath(); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char *unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL}; if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0) waitpid(pid, NULL, 0);
+    if (newLevel < 3 && [defaults boolForKey:@"corelliumDecoyEnabled"]) {
+        ads_set_shared_preference(@"corelliumDecoyEnabled", @NO);
+        pid_t pid; NSString *launchctl = ADSLaunchctlPath(); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char *unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL}; if (posix_spawn(&pid, launchctl.UTF8String, NULL, NULL, (char* const*)unloadArgs, NULL) == 0) waitpid(pid, NULL, 0);
     }
     [defaults synchronize]; [self flagSaveRequirement]; ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; });
 }
