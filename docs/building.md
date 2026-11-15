@@ -70,8 +70,17 @@ base entitlements in a separate native entitlement file.
 
 Launchctl lookup checks executable candidates only within the selected package
 environment (`/usr/bin` then `/bin`); it does not guess a different prefix.
-An already-unloaded service may return a nonzero unload status, which is treated
-as idempotent. Spawn, timeout, signal and other command failures are reported.
+The preferences runner validates executable/plist paths in that namespace and
+preserves native Roothide executable/argument conversions. A successful
+`launchctl list <label>` can establish an already-loaded job in the caller's
+bootstrap context. Unverified nonzero unload statuses remain failures; no
+portable already-absent exit code is assumed. Validation, spawn, wait, exit,
+signal and timeout outcomes include bounded diagnostics and completion results.
+Dependent apply/reset restarts run only after required service control succeeds.
+The child inherits the existing environment and credentials; daemon entitlements
+do not grant those privileges to Settings. Signal 6 still requires the child's
+crash report and device context to diagnose. Install/boot registration policy
+is unchanged and is distinct from preference-gated hook activity.
 
 Use a complete pinned Roothide Theos checkout with its recursive submodules,
 Xcode command-line tools (`xcrun` clang/linker), `ldid`, `dpkg-deb`, GNU make,

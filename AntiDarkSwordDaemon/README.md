@@ -1,6 +1,8 @@
 # AntiDarkSwordDaemon
 
-The daemon-layer tweak of [AntiDarkSword](../README.md). It injects directly into the system's iMessage background daemons to block zero-click attachment processing before content ever reaches an app UI, and to plant the Corellium Honeypot signal visible to exploit payloads running at the system level.
+The daemon-layer tweak of [AntiDarkSword](../README.md). It applies exploit mitigations by injecting directly into the system's iMessage background daemons to block zero-click attachment processing before content ever reaches an app UI, and to plant the Corellium Honeypot signal visible to exploit payloads running at the system level.
+
+This component does not implement a general firewall or network traffic monitor. Its attachment-processing and Corellium hooks are exploit mitigations; remote-content and attachment rules in the UI/per-app layers remain separate legitimate mitigations.
 
 ---
 
@@ -46,7 +48,7 @@ On a rootless jailbreak, the Corellium decoy binary lives at `/var/jb/usr/libexe
 
 The `stat` and `lstat` hooks fill the buffer with `uid=0`, `gid=0`, `nlink=1` — consistent with a real root-owned system binary.
 
-On a rootful install these hooks are also installed, but their bodies are gated by `isRootlessJB`. If the device is rootful, the binary is already at `/usr/libexec/corelliumd` for real, so the hooks pass straight through to the original syscall with no overhead.
+On rootful, the hooks still count explicit Corellium-path probes when the honeypot and counter are enabled, but return the real filesystem result. Rootless and native Roothide fabricate the canonical-path result when the honeypot is active. When the master/honeypot/process gate is false, all hooks pass through to the original operation.
 
 The POSIX hooks (`access`, `stat`, `lstat`) use `MSHookFunction` from CydiaSubstrate/ElleKit — C-function interposition, not ObjC method swizzling — because these are C library calls, not Objective-C methods. The `NSFileManager` hooks use the standard `%hook` mechanism.
 
@@ -75,7 +77,7 @@ File-path checks are not the only environment probe a payload may use. Hardware 
 
 The `ads_spoof_bytes` helper implements the correct POSIX two-pass sysctl contract: a first call with `oldp == NULL` writes the required size to `*oldlenp` and returns 0; a second call copies the spoofed value after validating buffer size, returning `ENOMEM` on undersize.
 
-Both hooks are installed in `%ctor` immediately after the existing `access`/`stat`/`lstat` hooks, gated on `globalDecoyEnabled`. Sysctl hooks do not increment the probe counter — `sysctl` and `sysctlbyname` are called constantly during normal ObjC/Foundation initialisation and do not indicate a Corellium probe.
+Both hooks are installed unconditionally in `%ctor` after the `access`/`stat`/`lstat` hooks; their bodies check the published decoy flag on each call. Sysctl hooks do not increment the probe counter — `sysctl` and `sysctlbyname` are called constantly during normal ObjC/Foundation initialisation and do not indicate a Corellium probe.
 
 Three additional detection vectors are spoofed when `globalDecoyEnabled` is active:
 
@@ -100,7 +102,7 @@ Tier 1 and tier 2 (UIKit apps) are not relevant here and are never evaluated.
 
 ### Cross-alias disabled check
 
-Before the tier 3 matching loop runs, the tweak checks whether the current process is individually disabled by the user (via the "Restrict System Daemons" switches in Settings). This check runs against **both** the bundle ID and the short process name, so that disabling `"apsd"` via the UI (which stores the short name) correctly suppresses the hook even when the process reports its bundle ID `"com.apple.apsd"` first.
+Before the tier 3 matching loop runs, the tweak checks whether the current process is individually disabled by the user (via the "System Daemons" protection switches in Level 3 Settings). This check runs against **both** the bundle ID and the short process name, so that disabling `"apsd"` via the UI (which stores the short name) correctly suppresses the hook even when the process reports its bundle ID `"com.apple.apsd"` first.
 
 ```
 isDisabledByUser = bundleID in disabledPresetRules
@@ -125,7 +127,7 @@ Global overrides apply the mitigation regardless of tier or per-process rules. P
 globalTweakEnabled AND corelliumDecoyEnabled AND currentProcessRestricted
 ```
 
-All three must be true. If any is false, every file-path hook passes through to the real syscall with no overhead.
+All three must be true. If any is false, every file-path hook passes through to the original operation.
 
 ### Thread safety
 
