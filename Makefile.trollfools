@@ -1,6 +1,0 @@
-# Standalone dylib, iOS 15+, internal Logos backend; no MobileSubstrate.
-override ADS_RELEASE_TARGET := trollfools
-include config/target.mk
-include $(THEOS)/makefiles/common.mk
-SUBPROJECTS += AntiDarkSwordTF
-include $(THEOS_MAKE_PATH)/aggregate.mk
