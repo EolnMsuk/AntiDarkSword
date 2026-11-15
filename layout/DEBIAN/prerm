@@ -1,0 +1,16 @@
+#!/bin/sh
+ENVIRONMENT="@ADS_ENVIRONMENT@"
+case "$ENVIRONMENT" in
+    legacy|rootful|roothide) PREFIX="" ;;
+    rootless) PREFIX="/var/jb" ;;
+    *) echo "AntiDarkSword: package environment was not prepared" >&2; exit 1 ;;
+esac
+PLIST="$PREFIX/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"
+LAUNCHCTL="$PREFIX/usr/bin/launchctl"
+[ -x "$LAUNCHCTL" ] || LAUNCHCTL="$PREFIX/bin/launchctl"
+case "${1:-}" in
+    remove|purge)
+        "$LAUNCHCTL" unload "$PLIST" 2>/dev/null || true
+        ;;
+esac
+exit 0
