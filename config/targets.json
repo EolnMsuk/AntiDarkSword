@@ -1,7 +1,0 @@
-{
-  "legacy": {"sdk": "14.5", "minimum": "13.0", "archs": ["arm64"], "scheme": "", "package_arch": "iphoneos-arm", "framework": "AltList_Old.framework"},
-  "rootful": {"sdk": "16.5", "minimum": "15.0", "archs": ["arm64", "arm64e"], "scheme": "", "package_arch": "iphoneos-arm", "framework": "AltList_New.framework"},
-  "rootless": {"sdk": "16.5", "minimum": "15.0", "archs": ["arm64", "arm64e"], "scheme": "rootless", "package_arch": "iphoneos-arm64", "framework": "AltList_New.framework"},
-  "roothide": {"sdk": "16.5", "minimum": "15.0", "archs": ["arm64", "arm64e"], "scheme": "roothide", "package_arch": "iphoneos-arm64e", "framework": "AltList_Roothide.framework"},
-  "trollfools": {"sdk": "16.5", "minimum": "15.0", "archs": ["arm64", "arm64e"], "scheme": "", "package_arch": "-", "framework": null}
-}
