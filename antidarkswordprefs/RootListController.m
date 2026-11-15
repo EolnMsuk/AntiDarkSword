@@ -407,9 +407,12 @@ static BOOL ads_restore_daemon_rules(NSMutableDictionary *changes) {
     return YES;
 }
 
+// Requested activity is not observed registration. An equal request needs no
+// service operation; nil reports that decision, not a verified job state.
 static void ads_transition_decoy(ADSSettingsTransaction *transaction, BOOL previous, BOOL next,
-                                 BOOL reconcile, ADSCommandCompletion completion) {
-    if (previous == next && !reconcile) {
+                                 ADSCommandCompletion completion) {
+    if (ads_settings_transaction != transaction) return;
+    if (previous == next) {
         completion(nil); // in particular, OFF configuration edits never spawn or probe
         return;
     }
@@ -420,7 +423,8 @@ static void ads_transition_decoy(ADSSettingsTransaction *transaction, BOOL previ
 }
 
 static void ads_apply_configuration(ADSSettingsTransaction *transaction, NSDictionary *changes) {
-    ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(changes), NO, ^(ADSCommandResult *result) {
+    ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(changes), ^(ADSCommandResult *result) {
+        if (ads_settings_transaction != transaction) return;
         if (result && !result.isSuccessful) {
             ads_fail_transaction(transaction, result, @"The change was not fully applied. Previous settings were kept. You can try the change again.");
             return;
@@ -430,7 +434,8 @@ static void ads_apply_configuration(ADSSettingsTransaction *transaction, NSDicti
     });
 }
 
-static void ads_restart(ADSSettingsTransaction *transaction, BOOL needsReboot) {
+static void ads_restart(ADSSettingsTransaction *transaction, BOOL needsReboot, NSString *failureMessage) {
+    if (ads_settings_transaction != transaction) return;
     NSUserDefaults *defaults = ads_defaults();
     NSDictionary *pending = @{
         @"ADSNeedsRespring": @([defaults boolForKey:@"ADSNeedsRespring"]),
@@ -445,7 +450,7 @@ static void ads_restart(ADSSettingsTransaction *transaction, BOOL needsReboot) {
         if (ads_settings_transaction != transaction) return;
         if (!result.isSuccessful) {
             ads_write_preferences(pending);
-            ads_fail_transaction(transaction, result, @"Settings were saved, but the restart failed. Use Save to retry applying them.");
+            ads_fail_transaction(transaction, result, failureMessage);
         } else ads_end_transaction(transaction);
     });
 }
@@ -460,24 +465,28 @@ static void ads_present_save_prompt(PSListController *controller, NSDictionary *
         message:needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?"
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        if (transaction.locked) return;
         ads_end_transaction(transaction); // no staged writes or service commands to undo
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:needsReboot ? @"Reboot Userspace" : @"Respring"
         style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-        if (ads_settings_transaction != transaction) return;
-        // Apply is explicit: installation/reboot may have registered the job even
-        // when the saved request is inactive. Do not infer actual state from prefs.
-        ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(proposal), YES, ^(ADSCommandResult *result) {
-            if (!result.isSuccessful) {
-                ads_fail_transaction(transaction, result, proposal ?
-                    @"The change was not fully applied. Previous settings and Save flags were kept. You can try again." :
-                    @"The saved changes were not fully applied. Use Save to retry.");
+        if (ads_settings_transaction != transaction || transaction.locked) return;
+        ads_lock_transaction(transaction);
+        // A staged master proposal may require a live transition. Already-saved
+        // changes have completed theirs; their pending flags request only restart.
+        ADSCommandCompletion apply = ^(ADSCommandResult *result) {
+            if (ads_settings_transaction != transaction) return;
+            if (result && !result.isSuccessful) {
+                ads_fail_transaction(transaction, result,
+                    @"The change was not fully applied. Previous settings and Save flags were kept. You can try again.");
                 return;
             }
             if (proposal) ads_write_preferences(proposal);
             ads_post_notification();
-            ads_restart(transaction, needsReboot);
-        });
+            ads_restart(transaction, needsReboot, @"Settings were saved, but the restart failed. Use Save to retry applying them.");
+        };
+        if (proposal) ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(proposal), apply);
+        else apply(nil);
     }]];
     [controller presentViewController:alert animated:YES completion:nil];
 }
@@ -1357,14 +1366,18 @@ static void ads_present_save_prompt(PSListController *controller, NSDictionary *
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults"
         message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        if (transaction.locked) return;
         ads_end_transaction(transaction);
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-        if (ads_settings_transaction != transaction) return;
+        if (ads_settings_transaction != transaction || transaction.locked) return;
         ads_lock_transaction(transaction);
-        ADSSetDecoyActive(NO, ^(ADSCommandResult *result) {
+        // Reset stops a requested live Honeypot before clearing settings. An
+        // inactive request needs only reset/reboot, even if install or boot has
+        // registered the job independently; that policy is unchanged.
+        ads_transition_decoy(transaction, ads_requested_active(nil), NO, ^(ADSCommandResult *result) {
             if (ads_settings_transaction != transaction) return;
-            if (!result.isSuccessful) {
+            if (result && !result.isSuccessful) {
                 ads_fail_transaction(transaction, result, @"Reset was not applied. Previous settings were kept; no reboot was requested.");
                 return;
             }
@@ -1380,7 +1393,7 @@ static void ads_present_save_prompt(PSListController *controller, NSDictionary *
             CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
             ads_write_preferences(@{@"ADSNeedsRespring": @YES, @"ADSPendingDaemonChanges": @YES});
             ads_post_notification();
-            ads_restart(transaction, YES);
+            ads_restart(transaction, YES, @"Defaults were reset, but the userspace reboot failed. Use Save to retry the reboot.");
         });
     }]];
     [self presentViewController:alert animated:YES completion:nil];

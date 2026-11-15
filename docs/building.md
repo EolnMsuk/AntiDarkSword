@@ -72,15 +72,46 @@ Launchctl lookup checks executable candidates only within the selected package
 environment (`/usr/bin` then `/bin`); it does not guess a different prefix.
 The preferences runner validates executable/plist paths in that namespace and
 preserves native Roothide executable/argument conversions. A successful
-`launchctl list <label>` can establish an already-loaded job in the caller's
-bootstrap context. Unverified nonzero unload statuses remain failures; no
-portable already-absent exit code is assumed. Validation, spawn, wait, exit,
-signal and timeout outcomes include bounded diagnostics and completion results.
-Dependent apply/reset restarts run only after required service control succeeds.
-The child inherits the existing environment and credentials; daemon entitlements
-do not grant those privileges to Settings. Signal 6 still requires the child's
-crash report and device context to diagnose. Install/boot registration policy
-is unchanged and is distinct from preference-gated hook activity.
+`launchctl list <label>` establishes registration only in the caller's bootstrap
+context, not process health or completed mitigation/restart work. A normally
+exiting nonzero query leads to a load attempt, not verified absence. Unverified
+nonzero unload statuses remain failures; no portable already-absent exit code is
+assumed. Validation, spawn, wait, exit, signal and timeout outcomes retain bounded
+diagnostics, asynchronous deadlines, descriptor cleanup and child reaping.
+
+Only a requested live Honeypot transition gates a configuration commit. Equal
+requested-state edits, including all level/Honeypot edits while Protection stays
+OFF, issue no service command or probe and preserve older pending restart flags.
+Confirmed Save locks its transaction even when no service work is needed. A
+staged master change performs only its required transition; Save of already-saved
+changes and restart retries request only restart, without repeating a completed
+stop. Reset requires a stop for a requested active Honeypot; an already-inactive
+request clears both preference stores and requests userspace reboot under the
+existing install/boot policy. A skipped stop does not prove job absence. Failed
+required transitions keep previous settings; failed restarts preserve saved
+settings (or cleared defaults) and restore the pending flags for Save to retry.
+
+The existing package launchctl/killall controls pass `NULL` envp and use the
+basename (`launchctl` or `killall`) as `argv[0]`, matching the working 4.9.3 source.
+The executable passed separately to `posix_spawn` stays absolute and selected by
+the compile-time package target. Native Roothide still uses typed `jbroot` for
+the executable/filesystem paths and `rootfs` for plist arguments. Local native
+bootstrap examples also pass `NULL` envp and distinguish the executable from
+`argv[0]`; they do not establish that the reference basename is required. No
+required inherited bootstrap variables were identified in the local evidence.
+These are compatibility choices, not a proven explanation of either reported
+failure or privilege elevation. Caller credentials in diagnostics do not measure
+post-exec privileges; daemon entitlements do not grant privileges to Settings.
+
+Diagnostics name the compile-time package target; a rootless target can also be
+converted by a Roothide patcher, so device results must record that route
+separately. Ordinary rootless's normal exit status 1 with empty output and native
+Roothide's signal 6 with a plist-patching failure remain distinct, unresolved
+device evidence. Native diagnosis may need the launchctl crash report and exact
+bootstrap/tool build; rootless diagnosis needs tool/build and registration/context
+evidence, not an assumed crash report. Validate ordinary rootless first, then
+native Roothide and converted-rootless independently. Install/boot registration
+policy remains unchanged and distinct from preference-gated hook activity.
 
 Use a complete pinned Roothide Theos checkout with its recursive submodules,
 Xcode command-line tools (`xcrun` clang/linker), `ldid`, `dpkg-deb`, GNU make,

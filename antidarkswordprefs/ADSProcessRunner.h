@@ -23,12 +23,14 @@ typedef NS_ENUM(NSInteger, ADSCommandOutcome) {
 
 typedef void (^ADSCommandCompletion)(ADSCommandResult *result);
 
-// Copies arguments immediately; argv[0] is the resolved executable. Drains
-// bounded diagnostics on a serial worker, then completes once on the main queue,
-// independently of the originating controller's lifetime.
+// Existing package launchctl/killall controls use an absolute executable,
+// basename argv[0] and NULL envp, matching the 4.9.3 call convention. Copies
+// strings immediately, drains bounded diagnostics on a serial worker, then
+// completes once on the main queue independently of the controller's lifetime.
 void ADSRunCommand(NSString *executable, NSArray<NSString *> *arguments,
                    NSString *operation, ADSCommandCompletion completion);
 
 // Uses load/unload in the compile-selected namespace. Only a successful label
-// query establishes an already-loaded job; unverified nonzero unloads fail.
+// query establishes registration in the caller's bootstrap context, not process
+// health or completed restart work. Unverified nonzero unloads fail.
 void ADSSetDecoyActive(BOOL active, ADSCommandCompletion completion);

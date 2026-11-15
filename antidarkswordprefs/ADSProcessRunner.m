@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern char **environ;
-
 @interface ADSCommandResult ()
 @property (nonatomic) ADSCommandOutcome outcome;
 @property (nonatomic) int errorCode;
@@ -20,6 +18,7 @@ extern char **environ;
 @property (nonatomic) int terminationSignal;
 @property (nonatomic, copy) NSString *operation;
 @property (nonatomic, copy) NSString *executable;
+@property (nonatomic, copy) NSString *argumentZero;
 @property (nonatomic, copy) NSArray<NSString *> *arguments;
 @property (nonatomic, copy) NSString *standardError;
 @property (nonatomic, copy) NSString *standardOutput;
@@ -38,7 +37,7 @@ extern char **environ;
         case ADSCommandExited: reason = [NSString stringWithFormat:@"Exit status %d.", self.exitCode]; break;
         case ADSCommandSignaled: reason = [NSString stringWithFormat:@"Child terminated by signal %d.", self.terminationSignal]; break;
         case ADSCommandTimedOut: reason = @"Command timed out; termination was requested."; break;
-        case ADSCommandAlreadySatisfied: reason = @"Job already registered (successful launchctl label query)."; break;
+        case ADSCommandAlreadySatisfied: reason = @"Job registered in the caller's bootstrap context (successful launchctl label query)."; break;
         default: {
             NSString *stage = self.outcome == ADSCommandSpawnFailed ? @"Spawn" :
                 (self.outcome == ADSCommandWaitFailed ? @"Wait" : @"Validation/setup");
@@ -68,14 +67,15 @@ static NSString *ADSPackageEnvironment(void) {
 static ADSCommandResult *ADSNewResult(NSString *program, NSArray<NSString *> *arguments, NSString *operation) {
     ADSCommandResult *result = [ADSCommandResult new];
     result.executable = [program copy] ?: @"";
+    result.argumentZero = result.executable.lastPathComponent;
     result.arguments = [[NSArray alloc] initWithArray:arguments ?: @[] copyItems:YES];
     result.operation = [operation copy] ?: @"Process control";
     result.exitCode = -1;
     result.standardError = @"";
     result.standardOutput = @"";
-    result.context = [NSString stringWithFormat:@"Environment: %@; iOS %@; uid=%u euid=%u gid=%u egid=%u; inherited child environment\nExecutable: %@\nArguments: %@",
+    result.context = [NSString stringWithFormat:@"Package target: %@; iOS %@; caller uid=%u euid=%u gid=%u egid=%u; envp: NULL\nExecutable: %@\nargv[0]: %@\nArguments: %@",
         ADSPackageEnvironment(), NSProcessInfo.processInfo.operatingSystemVersionString,
-        getuid(), geteuid(), getgid(), getegid(), result.executable, result.arguments];
+        getuid(), geteuid(), getgid(), getegid(), result.executable, result.argumentZero, result.arguments];
     return result;
 }
 
@@ -178,10 +178,13 @@ void ADSRunCommand(NSString *executable, NSArray<NSString *> *arguments,
                 if (!argv) failure = ENOMEM;
             }
             if (!failure) {
-                argv[0] = (char *)result.executable.UTF8String;
+                // Match the working reference's launchctl/killall call convention.
+                // The absolute executable still selects the compile-time target;
+                // neither argv[0] nor NULL envp establishes post-exec privileges.
+                argv[0] = (char *)result.argumentZero.UTF8String;
                 for (NSUInteger i = 0; i < result.arguments.count; i++) argv[i + 1] = (char *)result.arguments[i].UTF8String;
                 result.outcome = ADSCommandSpawnFailed;
-                failure = posix_spawn(&pid, result.executable.fileSystemRepresentation, &actions, NULL, argv, environ);
+                failure = posix_spawn(&pid, result.executable.fileSystemRepresentation, &actions, NULL, argv, NULL);
             }
             free(argv);
             if (actionsReady) posix_spawn_file_actions_destroy(&actions);
@@ -265,7 +268,7 @@ void ADSSetDecoyActive(BOOL active, ADSCommandCompletion completion) {
         ADSRunCommand(launchctl, arguments, operation, completion);
         return;
     }
-    // A successful query proves availability in this caller's bootstrap context.
+    // A successful query proves registration only in this caller's bootstrap context.
     // A failed query does not establish absence or a harmless numeric exit code.
     ADSRunCommand(launchctl, @[@"list", @"c.eolnmsuk.corelliumdecoy"], @"Check Corellium Honeypot registration", ^(ADSCommandResult *query) {
         if (query.isSuccessful) {
