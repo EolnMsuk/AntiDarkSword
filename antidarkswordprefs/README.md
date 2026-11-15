@@ -34,19 +34,19 @@ path; native Roothide uses its native reference. See
 
 ## Preference read/write lifecycle
 
-All pref writes go through two parallel paths to avoid a host-scope mismatch that causes the tweaks to see stale values for up to ~30 seconds.
+Protection, level, honeypot, daemon-exclusion and preset/plugin-rule transactions write to both NSUserDefaults and the existing current-user/AnyHost CFPreferences scope. This avoids a host-scope mismatch for those runtime settings; it is not a claim that every UI-only setting uses this path.
 
 ### Dual-write with `ads_cfwrite()`
 
-`NSUserDefaults` on supervised or Roothide devices may silently write under `kCFPreferencesCurrentHost`, while the tweaks read under `kCFPreferencesAnyHost`. `ads_cfwrite()` resolves this by writing the same key through CFPreferences at `kCFPreferencesAnyHost` alongside every `NSUserDefaults` write:
+`NSUserDefaults` on supervised or Roothide devices may silently write under `kCFPreferencesCurrentHost`, while the tweaks read under `kCFPreferencesAnyHost`. `ads_cfwrite()` resolves this by writing the same key through CFPreferences at `kCFPreferencesAnyHost` alongside the corresponding `NSUserDefaults` write:
 
 ```objc
-CFPreferencesSetValue(key, value, appID,
+CFPreferencesSetMultiple(values, removedKeys, appID,
                       kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
 ```
 
-Every setter that touches a preference key (`setPreferenceValue:specifier:`, `setFeatureValue:specifier:`, `setAutoProtectLevel:specifier:`, etc.) calls `ads_cfwrite()` immediately after the `NSUserDefaults` write.
+Single-key paths use `ads_cfwrite()`. Related transaction values use `ads_write_preferences()` and the same AnyHost contract, batching CFPreferences values with `CFPreferencesSetMultiple` before one synchronization and the saved notification. A level change stages all generated parent/plugin rules and plugin enable keys together, so a failed service request leaves the previous configuration and Save flags intact. Reset removes the domain from both stores after required service cleanup succeeds.
 
 ### One-time migration (`ads_migrate_prefs_if_needed()`)
 
@@ -70,10 +70,10 @@ The existing banner selection remains in `setupHeaderView`. The footer reads the
 
 The master `enabled` switch uses a custom red background (`UISwitch.backgroundColor = systemRedColor`, `layer.cornerRadius = 15.5`) to visually distinguish it from feature toggles. Toggling it invokes `setEnableProtection:specifier:`, which:
 
-1. Unconditionally unloads the CorelliumDecoy LaunchDaemon plist via `posix_spawn + launchctl unload`.
-2. Re-loads it if both `masterEnabled` and `corelliumDecoyEnabled` are `YES`.
-3. Sets `ADSPendingDaemonChanges = YES` if level ≥ 3 or any custom daemon IDs are configured.
-4. Immediately presents `ads_present_save_prompt()` — a cancel action provided to the prompt restores the prior `enabled`, `ADSNeedsRespring`, and `ADSPendingDaemonChanges` flags and reverts the launchctl state.
+1. Stages the proposed `enabled` value and restart flags behind the existing Save confirmation.
+2. Cancel discards the proposal without preference writes or service commands.
+3. Confirmation reconciles the decoy request (`enabled && corelliumDecoyEnabled`) with the live job through `ADSProcessRunner`. Enabling checks registration and loads only when necessary; it never unloads first. Stopping uses the existing unload command.
+4. Only successful service control publishes the staged values and proceeds to the required respring/userspace reboot. A failure preserves the previous settings and flags. Custom-daemon fallback and Level 3 retain their existing restart requirements.
 
 ### User Agent section
 
@@ -93,16 +93,16 @@ If the custom text field is submitted empty, the controller silently resets `sel
 
 A `PSSegmentCell` with integer values `1 / 2 / 3`. Changing the level calls `setAutoProtectLevel:specifier:`, which:
 
-1. Re-runs `populateDefaultRulesForLevel:force:YES` to write fresh `TargetRules_` dicts for all affected targets.
-2. Sets `ADSPendingDaemonChanges = YES` if either the old or new level involves level 3.
-3. **Level 3 → auto-enables Corellium Honeypot**: sets `corelliumDecoyEnabled = YES`, clears all four daemon IDs from `disabledPresetRules`, and asynchronously enqueues `launchctl load` for the plist if protection is enabled.
-4. **Dropping below level 3** → auto-disables the honeypot and `launchctl unload`s the plist.
+1. Stages fresh `TargetRules_` dictionaries and plugin enable keys for every affected target.
+2. Entering Level 3 enables the honeypot preference and removes both aliases of the four daemons from `disabledPresetRules`. Leaving Level 3 clears the honeypot preference. A duplicate level callback does not re-enable a honeypot the user turned off.
+3. Uses the shared requested-state transition: inactive to active loads/checks registration; active to inactive unloads; equal requests do not restart. Both level directions and honeypot edits while Protection remains off save configuration without a child command or status probe.
+4. Publishes the complete configuration only after any required live operation succeeds. While Protection is on, app changes retain the respring requirement and transitions involving Level 3 retain the daemon restart flag. Off-state configuration edits create no new restart requirement; existing pending work is preserved.
 
 The footer under the "Preset Rules" group updates dynamically on each specifier reload to describe the active level's scope:
 
 - Level 1: core Apple apps (Safari, Messages, Mail, Notes, Calendar, QuickLook, etc.)
 - Level 2: expands to major third-party browsers, email, messaging, social media, finance, crypto, package managers
-- Level 3: maximum — unlocks daemon restrictions and global rules, accessible via the Level 3 Settings cell
+- Level 3: adds mitigations for selected system daemons and unlocks global rules through Level 3 Settings
 
 ### Preset rules list
 
@@ -131,7 +131,13 @@ Accessible only at auto-protect level 3 (the "Advanced Options" cell is disabled
 
 ### Corellium Honeypot
 
-Toggles `corelliumDecoyEnabled` while preserving the existing daemon rule changes. Existing unload/load actions enqueue through `ADSProcessRunner` on a serial worker, with bounded waits, spawn/status/error handling, weak presentation and restored controls. `ADSPaths.h` resolves package executables for the selected environment; native Roothide file arguments use the documented bootstrap coordinate conversion. These actions are separate from updater/donation code.
+Toggles `corelliumDecoyEnabled` through the same staged transition as level and master changes. Enabling restores both aliases of the four daemon mitigation rules and locks their individual controls. Disabling the honeypot leaves the underlying daemon rules enabled. Ordinary honeypot/level edits have no new confirmation dialog.
+
+`ADSProcessRunner` copies arguments, validates the selected executable and installed service paths, and completes once on the main queue even if its controller disappeared. Its serial worker drains bounded stderr/stdout while waiting, distinguishes validation, spawn, wait, exit, signal and timeout results, and records the operation, resolved executable, arguments, package environment and caller credentials without dumping inherited environment values. A successful `launchctl list <label>` establishes an already-registered job in the caller's bootstrap context. A normal nonzero query can lead to a strict load attempt; a signaled/timed-out/spawn-failed query stops the operation. Every unverified nonzero unload remains a failure; no portable already-absent numeric status is assumed.
+
+A single settings transaction coordinates confirmation, commands and completion. Controls recover on each completion; obsolete callbacks cannot publish a newer transaction's state. Errors wait for a visible preference page if a Save alert is dismissing. `ADSPaths.h` keeps the compile-selected environment and native Roothide executable/file-argument conversions. Process controls remain separate from updater/donation code.
+
+Package configure still registers the decoy independently of preferences, and its launch plist retains `RunAtLoad`/`KeepAlive`. Explicit Save/master/reset operations therefore reconcile service requests; an off-state configuration edit does not claim that the job is absent. Job registration after reboot and master-gated mitigation hooks must be checked separately. The underlying device-specific SIGABRT cause remains unconfirmed; the new command diagnostics and the child's crash report are needed to establish it.
 
 ### Attack statistics
 
@@ -139,7 +145,7 @@ Toggles `corelliumDecoyEnabled` while preserving the existing daemon rule change
 
 ### System daemon toggles
 
-Four `PSSwitchCell` rows for `imagent`, `apsd`, `identityservicesd`, and `IMDPersistenceAgent`. Enabled state is derived from absence in `disabledPresetRules`. Disabling a daemon writes both the short name and its bundle ID alias (via `ads_daemon_alias_map()`) to the disabled array, ensuring the tweak's bundle-ID and short-name lookup paths are both blocked. All four rows are non-interactive when the Corellium Honeypot is on — the honeypot requires all four daemons to remain monitored.
+Four `PSSwitchCell` rows for `imagent`, `apsd`, `identityservicesd`, and `IMDPersistenceAgent`. Enabled state is derived from both the short name and bundle ID being absent from `disabledPresetRules`. Disabling a daemon writes both the short name and its bundle ID alias (via `ads_daemon_alias_map()`) to the disabled array, ensuring the tweak's bundle-ID and short-name lookup paths are both blocked. All four rows are non-interactive when the Corellium Honeypot is on — the honeypot keeps mitigation coverage enabled for all four daemons. These are protection selectors, not firewall or traffic-monitor controls; custom/global overrides retain their stored meaning.
 
 ### Global Rules (beta)
 
@@ -252,15 +258,11 @@ A one-time `ADSPluginEnablesMigrated_v1` pass runs on subsequent opens of existi
 
 ## Save flow
 
-Every navigation controller that can modify prefs installs a Save button in the navigation bar. The button is enabled when `ADSNeedsRespring = YES` or (`enabled = YES` AND `ADSPendingDaemonChanges = YES`). All four controllers subscribe to the `saved` Darwin notification to keep Save button state synchronized across the navigation stack without requiring explicit cross-controller calls.
+Every preferences controller installs a Save button. Either `ADSNeedsRespring` or `ADSPendingDaemonChanges` keeps it enabled, including a failed apply while Protection is off. Saved notifications refresh that state throughout the navigation stack. Configuration edits while Protection is off do not add restart flags; pending live work is preserved. `ads_flag_pending_changes()` applies this rule to the other existing settings writers too, so preserving failed apply work does not introduce new restarts for off-state edits.
 
-`ads_present_save_prompt()` inspects `ADSPendingDaemonChanges` to choose the restart action:
+`ads_present_save_prompt()` offers a userspace reboot for pending daemon changes, otherwise a respring. Cancel leaves existing pending work intact; a staged master proposal is discarded. Confirmation reconciles the service request first and never queues a dependent restart after failure. No flags are silently discarded just because Protection is off.
 
-- **`ADSPendingDaemonChanges = NO`**: offers a respring via `posix_spawn(killall backboardd)`.
-- **`ADSPendingDaemonChanges = YES`**: offers a userspace reboot via `posix_spawn(launchctl reboot userspace)`.
-- **Protection disabled, no pending daemon changes**: silently clears both flags, posts `saved`, and returns without showing any alert.
-
-`setEnableProtection:specifier:` is the only caller that passes a non-nil cancel handler; all other callers pass `nil`. The cancel handler restores the prior `enabled`, `ADSNeedsRespring`, and `ADSPendingDaemonChanges` values and reverts the CorelliumDecoy launchctl state.
+For the restart handoff only, the pending flags are cleared immediately before launching the restart and their exact values are retained by the transaction. Any command failure restores them for Save to retry. This accommodates a successful restart terminating Settings before its callback can run. If service control succeeded but restart failed, the saved configuration remains in place and the error identifies that incomplete restart. Reset clears both preference stores only after cleanup succeeds and uses the same retryable restart flow.
 
 ---
 
@@ -292,7 +294,7 @@ Each scene has a render-retained `ADSAudioBuffer` owner. Synth fields are audio-
 
 ## Info actions: updates and donation
 
-`Check for Updates` sits next to GitHub. The installed version is read from this
+`🔄 Updates` is first in INFO, followed by `🛠  GitHub`, `💸 Donate`, and `👨🏻‍💻  Credits`. The updater keeps its `CheckUpdates` ID and `checkForUpdates` action. The installed version is read from this
 preferences bundle, never Settings.app. `ADSUpdateChecker` requests only the
 official repository's latest release endpoint, validates HTTP/size/types/stable
 flags/tag and the exact release URL, and compares decimal version components
@@ -329,13 +331,13 @@ to PreferenceLoader.
 | `entry.plist` | PreferenceLoader registration — bundle ID, root controller class, entry cell, icon |
 | `Resources/Root.plist` | Declarative specifier plist: master switch, UA section, preset rules segment, custom rules/daemons sections, Info section |
 | `Resources/Info.plist` | Bundle metadata — `CFBundleIdentifier: com.eolnmsuk.antidarkswordprefs`, `NSPrincipalClass` |
-| `RootListController.m` | All preference controllers (`AntiDarkSwordPrefsRootListController`, `AntiDarkSwordDaemonListController`, `AntiDarkSwordAltListController`, `AntiDarkSwordAppController`) plus all static helpers: `ads_cfwrite()`, `ads_migrate_prefs_if_needed()`, `ads_plugins_for_bundle_id()`, `ads_root_path()`, `ads_present_save_prompt()` |
+| `RootListController.m` | All preference controllers (`AntiDarkSwordPrefsRootListController`, `AntiDarkSwordDaemonListController`, `AntiDarkSwordAltListController`, `AntiDarkSwordAppController`) plus all static helpers: `ads_cfwrite()`, `ads_migrate_prefs_if_needed()`, `ads_plugins_for_bundle_id()`, staged preference/service transactions, `ads_present_save_prompt()` |
 | `ADSCreditsMenu.m` | `AntiDarkSwordCreditsController` (credits list + game host), `ADSGameMenuScene` (selection screen) |
 | `ADSGames.h` | Shared game-state enum and scene/controller declarations; imports the audio helper |
 | `ADSAudio.h` / `ADSAudio.m` | Synth owner and bounded lock-free render-side sound mailbox |
 | `ADSUpdateChecker.h` / `ADSUpdateChecker.m` | Stable release validation, persisted/coalesced daily checks, weak UIKit presentation |
 | `ADSDonationController.h` / `ADSDonationController.m` | Venmo/Crypto menu and eight-wallet copy modal |
-| `ADSProcessRunner.h` / `ADSProcessRunner.m` | Existing explicit process actions on a serial bounded worker |
+| `ADSProcessRunner.h` / `ADSProcessRunner.m` | Completion-aware explicit process controls, bounded diagnostics and service registration checks |
 | `ADSJailTris.m` | `ADSJailTrisScene` — full Tetris implementation |
 | `ADSPyEater.m` | `ADSPyEaterScene` — full snake implementation |
 | `Makefile` | Theos bundle rules: `Preferences` (private), `AltList` (extra), `MobileCoreServices` frameworks; install path `/Library/PreferenceBundles` |

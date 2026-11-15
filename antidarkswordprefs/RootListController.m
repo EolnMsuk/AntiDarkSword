@@ -40,19 +40,45 @@ static inline NSUserDefaults *ads_defaults(void) {
     dispatch_once(&onceToken, ^{ sharedDefaults = [[NSUserDefaults alloc] initWithSuiteName:ADS_PREFS_SUITE]; }); return sharedDefaults;
 }
 
+// Writes related keys together using the existing AnyHost scope. Callers post
+// saved only after both stores contain the complete configuration.
+static void ads_cfwrite_values(NSDictionary *values) {
+    NSMutableDictionary *saved = [NSMutableDictionary dictionary];
+    NSMutableArray *removed = [NSMutableArray array];
+    for (NSString *key in values) {
+        if (values[key] == NSNull.null) [removed addObject:key];
+        else saved[key] = values[key];
+    }
+    CFStringRef appID = (__bridge CFStringRef)ADS_PREFS_SUITE;
+    CFPreferencesSetMultiple((__bridge CFDictionaryRef)saved, (__bridge CFArrayRef)removed,
+                             appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+}
+
 // Writes a single key directly via CFPreferences using kCFPreferencesAnyHost — the same
 // host scope the tweaks read from. NSUserDefaults may use kCFPreferencesCurrentHost on
 // supervised/Roothide devices, causing a read-miss in the tweaks for up to ~30 s.
 static inline void ads_cfwrite(NSString *key, id value) {
-    CFStringRef appID = (__bridge CFStringRef)ADS_PREFS_SUITE;
-    if (value) {
-        CFPreferencesSetValue((__bridge CFStringRef)key, (__bridge CFPropertyListRef)value,
-                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
-    } else {
-        CFPreferencesSetValue((__bridge CFStringRef)key, NULL,
-                              appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    ads_cfwrite_values(@{key: value ?: NSNull.null});
+}
+
+static void ads_write_preferences(NSDictionary *values) {
+    NSUserDefaults *defaults = ads_defaults();
+    for (NSString *key in values) {
+        if (values[key] == NSNull.null) [defaults removeObjectForKey:key];
+        else [defaults setObject:values[key] forKey:key];
     }
-    CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    [defaults synchronize];
+    ads_cfwrite_values(values);
+}
+
+static void ads_flag_pending_changes(BOOL daemonChanges) {
+    // Configuration edits while off require no restart. Preserve any pending
+    // apply left by a previous live change or failed restart.
+    if (![ads_defaults() boolForKey:@"enabled"]) return;
+    NSMutableDictionary *flags = [@{@"ADSNeedsRespring": @YES} mutableCopy];
+    if (daemonChanges) flags[@"ADSPendingDaemonChanges"] = @YES;
+    ads_write_preferences(flags);
 }
 
 // One-time migration: re-writes all known preference keys through CFPreferences so that
@@ -109,10 +135,6 @@ static inline UIColor *ads_color_red(void) {
     return [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:0.15];
 }
 
-static inline NSString *ads_root_path(NSString *path) {
-    return [path isEqualToString:@"/usr/bin/launchctl"] ? ADSLaunchctlPath() : ADSJailbreakPath(path);
-}
-
 @interface LSApplicationProxy : NSObject
 + (id)applicationProxyForIdentifier:(NSString *)identifier;
 - (NSString *)localizedName; - (NSURL *)bundleURL;
@@ -144,6 +166,7 @@ static inline NSString *ads_root_path(NSString *path) {
 @property (nonatomic, strong) NSArray *cachedActiveCustomDaemons;
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level;
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force;
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force changes:(NSMutableDictionary *)changes;
 - (NSString *)displayNameForTargetID:(NSString *)targetID;
 - (UIImage *)iconForTargetID:(NSString *)targetID;
 - (BOOL)isTargetInstalled:(NSString *)targetID;
@@ -268,7 +291,7 @@ static void ads_observe(PSListController *controller, const char *name, BOOL cou
         else {
             NSUserDefaults *defaults = ads_defaults();
             live.navigationItem.rightBarButtonItem.enabled = [defaults boolForKey:@"ADSNeedsRespring"] ||
-                ([defaults boolForKey:@"enabled"] && [defaults boolForKey:@"ADSPendingDaemonChanges"]);
+                [defaults boolForKey:@"ADSPendingDaemonChanges"];
         }
     });
     if (result != NOTIFY_STATUS_OK) return;
@@ -284,27 +307,179 @@ static void ads_remove_observers(id controller) {
     for (NSNumber *token in objc_getAssociatedObject(controller, &ads_observer_tokens_key)) notify_cancel(token.intValue);
 }
 
-static inline void ads_present_save_prompt(UIViewController *controller, BOOL forcePrompt, void (^cancelAction)(void)) {
-    NSUserDefaults *defaults = ads_defaults(); 
-    if (![defaults boolForKey:@"enabled"] && !forcePrompt) {
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"]; [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; ads_post_notification(); return;
+// One main-queue transaction spans confirmation, service control and restart.
+// Staged dictionaries include every preset/plugin rule changed by a level edit;
+// failure before commit therefore leaves both preference stores and Save flags intact.
+@interface ADSSettingsTransaction : NSObject
+@property (nonatomic, weak) PSListController *presenter;
+@property (nonatomic, weak) UIView *interactionView;
+@property (nonatomic) BOOL wasInteractive;
+@property (nonatomic) BOOL locked;
+@end
+@implementation ADSSettingsTransaction
+@end
+
+static ADSSettingsTransaction *ads_settings_transaction;
+static NSString *ads_pending_process_error;
+
+static void ads_present_pending_error(UIViewController *controller) {
+    if (!ads_pending_process_error || ads_settings_transaction || !controller.viewIfLoaded.window ||
+        controller.presentedViewController || controller.isBeingDismissed ||
+        UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+    if (controller.navigationController && controller.navigationController.topViewController != controller) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Process Control Failed"
+        message:ads_pending_process_error preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+    ads_pending_process_error = nil;
+    [controller presentViewController:alert animated:YES completion:nil];
+}
+
+static ADSSettingsTransaction *ads_begin_transaction(PSListController *controller) {
+    NSCAssert(NSThread.isMainThread, @"Settings transactions must start on the UI thread");
+    if (ads_settings_transaction && !ads_settings_transaction.presenter && !ads_settings_transaction.locked)
+        ads_settings_transaction = nil; // an unconfirmed page disappeared; nothing was submitted
+    if (ads_settings_transaction || controller.presentedViewController) {
+        [controller reloadSpecifiers];
+        return nil;
     }
-    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
-    NSString *title = @"Save"; NSString *msg = needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?"; NSString *btn = needsReboot ? @"Reboot Userspace" : @"Respring";
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert]; 
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-        if (cancelAction) cancelAction();
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:btn style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        [defaults setBool:NO forKey:@"ADSNeedsRespring"]; [defaults setBool:NO forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize];
-        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *killall = ads_root_path(@"/usr/bin/killall");
-        if (needsReboot) {
-            const char* args[] = {"launchctl", "reboot", "userspace", NULL}; ADSRunCommand(launchctl, args, controller);
-        } else {
-            const char* args[] = {"killall", "backboardd", NULL};
-            ADSRunCommand(killall, args, controller);
+    ADSSettingsTransaction *transaction = [ADSSettingsTransaction new];
+    transaction.presenter = controller;
+    ads_settings_transaction = transaction;
+    ads_pending_process_error = nil; // a new explicit request supersedes an older deferred alert
+    return transaction;
+}
+
+static void ads_lock_transaction(ADSSettingsTransaction *transaction) {
+    if (transaction.locked) return;
+    UIView *view = transaction.presenter.navigationController.view ?: transaction.presenter.view;
+    transaction.interactionView = view;
+    transaction.wasInteractive = view.userInteractionEnabled;
+    transaction.locked = YES;
+    view.userInteractionEnabled = NO;
+}
+
+static void ads_end_transaction(ADSSettingsTransaction *transaction) {
+    if (ads_settings_transaction != transaction) return;
+    if (transaction.locked) transaction.interactionView.userInteractionEnabled = transaction.wasInteractive;
+    ads_settings_transaction = nil;
+    [transaction.presenter reloadSpecifiers];
+    ads_post_notification();
+}
+
+static void ads_cancel_unconfirmed(PSListController *controller) {
+    ADSSettingsTransaction *transaction = ads_settings_transaction;
+    if (transaction.presenter == controller && !transaction.locked &&
+        (controller.isMovingFromParentViewController || controller.isBeingDismissed || controller.navigationController.isBeingDismissed))
+        ads_end_transaction(transaction);
+}
+
+static void ads_fail_transaction(ADSSettingsTransaction *transaction, ADSCommandResult *result, NSString *message) {
+    if (ads_settings_transaction != transaction) return;
+    __weak PSListController *presenter = transaction.presenter;
+    ads_end_transaction(transaction);
+    NSString *diagnostics = result.diagnosticDescription;
+    if (diagnostics.length > 4500) diagnostics = [[diagnostics substringToIndex:4500] stringByAppendingString:@"\n[see process log for full diagnostics]"];
+    ads_pending_process_error = [NSString stringWithFormat:@"%@\n\n%@", message, diagnostics];
+    ads_present_pending_error(presenter);
+    // A Save/reset alert may still be dismissing when the command completes.
+    // Keep the error for the next appearance if this controller is no longer visible.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        ads_present_pending_error(presenter);
+    });
+}
+
+static BOOL ads_requested_active(NSDictionary *changes) {
+    NSUserDefaults *defaults = ads_defaults();
+    return [changes[@"enabled"] ?: [defaults objectForKey:@"enabled"] boolValue] &&
+        [changes[@"corelliumDecoyEnabled"] ?: [defaults objectForKey:@"corelliumDecoyEnabled"] boolValue];
+}
+
+static BOOL ads_restore_daemon_rules(NSMutableDictionary *changes) {
+    NSMutableArray *disabled = [changes[@"disabledPresetRules"] ?: [ads_defaults() arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
+    NSArray *before = [disabled copy];
+    NSDictionary *aliases = ads_daemon_alias_map();
+    for (NSString *shortName in aliases) {
+        [disabled removeObject:shortName];
+        [disabled removeObject:aliases[shortName]];
+    }
+    if ([before isEqualToArray:disabled]) return NO;
+    changes[@"disabledPresetRules"] = disabled;
+    return YES;
+}
+
+static void ads_transition_decoy(ADSSettingsTransaction *transaction, BOOL previous, BOOL next,
+                                 BOOL reconcile, ADSCommandCompletion completion) {
+    if (previous == next && !reconcile) {
+        completion(nil); // in particular, OFF configuration edits never spawn or probe
+        return;
+    }
+    ads_lock_transaction(transaction);
+    ADSSetDecoyActive(next, ^(ADSCommandResult *result) {
+        if (ads_settings_transaction == transaction) completion(result);
+    });
+}
+
+static void ads_apply_configuration(ADSSettingsTransaction *transaction, NSDictionary *changes) {
+    ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(changes), NO, ^(ADSCommandResult *result) {
+        if (result && !result.isSuccessful) {
+            ads_fail_transaction(transaction, result, @"The change was not fully applied. Previous settings were kept. You can try the change again.");
+            return;
         }
-    }]]; [controller presentViewController:alert animated:YES completion:nil];
+        ads_write_preferences(changes);
+        ads_end_transaction(transaction);
+    });
+}
+
+static void ads_restart(ADSSettingsTransaction *transaction, BOOL needsReboot) {
+    NSUserDefaults *defaults = ads_defaults();
+    NSDictionary *pending = @{
+        @"ADSNeedsRespring": @([defaults boolForKey:@"ADSNeedsRespring"]),
+        @"ADSPendingDaemonChanges": @([defaults boolForKey:@"ADSPendingDaemonChanges"])
+    };
+    // Prepare the restart handoff: Settings may terminate before a successful
+    // command can call back. Restore the exact pending flags on every failure.
+    ads_write_preferences(@{@"ADSNeedsRespring": @NO, @"ADSPendingDaemonChanges": @NO});
+    NSString *program = needsReboot ? ADSLaunchctlPath() : ADSJailbreakPath(@"/usr/bin/killall");
+    NSArray *arguments = needsReboot ? @[@"reboot", @"userspace"] : @[@"backboardd"];
+    ADSRunCommand(program, arguments, needsReboot ? @"Reboot Userspace" : @"Respring", ^(ADSCommandResult *result) {
+        if (ads_settings_transaction != transaction) return;
+        if (!result.isSuccessful) {
+            ads_write_preferences(pending);
+            ads_fail_transaction(transaction, result, @"Settings were saved, but the restart failed. Use Save to retry applying them.");
+        } else ads_end_transaction(transaction);
+    });
+}
+
+static void ads_present_save_prompt(PSListController *controller, NSDictionary *proposal) {
+    NSUserDefaults *defaults = ads_defaults();
+    if (!proposal && ![defaults boolForKey:@"ADSNeedsRespring"] && ![defaults boolForKey:@"ADSPendingDaemonChanges"]) return;
+    ADSSettingsTransaction *transaction = ads_begin_transaction(controller);
+    if (!transaction) return;
+    BOOL needsReboot = [proposal[@"ADSPendingDaemonChanges"] ?: [defaults objectForKey:@"ADSPendingDaemonChanges"] boolValue];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save"
+        message:needsReboot ? @"Apply changes with a userspace reboot? (Required for daemon changes)" : @"Apply changes with respring?"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        ads_end_transaction(transaction); // no staged writes or service commands to undo
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:needsReboot ? @"Reboot Userspace" : @"Respring"
+        style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        if (ads_settings_transaction != transaction) return;
+        // Apply is explicit: installation/reboot may have registered the job even
+        // when the saved request is inactive. Do not infer actual state from prefs.
+        ads_transition_decoy(transaction, ads_requested_active(nil), ads_requested_active(proposal), YES, ^(ADSCommandResult *result) {
+            if (!result.isSuccessful) {
+                ads_fail_transaction(transaction, result, proposal ?
+                    @"The change was not fully applied. Previous settings and Save flags were kept. You can try again." :
+                    @"The saved changes were not fully applied. Use Save to retry.");
+                return;
+            }
+            if (proposal) ads_write_preferences(proposal);
+            ads_post_notification();
+            ads_restart(transaction, needsReboot);
+        });
+    }]];
+    [controller presentViewController:alert animated:YES completion:nil];
 }
 
 @class AntiDarkSwordAltListController;
@@ -312,19 +487,21 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 
 
 @implementation AntiDarkSwordDaemonListController
+- (void)viewWillDisappear:(BOOL)animated { [super viewWillDisappear:animated]; ads_cancel_unconfirmed(self); }
 - (void)viewDidLoad {
     [super viewDidLoad];
     ads_observe(self, "com.eolnmsuk.antidarkswordprefs/counter", YES);
     
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
-    NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    NSUserDefaults *defaults = ads_defaults(); BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || needsReboot;
     ads_observe(self, "com.eolnmsuk.antidarkswordprefs/saved", NO);
 }
 - (void)dealloc {
     ads_remove_observers(self);
 }
 
-- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
+- (void)savePrompt { ads_present_save_prompt(self, nil); }
+- (void)viewDidAppear:(BOOL)animated { [super viewDidAppear:animated]; ads_present_pending_error(self); }
 
 - (NSArray *)specifiers {
     if (!_specifiers) {
@@ -354,7 +531,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
         }
 
         PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"System Daemons" target:self set:nil get:nil detail:nil cell:PSGroupCell edit:nil];
-        [group setProperty:@"Restricting a daemon bypasses all zero-click mitigations for that process." forKey:@"footerText"]; [specs addObject:group];
+        [group setProperty:@"With Protection on, enabled daemons receive exploit mitigations. Turning a row off bypasses its preset protection; custom and global rules still apply." forKey:@"footerText"]; [specs addObject:group];
 
         NSArray *daemons = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"];
         for (NSString *daemon in daemons) {
@@ -385,9 +562,14 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 
 - (void)reloadSpecifiers { self->_specifiers = nil; [super reloadSpecifiers]; }
 
-- (id)getDaemonEnabled:(PSSpecifier *)spec { return @(![[ads_defaults() arrayForKey:@"disabledPresetRules"] ?: @[] containsObject:[spec propertyForKey:@"targetID"]]); }
+- (id)getDaemonEnabled:(PSSpecifier *)spec {
+    NSString *target = [spec propertyForKey:@"targetID"];
+    NSArray *disabled = [ads_defaults() arrayForKey:@"disabledPresetRules"] ?: @[];
+    return @(![disabled containsObject:target] && ![disabled containsObject:ads_daemon_alias_map()[target]]);
+}
 
 - (void)setDaemonEnabled:(id)value specifier:(PSSpecifier *)spec {
+    if (ads_settings_transaction) { [self reloadSpecifiers]; return; }
     NSUserDefaults *defaults = ads_defaults(); NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
     NSString *targetID = [spec propertyForKey:@"targetID"]; NSDictionary *aliasMap = ads_daemon_alias_map();
 
@@ -397,7 +579,13 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
         if (![disabled containsObject:targetID]) [disabled addObject:targetID];
         if (aliasMap[targetID] && ![disabled containsObject:aliasMap[targetID]]) [disabled addObject:aliasMap[targetID]];
     }
-    [defaults setObject:disabled forKey:@"disabledPresetRules"]; [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; ads_post_notification();
+    NSMutableDictionary *changes = [@{@"disabledPresetRules": disabled} mutableCopy];
+    if ([defaults boolForKey:@"enabled"]) {
+        changes[@"ADSNeedsRespring"] = @YES;
+        changes[@"ADSPendingDaemonChanges"] = @YES;
+    }
+    ads_write_preferences(changes);
+    ads_post_notification();
 }
 
 - (void)viewWillAppear:(BOOL)animated { [super viewWillAppear:animated]; [self reloadSpecifiers]; }
@@ -405,36 +593,25 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 - (id)getCorelliumEnabled:(PSSpecifier *)spec { return @([ads_defaults() boolForKey:@"corelliumDecoyEnabled"]); }
 
 - (void)setCorelliumEnabled:(id)value specifier:(PSSpecifier *)spec {
-    NSUserDefaults *defaults = ads_defaults(); BOOL masterEnabled = [defaults boolForKey:@"enabled"]; BOOL decoyEnabled = [value boolValue];
-    [defaults setBool:decoyEnabled forKey:@"corelliumDecoyEnabled"];
-    
-    if (decoyEnabled) {
-        NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
-        NSDictionary *aliasMap = ads_daemon_alias_map(); BOOL changed = NO;
-        for (NSString *shortName in @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"]) {
-            if ([disabled containsObject:shortName]) { [disabled removeObject:shortName]; changed = YES; }
-            if (aliasMap[shortName] && [disabled containsObject:aliasMap[shortName]]) { [disabled removeObject:aliasMap[shortName]]; changed = YES; }
-        }
-        if (changed) { [defaults setObject:disabled forKey:@"disabledPresetRules"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; }
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL decoyEnabled = [value boolValue];
+    if (decoyEnabled == [defaults boolForKey:@"corelliumDecoyEnabled"]) { [self reloadSpecifiers]; return; }
+    ADSSettingsTransaction *transaction = ads_begin_transaction(self);
+    if (!transaction) return;
+    NSMutableDictionary *changes = [@{@"corelliumDecoyEnabled": @(decoyEnabled)} mutableCopy];
+    BOOL daemonsChanged = decoyEnabled && ads_restore_daemon_rules(changes);
+    if ([defaults boolForKey:@"enabled"]) {
+        changes[@"ADSNeedsRespring"] = @YES;
+        if (daemonsChanged) changes[@"ADSPendingDaemonChanges"] = @YES;
     }
-
-    [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
-    NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"));
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    ADSRunCommand(launchctl, unloadArgs, self);
-
-    if (masterEnabled && decoyEnabled) {
-        const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-        ADSRunCommand(launchctl, loadArgs, self);
-    }
-    ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; });
+    ads_apply_configuration(transaction, changes);
 }
 
 - (id)getCountersEnabled:(PSSpecifier *)spec { return @([ads_defaults() boolForKey:@"countersEnabled"]); }
 
 - (void)setCountersEnabled:(id)value specifier:(PSSpecifier *)spec {
     NSUserDefaults *defaults = ads_defaults(); [defaults setBool:[value boolValue] forKey:@"countersEnabled"];
-    [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
+    ads_flag_pending_changes(NO); [defaults synchronize];
     ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; });
 }
 
@@ -461,7 +638,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
         [alert addAction:[UIAlertAction actionWithTitle:@"Enable Globally" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [defaults setBool:YES forKey:key];
             if ([key isEqualToString:@"globalDisableJS"]) { if (ads_is_ios16()) [defaults setBool:YES forKey:@"globalDisableJIT"]; else [defaults setBool:YES forKey:@"globalDisableJIT15"]; }
-            [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification();
+            ads_flag_pending_changes(NO); [defaults synchronize]; ads_post_notification();
             dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; });
         }]];
         
@@ -470,7 +647,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     } else {
         [defaults setBool:NO forKey:key];
         if ([key isEqualToString:@"globalDisableJS"]) { [defaults setBool:NO forKey:@"globalDisableJIT"]; [defaults setBool:NO forKey:@"globalDisableJIT15"]; }
-        [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification();
+        ads_flag_pending_changes(NO); [defaults synchronize]; ads_post_notification();
         dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; });
     }
 }
@@ -486,6 +663,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 @end
 
 @implementation AntiDarkSwordAltListController
+- (void)viewWillDisappear:(BOOL)animated { [super viewWillDisappear:animated]; ads_cancel_unconfirmed(self); }
 - (void)viewDidLoad {
     [super viewDidLoad];
     NSUserDefaults *defaults = ads_defaults(); NSInteger level = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
@@ -493,11 +671,12 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     self.cachedPresetApps = [rootCtrl autoProtectedItemsForLevel:level];
     
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
-    BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || needsReboot;
     ads_observe(self, "com.eolnmsuk.antidarkswordprefs/saved", NO);
 }
 - (void)dealloc { ads_remove_observers(self); }
-- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
+- (void)savePrompt { ads_present_save_prompt(self, nil); }
+- (void)viewDidAppear:(BOOL)animated { [super viewDidAppear:animated]; ads_present_pending_error(self); }
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     NSUserDefaults *defaults = ads_defaults(); self.cachedRestrictedAppsLegacy = [defaults dictionaryForKey:@"restrictedApps"] ?: @{};
@@ -543,14 +722,16 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 
 
 @implementation AntiDarkSwordAppController
+- (void)viewWillDisappear:(BOOL)animated { [super viewWillDisappear:animated]; ads_cancel_unconfirmed(self); }
 - (void)viewDidLoad {
     [super viewDidLoad];
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
-    NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    NSUserDefaults *defaults = ads_defaults(); BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || needsReboot;
     ads_observe(self, "com.eolnmsuk.antidarkswordprefs/saved", NO);
 }
 - (void)dealloc { ads_remove_observers(self); }
-- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
+- (void)savePrompt { ads_present_save_prompt(self, nil); }
+- (void)viewDidAppear:(BOOL)animated { [super viewDidAppear:animated]; ads_present_pending_error(self); }
 
 + (BOOL)isDaemonTarget:(NSString *)targetID {
     if (!targetID) return NO;
@@ -687,7 +868,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     if (self.ruleType == 0) { 
         NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array];
         if (enabled) [disabled removeObject:self.targetID]; else if (![disabled containsObject:self.targetID]) [disabled addObject:self.targetID];
-        [defaults setObject:disabled forKey:@"disabledPresetRules"];
+        [defaults setObject:disabled forKey:@"disabledPresetRules"]; ads_cfwrite(@"disabledPresetRules", disabled);
     } else if (self.ruleType == 1) { 
         [defaults setBool:enabled forKey:[NSString stringWithFormat:@"restrictedApps-%@", self.targetID]];
         NSMutableDictionary *apps = [[defaults dictionaryForKey:@"restrictedApps"] mutableCopy];
@@ -695,9 +876,9 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     } else { 
         NSMutableArray *active = [[defaults arrayForKey:@"activeCustomDaemonIDs"] mutableCopy] ?: [[defaults arrayForKey:@"customDaemonIDs"] mutableCopy] ?: [NSMutableArray array];
         if (enabled && ![active containsObject:self.targetID]) [active addObject:self.targetID]; else if (!enabled) [active removeObject:self.targetID];
-        [defaults setObject:active forKey:@"activeCustomDaemonIDs"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
+        [defaults setObject:active forKey:@"activeCustomDaemonIDs"]; ads_flag_pending_changes(YES);
     }
-    [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; });
+    ads_flag_pending_changes(NO); [defaults synchronize]; ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; });
 }
 - (id)getFeatureValue:(PSSpecifier *)specifier {
     NSString *featureKey = [specifier propertyForKey:@"featureKey"];
@@ -755,17 +936,25 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
                 if (![rules[@"disableJIT15"] boolValue]) rules[@"disableMedia"] = @NO;
             }
         }
-        [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
+        [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); ads_flag_pending_changes(NO); [defaults synchronize];
         dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; }); ads_post_notification(); return;
     }
-    [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize]; ads_post_notification();
+    [defaults setObject:rules forKey:dictKey]; ads_cfwrite(dictKey, rules); ads_flag_pending_changes(NO); [defaults synchronize]; ads_post_notification();
 }
 @end
 
 
 @implementation AntiDarkSwordPrefsRootListController
+- (void)viewWillDisappear:(BOOL)animated { [super viewWillDisappear:animated]; ads_cancel_unconfirmed(self); }
+- (void)reloadSpecifiers {
+    self.cachedDisabledPresetRules = [ads_defaults() arrayForKey:@"disabledPresetRules"] ?: @[];
+    self.cachedActiveCustomDaemons = [ads_defaults() arrayForKey:@"activeCustomDaemonIDs"] ?: [ads_defaults() arrayForKey:@"customDaemonIDs"] ?: @[];
+    _specifiers = nil;
+    [super reloadSpecifiers];
+}
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    ads_present_pending_error(self);
     [[ADSUpdateChecker sharedChecker] checkForController:self
         installedVersion:ADSInstalledPreferencesVersion([AntiDarkSwordPrefsRootListController class])
         manual:NO finished:nil];
@@ -834,6 +1023,11 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     return nil;
 }
 - (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force {
+    NSMutableDictionary *changes = [NSMutableDictionary dictionary];
+    [self populateDefaultRulesForLevel:level force:force changes:changes];
+    if (changes.count) ads_write_preferences(changes);
+}
+- (void)populateDefaultRulesForLevel:(NSInteger)level force:(BOOL)force changes:(NSMutableDictionary *)changes {
     NSUserDefaults *defaults = ads_defaults();
     if (!force && [defaults boolForKey:@"hasInitializedDefaultRules"]) {
         // One-time migration for existing installs: write restrictedApps-{pluginBundleID}=YES
@@ -856,12 +1050,10 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
                     if (!hasNonTrivial) continue;
                     NSString *enableKey = [NSString stringWithFormat:@"restrictedApps-%@", pluginBundleID];
                     if ([defaults objectForKey:enableKey]) continue;
-                    [defaults setBool:YES forKey:enableKey];
-                    ads_cfwrite(enableKey, @YES);
+                    changes[enableKey] = @YES;
                 }
             }
-            [defaults setBool:YES forKey:@"ADSPluginEnablesMigrated_v1"];
-            [defaults synchronize];
+            changes[@"ADSPluginEnablesMigrated_v1"] = @YES;
         }
         return;
     }
@@ -896,7 +1088,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
         } else if (![AntiDarkSwordAppController isDaemonTarget:targetID]) {
             if (![targetID hasPrefix:@"com.apple."]) rules[@"spoofUA"] = (level >= 2) ? @YES : @NO;
         }
-        [defaults setObject:rules forKey:dictKey];
+        changes[dictKey] = rules;
     }
     // Populate default rules for security-relevant plugins of all protected parent apps.
     // Plugin defaults follow the parent's risk profile: NSEs and notification content extensions
@@ -948,8 +1140,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
                 pluginRules[@"blockRiskyAttachments"] = pluginBlockRA ? @YES : @NO;
             }
 
-            [defaults setObject:pluginRules forKey:pluginKey];
-            ads_cfwrite(pluginKey, pluginRules);
+            changes[pluginKey] = pluginRules;
 
             // If the plugin has non-trivial category-specific mitigations, initialize
             // Enable Rule = ON so the UI shows an active override rather than contradicting
@@ -961,13 +1152,12 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
                                          [pluginRules[@"disableMedia"] boolValue];
             if (hasNonTrivialOverride) {
                 NSString *enableKey = [NSString stringWithFormat:@"restrictedApps-%@", pluginBundleID];
-                [defaults setBool:YES forKey:enableKey];
-                ads_cfwrite(enableKey, @YES);
+                changes[enableKey] = @YES;
             }
         }
     }
 
-    [defaults setBool:YES forKey:@"hasInitializedDefaultRules"]; [defaults synchronize];
+    changes[@"hasInitializedDefaultRules"] = @YES;
 }
 - (NSArray *)autoProtectedItemsForLevel:(NSInteger)level {
     NSMutableArray *items = [NSMutableArray array];
@@ -1027,7 +1217,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
                 NSString *footerText = @"";
                 if (autoProtectLevel == 1) footerText = @"Level 1: Protects native Apple applications, including Safari, Messages, Mail, Notes, Calendar, Wallet, and other built-in iOS apps.";
                 else if (autoProtectLevel == 2) footerText = @"Level 2: Expands protection to major 3rd-party web browsers, email clients, messaging platforms, social media apps, package managers, and finance/crypto apps.";
-                else if (autoProtectLevel == 3) footerText = @"Level 3: Maximum protection. Restricts system background daemons, configure in Level 3 Settings.";
+                else if (autoProtectLevel == 3) footerText = @"Level 3: Adds exploit mitigations for selected system daemons. Configure them in Level 3 Settings.";
                 [s setProperty:footerText forKey:@"footerText"];
             }
             if ([[s propertyForKey:@"id"] isEqualToString:@"SystemOptionsCell"]) {
@@ -1076,7 +1266,7 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     ads_migrate_prefs_if_needed();
     NSInteger currentLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1; [self populateDefaultRulesForLevel:currentLevel force:NO];
     UIBarButtonItem *saveButton = [[UIBarButtonItem alloc] initWithTitle:@"Save" style:UIBarButtonItemStyleDone target:self action:@selector(savePrompt)]; self.navigationItem.rightBarButtonItem = saveButton;
-    BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || (isEnabled && needsReboot);
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; saveButton.enabled = needsRespring || needsReboot;
     ads_observe(self, "com.eolnmsuk.antidarkswordprefs/saved", NO); [self setupHeaderView];
 }
 - (void)setupHeaderView {
@@ -1096,32 +1286,24 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 }
 - (void)dealloc { ads_remove_observers(self); }
 - (void)flagSaveRequirement {
-    NSUserDefaults *defaults = ads_defaults(); [defaults setBool:YES forKey:@"ADSNeedsRespring"]; [defaults synchronize];
-    BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; self.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot);
+    NSUserDefaults *defaults = ads_defaults(); ads_flag_pending_changes(NO); [defaults synchronize];
+    BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; self.navigationItem.rightBarButtonItem.enabled = needsRespring || needsReboot;
 }
 - (void)setEnableProtection:(id)value specifier:(PSSpecifier *)specifier {
-    NSUserDefaults *defaults = ads_defaults(); BOOL wasEnabled = [defaults boolForKey:@"enabled"]; BOOL masterEnabled = [value boolValue];
-    BOOL priorNeedsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL priorNeedsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"];
-    [self setPreferenceValue:value specifier:specifier]; NSInteger level = [defaults integerForKey:@"autoProtectLevel"]; NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: @[];
-    BOOL decoyEnabled = [defaults boolForKey:@"corelliumDecoyEnabled"]; NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist"));
-    const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-    ADSRunCommand(launchctl, unloadArgs, self);
-    if (masterEnabled && decoyEnabled) { const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL}; ADSRunCommand(launchctl, loadArgs, self); }
-    if (level >= 3 || customDaemons.count > 0) { [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; }
-
-    ads_present_save_prompt(self, YES, ^{
-        [defaults setBool:wasEnabled forKey:@"enabled"]; [defaults setBool:priorNeedsRespring forKey:@"ADSNeedsRespring"]; [defaults setBool:priorNeedsReboot forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize];
-        if (!wasEnabled && decoyEnabled) {
-            const char* revUnloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL};
-            ADSRunCommand(launchctl, revUnloadArgs, self);
-        } else if (wasEnabled && decoyEnabled) {
-            const char* revLoadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL};
-            ADSRunCommand(launchctl, revLoadArgs, self);
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{ [self reloadSpecifiers]; ads_post_notification(); });
-    });
+    NSUserDefaults *defaults = ads_defaults();
+    BOOL enabled = [value boolValue];
+    if (enabled == [defaults boolForKey:@"enabled"]) { [self reloadSpecifiers]; return; }
+    NSArray *customDaemons = [defaults arrayForKey:@"activeCustomDaemonIDs"] ?: [defaults arrayForKey:@"customDaemonIDs"] ?: @[];
+    BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"] ||
+        [defaults integerForKey:@"autoProtectLevel"] >= 3 || customDaemons.count > 0;
+    // The switch's displayed proposal is staged behind Save; Cancel changes neither
+    // store, either pending flag, nor the live service request.
+    ads_present_save_prompt(self, @{@"enabled": @(enabled), @"ADSNeedsRespring": @YES,
+                                  @"ADSPendingDaemonChanges": @(needsReboot)});
 }
+
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
+    if (ads_settings_transaction) { [self reloadSpecifiers]; return; }
     NSString *key = [specifier propertyForKey:@"key"]; NSUserDefaults *defaults = ads_defaults();
     if ([key isEqualToString:@"customUAString"]) {
         NSString *input = (NSString *)value; NSString *trimmed = [input stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -1133,26 +1315,32 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
     if ([key isEqualToString:@"selectedUAPreset"]) { _specifiers = nil; [self reloadSpecifiers]; }
 }
 - (void)setAutoProtectLevel:(id)value specifier:(PSSpecifier*)specifier {
-    NSUserDefaults *defaults = ads_defaults(); NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"]; NSInteger newLevel = [value integerValue]; [defaults setObject:value forKey:@"autoProtectLevel"];
-    if (oldLevel != newLevel) [self populateDefaultRulesForLevel:newLevel force:YES];
-    if (oldLevel >= 3 || newLevel >= 3) [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"];
-    if (newLevel >= 3 && ![defaults boolForKey:@"corelliumDecoyEnabled"]) {
-        [defaults setBool:YES forKey:@"corelliumDecoyEnabled"]; NSDictionary *aliasMap = ads_daemon_alias_map(); NSArray *daemonShortNames = @[@"imagent", @"apsd", @"identityservicesd", @"IMDPersistenceAgent"]; NSMutableArray *disabled = [[defaults arrayForKey:@"disabledPresetRules"] mutableCopy] ?: [NSMutableArray array]; BOOL daemonsChanged = NO;
-        for (NSString *shortName in daemonShortNames) { if ([disabled containsObject:shortName]) { [disabled removeObject:shortName]; daemonsChanged = YES; } NSString *bundleAlias = aliasMap[shortName]; if (bundleAlias && [disabled containsObject:bundleAlias]) { [disabled removeObject:bundleAlias]; daemonsChanged = YES; } }
-        if (daemonsChanged) [defaults setObject:disabled forKey:@"disabledPresetRules"];
-        if ([defaults boolForKey:@"enabled"]) { NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char* loadArgs[] = {"launchctl", "load", plistPath.UTF8String, NULL}; ADSRunCommand(launchctl, loadArgs, self); }
-    } else if (newLevel < 3 && [defaults boolForKey:@"corelliumDecoyEnabled"]) {
-        [defaults setBool:NO forKey:@"corelliumDecoyEnabled"]; NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char *unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL}; ADSRunCommand(launchctl, unloadArgs, self);
+    NSUserDefaults *defaults = ads_defaults();
+    NSInteger oldLevel = [defaults integerForKey:@"autoProtectLevel"] ?: 1;
+    NSInteger newLevel = [value integerValue];
+    if (newLevel == oldLevel || newLevel < 1 || newLevel > 3) { [self reloadSpecifiers]; return; }
+    ADSSettingsTransaction *transaction = ads_begin_transaction(self);
+    if (!transaction) return;
+    NSMutableDictionary *changes = [@{@"autoProtectLevel": @(newLevel)} mutableCopy];
+    [self populateDefaultRulesForLevel:newLevel force:YES changes:changes];
+    if (newLevel >= 3) {
+        changes[@"corelliumDecoyEnabled"] = @YES;
+        ads_restore_daemon_rules(changes);
+    } else changes[@"corelliumDecoyEnabled"] = @NO;
+    if ([defaults boolForKey:@"enabled"]) {
+        changes[@"ADSNeedsRespring"] = @YES;
+        if (oldLevel >= 3 || newLevel >= 3) changes[@"ADSPendingDaemonChanges"] = @YES;
     }
-    [defaults synchronize]; [self flagSaveRequirement]; ads_post_notification(); dispatch_async(dispatch_get_main_queue(), ^{ self->_specifiers = nil; [self reloadSpecifiers]; });
+    ads_apply_configuration(transaction, changes);
 }
+
 - (void)addCustomID {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Add Custom ID" message:@"Enter bundle IDs or process names (comma-separated)" preferredStyle:UIAlertControllerStyleAlert]; [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) { textField.placeholder = @"com.apple.imagent, apsd"; }]; [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]]; [alert addAction:[UIAlertAction actionWithTitle:@"Add" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *inputText = alert.textFields.firstObject.text;
         if (inputText.length > 0) {
             NSArray *inputIDs = [inputText componentsSeparatedByString:@","]; NSUserDefaults *defaults = ads_defaults(); NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy]; NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy]; BOOL changesMade = NO;
             for (NSString *rawID in inputIDs) { NSString *cleanID = [rawID stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]; if (cleanID.length > 0 && ![customIDs containsObject:cleanID]) { [customIDs addObject:cleanID]; if (![activeCustom containsObject:cleanID]) [activeCustom addObject:cleanID]; changesMade = YES; } }
-            if (changesMade) { [defaults setObject:customIDs forKey:@"customDaemonIDs"]; [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; [self flagSaveRequirement]; _specifiers = nil; [self reloadSpecifiers]; ads_post_notification(); }
+            if (changesMade) { [defaults setObject:customIDs forKey:@"customDaemonIDs"]; [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"]; ads_flag_pending_changes(YES); [defaults synchronize]; [self flagSaveRequirement]; _specifiers = nil; [self reloadSpecifiers]; ads_post_notification(); }
         }
     }]]; [self presentViewController:alert animated:YES completion:nil];
 }
@@ -1160,16 +1348,45 @@ static inline void ads_present_save_prompt(UIViewController *controller, BOOL fo
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         PSSpecifier *spec = [self specifierAtIndexPath:indexPath]; NSString *daemonID = [spec propertyForKey:@"daemonID"]; NSUserDefaults *defaults = ads_defaults(); NSMutableArray *customIDs = [[defaults objectForKey:@"customDaemonIDs"] ?: @[] mutableCopy]; NSMutableArray *activeCustom = [[defaults objectForKey:@"activeCustomDaemonIDs"] ?: customIDs mutableCopy];
-        [customIDs removeObject:daemonID]; [activeCustom removeObject:daemonID]; NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", daemonID]; [defaults removeObjectForKey:dictKey]; [defaults setObject:customIDs forKey:@"customDaemonIDs"]; [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"]; [defaults setBool:YES forKey:@"ADSPendingDaemonChanges"]; [defaults synchronize]; [self flagSaveRequirement]; [self removeSpecifier:spec animated:YES]; ads_post_notification();
+        [customIDs removeObject:daemonID]; [activeCustom removeObject:daemonID]; NSString *dictKey = [NSString stringWithFormat:@"TargetRules_%@", daemonID]; [defaults removeObjectForKey:dictKey]; [defaults setObject:customIDs forKey:@"customDaemonIDs"]; [defaults setObject:activeCustom forKey:@"activeCustomDaemonIDs"]; ads_flag_pending_changes(YES); [defaults synchronize]; [self flagSaveRequirement]; [self removeSpecifier:spec animated:YES]; ads_post_notification();
     }
 }
 - (void)resetToDefaults {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults" message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert]; [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]]; [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        NSString *launchctl = ads_root_path(@"/usr/bin/launchctl"); NSString *plistPath = ADSBootstrapArgument(ads_root_path(@"/Library/LaunchDaemons/c.eolnmsuk.corelliumdecoy.plist")); const char* unloadArgs[] = {"launchctl", "unload", plistPath.UTF8String, NULL}; ADSRunCommand(launchctl, unloadArgs, self);
-        NSUserDefaults *defaults = ads_defaults(); [defaults removePersistentDomainForName:ADS_PREFS_SUITE]; [defaults synchronize]; ads_post_notification(); const char* rebootArgs[] = {"launchctl", "reboot", "userspace", NULL}; ADSRunCommand(launchctl, rebootArgs, self);
-    }]]; [self presentViewController:alert animated:YES completion:nil];
+    ADSSettingsTransaction *transaction = ads_begin_transaction(self);
+    if (!transaction) return;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset to Defaults"
+        message:@"Userspace reboot required to completely flush daemon hooks." preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        ads_end_transaction(transaction);
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reboot Userspace" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        if (ads_settings_transaction != transaction) return;
+        ads_lock_transaction(transaction);
+        ADSSetDecoyActive(NO, ^(ADSCommandResult *result) {
+            if (ads_settings_transaction != transaction) return;
+            if (!result.isSuccessful) {
+                ads_fail_transaction(transaction, result, @"Reset was not applied. Previous settings were kept; no reboot was requested.");
+                return;
+            }
+            NSUserDefaults *defaults = ads_defaults();
+            CFStringRef appID = (__bridge CFStringRef)ADS_PREFS_SUITE;
+            CFArrayRef keys = CFPreferencesCopyKeyList(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            [defaults removePersistentDomainForName:ADS_PREFS_SUITE];
+            [defaults synchronize];
+            if (keys) {
+                CFPreferencesSetMultiple(NULL, keys, appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+                CFRelease(keys);
+            }
+            CFPreferencesSynchronize(appID, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+            ads_write_preferences(@{@"ADSNeedsRespring": @YES, @"ADSPendingDaemonChanges": @YES});
+            ads_post_notification();
+            ads_restart(transaction, YES);
+        });
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
-- (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
+
+- (void)savePrompt { ads_present_save_prompt(self, nil); }
 - (void)openGitHub { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"] options:@{} completionHandler:nil]; }
 - (void)presentDonationMenu {
     NSIndexPath *selected = self.table.indexPathForSelectedRow;

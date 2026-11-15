@@ -214,19 +214,19 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>🛠  GitHub</string>
+            <string>🔄 Updates</string>
             <key>action</key>
-            <string>openGitHub</string>
+            <string>checkForUpdates</string>
+            <key>id</key>
+            <string>CheckUpdates</string>
         </dict>
         <dict>
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>Check for Updates</string>
+            <string>🛠  GitHub</string>
             <key>action</key>
-            <string>checkForUpdates</string>
-            <key>id</key>
-            <string>CheckUpdates</string>
+            <string>openGitHub</string>
         </dict>
         <dict>
             <key>cell</key>

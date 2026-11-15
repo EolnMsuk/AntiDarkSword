@@ -65,7 +65,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "**AntiDarkSword** protects your device from hidden web browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS).",
+          "markdown": "**AntiDarkSword** is an exploit mitigation tweak that hardens supported iOS devices against browser exploits and silent iMessage attacks (like Coruna, DarkSword, and BLASTPASS).",
           "useRawFormat": false
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "class": "DepictionMarkdownView",
-          "markdown": "• **Browser Protection** — Makes web browsing safer by reducing areas attackers can target.\n\n• **iMessage Security** — Blocks silent attacks by stopping dangerous file downloads and risky attachment previews (like PDFs and images).\n\n• **Content Blocking** — Automatically blocks unsafe content in messaging and mail apps.\n\n• **Device Cloaking** — Spoofs environments that are not vulnerable causing most payloads to abort.\n\n• **Decoy System** — Tricks attackers into thinking your device is a test virtual machine, stopping many advanced attacks in their tracks.\n\n• **Background Service Protection** — Secures core system services (like message syncing) when using higher security levels.",
+          "markdown": "• **Browser Protection** — Makes web browsing safer by reducing areas attackers can target.\n\n• **iMessage Security** — Blocks silent attacks by stopping dangerous file downloads and risky attachment previews (like PDFs and images).\n\n• **Remote Content Mitigations** — Limits remote content in protected messaging and mail apps to reduce exploit exposure.\n\n• **Device Cloaking** — Spoofs environments that are not vulnerable causing most payloads to abort.\n\n• **Decoy System** — Tricks attackers into thinking your device is a test virtual machine, stopping many advanced attacks in their tracks.\n\n• **System Daemon Protection** — Applies exploit mitigations to selected system daemons at Level 3 or through custom rules.",
           "useRawFormat": false
         },
         {
@@ -126,7 +126,7 @@
       "views": [
         {
           "class": "DepictionMarkdownView",
-          "markdown": "## 4.9.6\n\n### What's New\n\n* **Update Checker:** Added a manual **\"Check for Updates\"** option in settings to check for the latest stable GitHub release. The app will also perform a quiet automatic check once per day when opened, only notifying you if a new version is available.\n* **Native Roothide Support:** Added native Roothide build support so users no longer need an external patcher.\n* **Standardized Package Names:** Standardized all Debian release packages clearly by their jailbreak environment (legacy, rootful, rootless, and roothide), alongside the TrollFools dylib.\n* **Version Management:** Streamlined versioning so that the control file serves as the single source of truth for the package version.\n* **Performance & Reliability:** Fixed underlying race conditions, improved audio handling and thread safety for mini-games, and optimized notification handling.\n* **Smoother Operation:** Replaced raw observer pointers with cleaner tokens and improved error handling for process controls to ensure overall system stability.\n* **Sileo Depiction Update:** Added a new **Changelog** tab to the Sileo depiction page right after the Details tab.\n* **Expanded Donation Options:** Combined the donation section into Venmo and a new **Crypto Wallets** menu.",
+          "markdown": "## 4.9.7\n\n* Stopped unnecessary honeypot commands when changing protection levels or honeypot settings with Protection off.\n* Improved applying Level 3 changes: no unload before enabling, and Cancel leaves the previous settings in place.\n* Kept protection, daemon, and app rules consistent when saving changes. Failed commands now show useful details and keep restart changes available to retry.\n* Clarified exploit-mitigation descriptions and what the system daemon switches protect.\n* Renamed the update row to 🔄 Updates and placed it above GitHub, Donate, and Credits.",
           "useRawFormat": false
         }
       ]
@@ -142,7 +142,7 @@
         {
           "class": "DepictionTableTextView",
           "title": "Version",
-          "text": "4.9.6"
+          "text": "4.9.7"
         },
         {
           "class": "DepictionTableTextView",

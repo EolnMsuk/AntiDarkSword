@@ -1,9 +1,9 @@
 Package: com.eolnmsuk.antidarksword
 Name: AntiDarkSword
 Depends: mobilesubstrate, preferenceloader, com.opa334.altlist
-Version: 4.9.6
+Version: 4.9.7
 Architecture: iphoneos-arm
-Description: Security framework to defend against WebKit RCE and iMessage zero-click exploits like Coruna / DarkSword / BLASTPASS.
+Description: Exploit mitigation tweak to defend against WebKit RCE and iMessage zero-click exploits like Coruna / DarkSword / BLASTPASS.
 Maintainer: EolnMsuk
 Author: EolnMsuk
 Section: Tweaks
