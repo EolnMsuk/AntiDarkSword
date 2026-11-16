@@ -1,3 +1,7 @@
+## 5.0.0
+
+- The only change is the version number, bumped to 5.0.0 for testing updates.
+
 ## 4.9.8
 
 - Release packages now have names that identify their target. A native RootHide package joins the legacy rootful, modern rootful, rootless, and TrollFools downloads.

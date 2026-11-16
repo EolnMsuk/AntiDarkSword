@@ -30,7 +30,9 @@ baseline remains iOS 15+. The overlay has no update checker or donation menu.
 
 ## 📱 Compatibility
 
-AntiDarkSword has been tested on device. Choose the package for your iOS version and jailbreak environment.
+The supplied 4.9.3 runtime is the baseline for this manual-update/donation port.
+This port needs device validation; native Roothide is separate from the
+previously reported working patcher-converted rootless route.
 
 | Release suffix | Platform | Slices / package architecture |
 |---|---|---|
@@ -138,9 +140,9 @@ Level 3
 │   └── Disable Media Auto-Play: ON
 │
 └── ⚙️ System Daemons (imagent, apsd, identityservicesd, IMDPersistenceAgent)
-    ├── System Hooking: ON (blocks zero-click payload parsing)
-    ├── Individual daemon switches: Settings > Level 3 Settings > System Daemons
-    └── Corellium Honeypot: ON
+    ├── All four daemon switches start OFF when entering from Level 1 or 2
+    ├── Choose individual daemons in Settings > Level 3 Settings > System Daemons
+    └── Corellium Honeypot starts OFF. Turning it on selects all four daemons.
 ```
 
 ---
