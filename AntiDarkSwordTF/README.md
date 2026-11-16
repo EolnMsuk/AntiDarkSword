@@ -129,4 +129,4 @@ The dylib uses `LOGOS_DEFAULT_GENERATOR = internal` — no CydiaSubstrate or Ell
 
 Created by: [EolnMsuk](https://github.com/EolnMsuk) / [AntiDarkSword](https://github.com/EolnMsuk/AntiDarkSword/)
 
-Support my work: [Venmo](https://venmo.com/user/eolnmsuk)
+Support my work: [Venmo](https://venmo.com/user/EolnMsuk)
