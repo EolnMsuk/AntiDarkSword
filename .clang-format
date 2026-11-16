@@ -1,0 +1,21 @@
+# Shared formatting for the project's C and Objective-C sources.
+# Apply to first-party .c/.m/.mm/.h files; review Logos .x/.xm files separately.
+BasedOnStyle: LLVM
+IndentWidth: 4
+ContinuationIndentWidth: 4
+UseTab: Never
+ColumnLimit: 120
+BreakBeforeBraces: Attach
+
+# Match Objective-C declarations and compact early returns.
+DerivePointerAlignment: false
+PointerAlignment: Right
+ObjCBlockIndentWidth: 4
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: false
+AllowShortIfStatementsOnASingleLine: WithoutElse
+
+# Preserve intentional import order and existing comment wrapping.
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false
