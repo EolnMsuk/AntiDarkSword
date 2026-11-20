@@ -214,7 +214,7 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>🔄 Updates</string>
+            <string>Updates</string>
             <key>action</key>
             <string>checkForUpdates</string>
             <key>id</key>
@@ -224,7 +224,7 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>🛠  GitHub</string>
+            <string>GitHub</string>
             <key>action</key>
             <string>openGitHub</string>
         </dict>
@@ -232,7 +232,15 @@
             <key>cell</key>
             <string>PSButtonCell</string>
             <key>label</key>
-            <string>💸 Donate</string>
+            <string>Reddit</string>
+            <key>action</key>
+            <string>openReddit</string>
+        </dict>
+        <dict>
+            <key>cell</key>
+            <string>PSButtonCell</string>
+            <key>label</key>
+            <string>Donate</string>
             <key>action</key>
             <string>presentDonationMenu</string>
         </dict>
@@ -240,7 +248,7 @@
             <key>cell</key>
             <string>PSLinkCell</string>
             <key>label</key>
-            <string>👨🏻‍💻  Credits</string>
+            <string>Credits</string>
             <key>detail</key>
             <string>AntiDarkSwordCreditsController</string>
         </dict>

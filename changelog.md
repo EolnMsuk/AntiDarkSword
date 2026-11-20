@@ -1,3 +1,7 @@
+## 5.0.1
+
+- The Info section in Settings has new GitHub and Donate icons and a Reddit link to EolnMsuk4334’s profile. All five row labels share the same alignment.
+
 ## 5.0.0
 
 - The only change is the version number, bumped to 5.0.0 for testing updates.

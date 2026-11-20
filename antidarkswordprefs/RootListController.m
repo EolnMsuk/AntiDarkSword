@@ -759,6 +759,21 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (controller) { NSUserDefaults *defaults = ads_defaults(); BOOL isEnabled = [defaults boolForKey:@"enabled"]; BOOL needsRespring = [defaults boolForKey:@"ADSNeedsRespring"]; BOOL needsReboot = [defaults boolForKey:@"ADSPendingDaemonChanges"]; dispatch_async(dispatch_get_main_queue(), ^{ controller.navigationItem.rightBarButtonItem.enabled = needsRespring || (isEnabled && needsReboot); }); }
 }
 
+static UIImage *ads_info_emoji_image(NSString *emoji) {
+    const CGFloat iconSide = 29.0;
+    NSDictionary *attributes = @{NSFontAttributeName: [UIFont systemFontOfSize:20.0]};
+    CGSize emojiSize = [emoji sizeWithAttributes:attributes];
+    CGPoint origin = CGPointMake((iconSide - emojiSize.width) / 2.0,
+                                 (iconSide - emojiSize.height) / 2.0);
+    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+    format.opaque = NO;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(iconSide, iconSide)
+                                                                             format:format];
+    return [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
+        [emoji drawAtPoint:origin withAttributes:attributes];
+    }];
+}
+
 @implementation AntiDarkSwordPrefsRootListController
 - (void)checkForUpdates {
     if (self.updateCheckInProgress) return;
@@ -975,34 +990,14 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
     if (spec->action == @selector(resetToDefaults)) { 
         if (@available(iOS 13.0, *)) cell.textLabel.textColor = [UIColor systemRedColor]; 
         else cell.textLabel.textColor = [UIColor redColor]; 
-    }
-    UIColor *infoColor = nil;
-    if (spec->action == @selector(checkForUpdates) || spec->action == @selector(openGitHub)) {
-        infoColor = [UIColor systemBlueColor];
+    } else if (spec->action == @selector(checkForUpdates) ||
+               spec->action == @selector(openGitHub) ||
+               spec->action == @selector(openReddit)) {
+        cell.textLabel.textColor = [UIColor systemBlueColor];
     } else if (spec->action == @selector(presentDonationMenu)) {
-        infoColor = [UIColor systemGreenColor];
+        cell.textLabel.textColor = [UIColor systemGreenColor];
     } else if (spec.detailControllerClass == [AntiDarkSwordCreditsController class]) {
-        infoColor = [UIColor whiteColor];
-    }
-    if (infoColor) {
-        UILabel *label = cell.textLabel;
-        label.textColor = infoColor;
-        NSString *title = spec.name;
-        NSRange gap = [title rangeOfString:@" +" options:NSRegularExpressionSearch];
-        if (gap.location != NSNotFound) {
-            // Start each title at the same tab stop after its emoji.
-            CGFloat titleOffset = [UIFont preferredFontForTextStyle:UIFontTextStyleBody].lineHeight + 8.0;
-            NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
-            paragraph.alignment = NSTextAlignmentLeft;
-            paragraph.lineBreakMode = label.lineBreakMode;
-            paragraph.tabStops = @[[[NSTextTab alloc] initWithTextAlignment:NSTextAlignmentLeft location:titleOffset options:@{}]];
-            NSString *alignedTitle = [title stringByReplacingCharactersInRange:gap withString:@"\t"];
-            label.attributedText = [[NSAttributedString alloc] initWithString:alignedTitle attributes:@{
-                NSFontAttributeName: label.font,
-                NSForegroundColorAttributeName: infoColor,
-                NSParagraphStyleAttributeName: paragraph
-            }];
-        }
+        cell.textLabel.textColor = [UIColor whiteColor];
     }
     
     if ([[spec propertyForKey:@"key"] isEqualToString:@"enabled"]) {
@@ -1034,8 +1029,29 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
         }
         NSInteger autoProtectLevel = [defaults objectForKey:@"autoProtectLevel"] ? [defaults integerForKey:@"autoProtectLevel"] : 1; NSArray *customIDs = [defaults objectForKey:@"customDaemonIDs"] ?: @[];
         
+        NSBundle *bundle = [NSBundle bundleForClass:[AntiDarkSwordPrefsRootListController class]];
         for (PSSpecifier *s in specs) {
-            if ([[s propertyForKey:@"id"] isEqualToString:@"CheckUpdates"]) [s setProperty:@(!self.updateCheckInProgress) forKey:@"enabled"];
+            NSString *infoIconName = nil;
+            UIImage *infoIcon = nil;
+            if ([[s propertyForKey:@"id"] isEqualToString:@"CheckUpdates"]) {
+                [s setProperty:@(!self.updateCheckInProgress) forKey:@"enabled"];
+                infoIcon = ads_info_emoji_image(@"🔄");
+            } else if (s->action == @selector(openGitHub)) {
+                infoIconName = @"GitHub";
+            } else if (s->action == @selector(openReddit)) {
+                infoIconName = @"Reddit";
+            } else if (s->action == @selector(presentDonationMenu)) {
+                infoIconName = @"Donate";
+            } else if (s.detailControllerClass == [AntiDarkSwordCreditsController class]) {
+                infoIcon = ads_info_emoji_image(@"👨🏻‍💻");
+            }
+            if (infoIconName) {
+                infoIcon = [UIImage imageNamed:infoIconName inBundle:bundle compatibleWithTraitCollection:self.traitCollection];
+            }
+            if (infoIcon) {
+                [s setProperty:[infoIcon imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forKey:@"iconImage"];
+            }
+
             if ([[s propertyForKey:@"id"] isEqualToString:@"SelectApps"]) s.detailControllerClass = [AntiDarkSwordAltListController class];
             if ([s.identifier isEqualToString:@"PresetRulesGroup"]) {
                 NSString *footerText = @"";
@@ -1186,6 +1202,11 @@ static void PrefsChangedNotification(CFNotificationCenterRef center, void *obser
 }
 - (void)savePrompt { ads_present_save_prompt(self, NO, nil); }
 - (void)openGitHub { [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/EolnMsuk/AntiDarkSword"] options:@{} completionHandler:nil]; }
+- (void)openReddit {
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://www.reddit.com/user/EolnMsuk4334/"]
+                                       options:@{}
+                             completionHandler:nil];
+}
 - (void)presentDonationMenu {
     NSIndexPath *selected = self.table.indexPathForSelectedRow;
     UIView *anchor = selected ? [self.table cellForRowAtIndexPath:selected] : nil;
